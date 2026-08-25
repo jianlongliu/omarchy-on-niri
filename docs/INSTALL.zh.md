@@ -174,4 +174,4 @@ niri msg action spawn -- omarchy-system-logout   # （结束会话；确认就�
 
 bar 应渲染出工作区/时钟/键盘布局；`Mod+Space` 打开菜单；媒体键显示 OSD；Power 菜单显示 注销 / 重启 / 关机。
 
-完整的移植笔记见 `omarchy-on-niri-port.md`（中文），依赖取舍见 `README.md`。
+完整的移植笔记见 `omarchy-on-niri-port.md`（中文），依赖取舍见 `README.zh.md`。

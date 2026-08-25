@@ -15,8 +15,8 @@ Arch + niri 登录会话、并且**已经装好 Omarchy**（或者你会先装 O
 - `niri-port/` — 幂等的覆盖层 patch（`niri.patch` + `Niri.qml`），能在 `omarchy update` 之后存续。
 - `niri-config/` — niri 侧的接线（要合并进 `config.kdl` 的 `omarchy.kdl.template`，外加一份 `shell.json` 示例）。
 - `hooks/` — Omarchy update/theme 钩子，负责重放移植覆盖层。
-- `install.sh` — 可选的一套便捷包装脚本。**不是推荐的路径**：手动步骤在 `docs/INSTALL.md`，应按它逐条来做。
-- `docs/INSTALL.md` — 手动执行安装流程（依赖、文件放位、配置合并、覆盖层、背光）。
+- `install.sh` — 可选的一套便捷包装脚本。**不是推荐的路径**：手动步骤在 `docs/INSTALL.zh.md`，应按它逐条来做。
+- `docs/INSTALL.zh.md` — 手动执行安装流程（依赖、文件放位、配置合并、覆盖层、背光）。
 - `docs/omarchy-on-niri-port.md` — 完整的移植决策日志 / 笔记（**中文**）。
 
 ## 仓库结构
@@ -31,8 +31,8 @@ omarchy-on-niri/
 ├── niri-config/  <- omarchy.kdl.template（合并进 ~/.config/niri/config.kdl）
 │                     + shell.json 示例（Omarchy 配置层1）
 ├── hooks/        <- post-update.d/10-niri-repatch, theme-set.d/10-niri-border
-├── install.sh    <- 可选便捷包装脚本（推荐按 docs/INSTALL.md 手动来）
-├── docs/INSTALL.md      <- 手动执行安装流程
+├── install.sh    <- 可选便捷包装脚本（推荐按 docs/INSTALL.zh.md 手动来）
+├── docs/INSTALL.zh.md   <- 手动执行安装流程
 ├── docs/omarchy-on-niri-port.md <- 完整移植笔记（中文）
 └── README.md / README.zh.md
 ```
@@ -88,11 +88,11 @@ omarchy-on-niri/
 
 ## 安装
 
-手动、逐条执行的步骤在 **`docs/INSTALL.md`**（依赖、`~/bin` 胶水、config.kdl 合并、覆盖层、背光、每机检查）。
+手动、逐条执行的步骤在 **`docs/INSTALL.zh.md`**（依赖、`~/bin` 胶水、config.kdl 合并、覆盖层、背光、每机检查）。
 这是受支持的路径。
 
 另外有个可选的 `install.sh` 引导脚本，会放下同样的文件，但它**不会**改写已存在的 `config.kdl`，也不会自动装包或
-修背光权限——要稳妥请按 `docs/INSTALL.md` 走。
+修背光权限——要稳妥请按 `docs/INSTALL.zh.md` 走。
 
 简版：
 
@@ -100,7 +100,7 @@ omarchy-on-niri/
 git clone https://github.com/jianlongliu/omarchy-on-niri
 cd omarchy-on-niri
 # 先装 README "Requirements" 里的包，然后执行：
-./install.sh            # 可选；或按 docs/INSTALL.md 逐步来
+./install.sh            # 可选；或按 docs/INSTALL.zh.md 逐步来
 ```
 
 然后注销再登录——`spawn-sh-at-startup` 会拉起 QuickShell 外壳。
