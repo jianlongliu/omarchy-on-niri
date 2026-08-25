@@ -15,7 +15,9 @@ standalone installer** — it assumes a working Arch + niri login session and an
 - `niri-config/` — the niri-side wiring (`omarchy.kdl.template` to merge into `config.kdl`, plus a
   `shell.json` sample).
 - `hooks/` — Omarchy update/theme hooks that reapply the port.
-- `install.sh` — pushes everything into place for a fresh machine.
+- `install.sh` — optional convenience wrapper. **Not the supported path**: the manual steps are in
+  `docs/INSTALL.md` and should be followed by hand.
+- `docs/INSTALL.md` — the hand-run install procedure (deps, file placement, config merge, overlay, backlight).
 - `docs/omarchy-on-niri-port.md` — the full port decision log / notes.
 
 ## Repository layout
@@ -30,8 +32,9 @@ omarchy-on-niri/
 ├── niri-config/  <- omarchy.kdl.template (merge into ~/.config/niri/config.kdl)
 │                     + shell.json sample (Omarchy config layer 1)
 ├── hooks/        <- post-update.d/10-niri-repatch, theme-set.d/10-niri-border
-├── install.sh    <- positional bootstrap
-├── docs/omarchy-on-niri-port.md   <- full port notes
+├── install.sh    <- optional convenience wrapper (prefer the manual steps in docs/INSTALL.md)
+├── docs/INSTALL.md  <- hand-run install procedure
+├── docs/omarchy-on-niri-port.md <- full port notes
 └── README.md
 ```
 
@@ -86,24 +89,21 @@ Install these on the target Arch machine. Everything below was verified in use o
 
 ## Install
 
-The port assumes Omarchy is already installed (its own installer puts it at
-`~/.local/share/omarchy`). To lay down the port glue on a fresh machine:
+The manual, hand-run procedure is in **`docs/INSTALL.md`** (deps, `~/bin` glue, config.kdl merge, overlay,
+backlight, per-machine checks). It is the supported path.
+
+There is also an optional `install.sh` bootstrap that lays down the same files, but it does **not** rewrite
+an existing `config.kdl` and it will not auto-install packages or fix backlight perms — follow
+`docs/INSTALL.md` to be sure.
+
+Short version:
 
 ```sh
-# 1. Install the packages above via your package manager.
-# 2. Clone this repo and run the bootstrap:
 git clone https://github.com/jianlongliu/omarchy-on-niri
 cd omarchy-on-niri
-./install.sh               # installs port-bin -> ~/bin, writes niri config, hooks, shell.json
+# install the packages in README "Requirements", then run:
+./install.sh            # optional; or follow docs/INSTALL.md step by step
 ```
-
-`install.sh` will:
-- copy the 6 `port-bin/` scripts into `~/bin` (PATH-first, survives `omarchy update`);
-- merge `niri-config/omarchy.kdl.template` (substituting `__HOME__`) into `~/.config/niri/config.kdl`
-  (backs up first; validates with `niri validate`);
-- write `~/.config/omarchy/shell.json` (only if absent);
-- create the omarchy hooks under `~/.config/omarchy/hooks/`;
-- apply the `niri-port/niri.patch` overlay to `~/.local/share/omarchy` (idempotent).
 
 Then log out and back in — `spawn-sh-at-startup` starts the Quickshell shell.
 
