@@ -1,5 +1,7 @@
 # Omarchy on niri
 
+> **简体中文 → [README.zh.md](README.zh.md)**
+
 Port of [basecamp/omarchy](https://github.com/basecamp/omarchy) (`quattro` / `4.0.0.alpha`) to the
 [niri](https://github.com/YaLTeR/niri) Wayland compositor, instead of Hyprland.
 

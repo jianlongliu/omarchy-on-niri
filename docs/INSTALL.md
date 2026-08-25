@@ -1,5 +1,7 @@
 # Manual install (no script)
 
+> **简体中文 → [INSTALL.zh.md](INSTALL.zh.md)**
+
 Follow these steps by hand on the target machine. This is the supported path — `install.sh` is just a
 convenience wrapper; everything below is what it actually does, spelled out so you can do it yourself.
 
