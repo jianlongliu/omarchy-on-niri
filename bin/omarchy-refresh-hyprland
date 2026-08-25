@@ -1,0 +1,22 @@
+#!/bin/bash
+
+# omarchy:summary=Overwrite all the user Hyprland Lua configs in ~/.config/hypr with the Omarchy defaults.
+
+# niri port: the Hyprland config layer does not drive this compositor. The
+# single source of truth is ~/.config/niri/config.kdl, so refreshing
+# ~/.config/hypr would only resurrect a dead config tree. Bail quietly on niri.
+if [[ ${XDG_CURRENT_DESKTOP:-} == niri ]]; then
+  echo "niri: skipping Hyprland config refresh (compositor is niri, no ~/.config/hypr)" >&2
+  exit 0
+fi
+
+omarchy-refresh-config hypr/.luarc.json
+omarchy-refresh-config hypr/autostart.lua
+omarchy-refresh-config hypr/bindings.lua
+omarchy-refresh-config hypr/input.lua
+omarchy-refresh-config hypr/looknfeel.lua
+omarchy-refresh-config hypr/hyprland.lua
+omarchy-refresh-config hypr/monitors.lua
+
+mkdir -p ~/.local/state/omarchy/toggles/hypr
+cp "$OMARCHY_PATH/default/hypr/toggles/flags.lua" ~/.local/state/omarchy/toggles/hypr/

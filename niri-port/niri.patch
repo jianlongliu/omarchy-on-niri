@@ -1,0 +1,265 @@
+diff --git a/bin/omarchy-launch-tui b/bin/omarchy-launch-tui
+index bd67c64..57f7610 100755
+--- a/bin/omarchy-launch-tui
++++ b/bin/omarchy-launch-tui
+@@ -10,4 +10,16 @@ else
+   APP_ID="org.omarchy.$(basename $1)"
+ fi
+ 
+-exec setsid uwsm-app -- xdg-terminal-exec --app-id=$APP_ID -e "$1" "${@:2}"
++# Hyprland/uwsm session: uwsm-app + xdg-terminal-exec. niri has neither, so
++# fall back to a Wayland terminal (ghostty, matching niri's Mod+Return bind).
++if command -v uwsm-app >/dev/null 2>&1 && command -v xdg-terminal-exec >/dev/null 2>&1; then
++  exec setsid uwsm-app -- xdg-terminal-exec --app-id=$APP_ID -e "$1" "${@:2}"
++fi
++
++for term in ghostty kitty alacritty foot; do
++  if command -v "$term" >/dev/null 2>&1; then
++    exec setsid "$term" -e "$1" "${@:2}"
++  fi
++done
++
++exec "$1" "${@:2}"
+diff --git a/bin/omarchy-refresh-hyprland b/bin/omarchy-refresh-hyprland
+index 6549c69..7302884 100755
+--- a/bin/omarchy-refresh-hyprland
++++ b/bin/omarchy-refresh-hyprland
+@@ -2,6 +2,14 @@
+ 
+ # omarchy:summary=Overwrite all the user Hyprland Lua configs in ~/.config/hypr with the Omarchy defaults.
+ 
++# niri port: the Hyprland config layer does not drive this compositor. The
++# single source of truth is ~/.config/niri/config.kdl, so refreshing
++# ~/.config/hypr would only resurrect a dead config tree. Bail quietly on niri.
++if [[ ${XDG_CURRENT_DESKTOP:-} == niri ]]; then
++  echo "niri: skipping Hyprland config refresh (compositor is niri, no ~/.config/hypr)" >&2
++  exit 0
++fi
++
+ omarchy-refresh-config hypr/.luarc.json
+ omarchy-refresh-config hypr/autostart.lua
+ omarchy-refresh-config hypr/bindings.lua
+diff --git a/bin/omarchy-system-logout b/bin/omarchy-system-logout
+index cb0fd66..815c214 100755
+--- a/bin/omarchy-system-logout
++++ b/bin/omarchy-system-logout
+@@ -4,6 +4,11 @@
+ # omarchy:examples=omarchy logout | omarchy system logout
+ # omarchy:aliases=omarchy logout
+ 
++# niri port: standardised via omarchy-niri-system (OSD + graceful close + dispatch).
++if [[ ${XDG_CURRENT_DESKTOP:-} == niri ]]; then
++  exec omarchy-niri-system logout
++fi
++
+ nohup bash -c "sleep 2 && uwsm stop" >/dev/null 2>&1 &
+ 
+ omarchy-osd -i logout -m "Logging out" -d 5000
+diff --git a/bin/omarchy-system-reboot b/bin/omarchy-system-reboot
+index 4d2b6c8..9e84b32 100755
+--- a/bin/omarchy-system-reboot
++++ b/bin/omarchy-system-reboot
+@@ -4,6 +4,11 @@
+ # omarchy:examples=omarchy reboot | omarchy system reboot
+ # omarchy:aliases=omarchy reboot
+ 
++# niri port: standardised via omarchy-niri-system (OSD + graceful close + dispatch).
++if [[ ${XDG_CURRENT_DESKTOP:-} == niri ]]; then
++  exec omarchy-niri-system reboot
++fi
++
+ # Schedule the reboot in the user manager so closing the terminal's systemd
+ # scope cannot terminate it before it runs.
+ systemd-run --user --collect --quiet --on-active="2s" --timer-property=AccuracySec=100ms systemctl reboot --no-wall || exit 1
+diff --git a/bin/omarchy-system-shutdown b/bin/omarchy-system-shutdown
+index 0143760..38a78a6 100755
+--- a/bin/omarchy-system-shutdown
++++ b/bin/omarchy-system-shutdown
+@@ -4,6 +4,11 @@
+ # omarchy:examples=omarchy shutdown | omarchy system shutdown
+ # omarchy:aliases=omarchy shutdown
+ 
++# niri port: standardised via omarchy-niri-system (OSD + graceful close + dispatch).
++if [[ ${XDG_CURRENT_DESKTOP:-} == niri ]]; then
++  exec omarchy-niri-system shutdown
++fi
++
+ # Schedule the shutdown in the user manager so closing the terminal's systemd
+ # scope cannot terminate it before it runs.
+ systemd-run --user --collect --quiet --on-active="2s" --timer-property=AccuracySec=100ms systemctl poweroff --no-wall || exit 1
+diff --git a/bin/omarchy-theme-set b/bin/omarchy-theme-set
+index b0c1cda..98bf58b 100755
+--- a/bin/omarchy-theme-set
++++ b/bin/omarchy-theme-set
+@@ -114,23 +114,14 @@ set_theme_background() {
+   fi
+ 
+   new_background="$CHOSEN_THEME_BACKGROUND"
+-  new_background_snapshot=$(snapshot_background_path "$new_background" "next")
+-
+-  if [[ -f $OLD_BACKGROUND_SNAPSHOT && -f $new_background_snapshot ]]; then
+-    shell_ipc background themeTransition "$OLD_BACKGROUND_SNAPSHOT" "$new_background_snapshot" "$new_background" "$colors_payload" "$shell_payload" || \
+-      shell_ipc shell applyTheme "$colors_payload" "$shell_payload" || true
+-    (sleep 3; rm -f "$OLD_BACKGROUND_SNAPSHOT" "$new_background_snapshot") &
+-  elif [[ -f $new_background_snapshot ]]; then
+-    shell_ipc background themeTransition "" "$new_background_snapshot" "$new_background" "$colors_payload" "$shell_payload" || \
+-      shell_ipc shell applyTheme "$colors_payload" "$shell_payload" || true
+-    (sleep 3; rm -f "$new_background_snapshot") &
+-  else
+-    shell_ipc background themeTransition "$OLD_BACKGROUND_SNAPSHOT" "$new_background" "$new_background" "$colors_payload" "$shell_payload" || \
+-      shell_ipc shell applyTheme "$colors_payload" "$shell_payload" || true
+-    if [[ -f $OLD_BACKGROUND_SNAPSHOT ]]; then
+-      (sleep 3; rm -f "$OLD_BACKGROUND_SNAPSHOT") &
+-    fi
+-  fi
++  old_background=$(readlink -f "$CURRENT_BACKGROUND_LINK" 2>/dev/null || true)
++
++  # Pass the real background files, not transition snapshots. The shell loads
++  # the paths asynchronously; a snapshot is normally unlinked within a few
++  # seconds, which can leave the shell's Image parked on a path that no longer
++  # exists (black desktop). The theme background files themselves persist.
++  shell_ipc background themeTransition "$old_background" "$new_background" "$new_background" "$colors_payload" "$shell_payload" || \
++    shell_ipc shell applyTheme "$colors_payload" "$shell_payload" || true
+ 
+   ln -nsf "$new_background" "$CURRENT_BACKGROUND_LINK"
+ }
+diff --git a/default/omarchy/omarchy-menu.jsonc b/default/omarchy/omarchy-menu.jsonc
+index 3a24759..694f9c5 100644
+--- a/default/omarchy/omarchy-menu.jsonc
++++ b/default/omarchy/omarchy-menu.jsonc
+@@ -108,7 +108,7 @@
+   "style.bar": {"icon":"󰍜","label":"Menu Bar"},
+   "style.bar.position": {"icon":"","label":"Position"},
+   "style.bar.transparency": {"icon":"󰂵","label":"Transparency","action":"omarchy-bar transparent toggle"},
+-  "style.hyprland": {"icon":"","label":"Hyprland","action":"omarchy-launch-config-editor \"$HOME/.config/hypr/looknfeel.lua\""},
++  "style.hyprland": {"icon":"","label":"Niri","action":"omarchy-launch-config-editor \"$HOME/.config/niri/config.kdl\""},
+   "style.screensaver": {"icon":"󱄄","label":"Screensaver"},
+   "style.about": {"icon":"","label":"About"},
+   "style.bar.position.top": {"icon":"󰁝","label":"Top","action":"omarchy-bar position top"},
+@@ -123,9 +123,9 @@
+   "style.screensaver.default": {"icon":"","label":"Restore Default","action":"omarchy-branding-screensaver reset"},
+ 
+   // Setup
+-  "setup.monitors": {"icon":"󰍹","label":"Monitors","action":"omarchy-launch-config-editor \"$HOME/.config/hypr/monitors.lua\""},
+-  "setup.keybindings": {"icon":"","label":"Keybindings","when":"[[ -f ~/.config/hypr/bindings.lua ]]","action":"omarchy-launch-config-editor \"$HOME/.config/hypr/bindings.lua\""},
+-  "setup.input": {"icon":"","label":"Input","when":"[[ -f ~/.config/hypr/input.lua ]]","action":"omarchy-launch-config-editor \"$HOME/.config/hypr/input.lua\""},
++  "setup.monitors": {"icon":"󰍹","label":"Monitors","action":"omarchy-launch-config-editor \"$HOME/.config/niri/config.kdl\""},
++  "setup.keybindings": {"icon":"","label":"Keybindings","action":"omarchy-launch-config-editor \"$HOME/.config/niri/config.kdl\""},
++  "setup.input": {"icon":"","label":"Input","action":"omarchy-launch-config-editor \"$HOME/.config/niri/config.kdl\""},
+   "setup.network": {"icon":"󰛳","label":"Network","aliases":["network"]},
+   "setup.network.dns": {"icon":"󰇖","label":"DNS","aliases":["dns"]},
+   "setup.network.dns.dhcp": {"icon":"󰩟","label":"DHCP","checked":"[[ \"$(omarchy-dns)\" == \"DHCP\" ]]","action":"omarchy-dns DHCP"},
+@@ -179,8 +179,8 @@
+   "setup.security.fido2": {"icon":"","label":"Fido2","action":"omarchy-launch-floating-terminal-with-presentation omarchy-setup-security-fido2"},
+   "setup.security.sshd": {"icon":"󰣀","label":"SSHD","action":"omarchy-launch-floating-terminal-with-presentation omarchy-setup-security-sshd"},
+   "setup.security.passwordless-sudo": {"icon":"󰟵","label":"Passwordless Sudo","action":"omarchy-launch-floating-terminal-with-presentation omarchy-sudo-passwordless"},
+-  "setup.config.hyprland": {"icon":"","label":"Hyprland","action":"omarchy-launch-config-editor \"$HOME/.config/hypr/hyprland.lua\""},
+-  "setup.config.hyprsunset": {"icon":"","label":"Hyprsunset","action":"omarchy-launch-config-editor ~/.config/hypr/hyprsunset.conf && omarchy-restart-hyprsunset"},
++  "setup.config.hyprland": {"icon":"","label":"Niri","action":"omarchy-launch-config-editor \"$HOME/.config/niri/config.kdl\""},
++  "setup.config.hyprsunset": {"icon":"","label":"Hyprsunset","when":"false","action":"omarchy-launch-config-editor ~/.config/hypr/hyprsunset.conf && omarchy-restart-hyprsunset"},
+   "setup.config.xcompose": {"icon":"󰞅","label":"XCompose","action":"omarchy-launch-config-editor ~/.XCompose && omarchy-restart-xcompose"},
+   "setup.direct-boot": {"icon":"","label":"Direct Boot","action":"omarchy-launch-floating-terminal-with-presentation omarchy-setup-direct-boot"},
+   "setup.reset": {"icon":"󰑓","label":"Reset Computer","when":"[[ $(findmnt -no FSTYPE /) == btrfs ]]","action":"omarchy-launch-floating-terminal-with-presentation omarchy-system-factory-reset"},
+@@ -350,10 +350,10 @@
+   "update.channel.rc": {"icon":"🟡","label":"RC","checked":"[[ \"$(omarchy-channel-current)\" == \"rc\" ]]","action":"omarchy-launch-floating-terminal-with-presentation 'omarchy-channel-set rc'"},
+   "update.channel.edge": {"icon":"🟠","label":"Edge","checked":"[[ \"$(omarchy-channel-current)\" == \"edge\" ]]","action":"omarchy-launch-floating-terminal-with-presentation 'omarchy-channel-set edge'"},
+   "update.channel.dev": {"icon":"🔴","label":"Dev","checked":"[[ \"$(omarchy-channel-current)\" == \"dev\" ]]","action":"omarchy-launch-floating-terminal-with-presentation 'omarchy-channel-set dev'"},
+-  "update.process.hyprsunset": {"icon":"","label":"Hyprsunset","action":"omarchy-restart-hyprsunset"},
++  "update.process.hyprsunset": {"icon":"","label":"Hyprsunset","when":"false","action":"omarchy-restart-hyprsunset"},
+   "update.process.shell": {"icon":"󰍜","label":"Shell","action":"omarchy-restart-shell"},
+-  "update.config.hyprland": {"icon":"","label":"Hyprland","action":"omarchy-launch-floating-terminal-with-presentation omarchy-refresh-hyprland"},
+-  "update.config.hyprsunset": {"icon":"","label":"Hyprsunset","action":"omarchy-launch-floating-terminal-with-presentation omarchy-refresh-hyprsunset"},
++  "update.config.hyprland": {"icon":"","label":"Niri Theme","action":"omarchy-niri-apply-theme"},
++  "update.config.hyprsunset": {"icon":"","label":"Hyprsunset","when":"false","action":"omarchy-launch-floating-terminal-with-presentation omarchy-refresh-hyprsunset"},
+   "update.config.plymouth": {"icon":"󱣴","label":"Plymouth","action":"omarchy-launch-floating-terminal-with-presentation omarchy-refresh-plymouth"},
+   "update.config.tmux": {"icon":"","label":"Tmux","action":"omarchy-launch-floating-terminal-with-presentation omarchy-refresh-tmux"},
+   "update.config.shell": {"icon":"󰍜","label":"Shell","action":"omarchy-launch-floating-terminal-with-presentation omarchy-refresh-shell"},
+diff --git a/shell/Commons/qmldir b/shell/Commons/qmldir
+index 4bfd0b7..17edf0c 100644
+--- a/shell/Commons/qmldir
++++ b/shell/Commons/qmldir
+@@ -1,5 +1,6 @@
+ module qs.Commons
+ singleton Border 1.0 Border.qml
+ singleton Color 1.0 Color.qml
++singleton Niri 1.0 Niri.qml
+ singleton Style 1.0 Style.qml
+ singleton Util 1.0 Util.qml
+diff --git a/shell/plugins/background/Background.qml b/shell/plugins/background/Background.qml
+index 21e1b0a..a32f138 100644
+--- a/shell/plugins/background/Background.qml
++++ b/shell/plugins/background/Background.qml
+@@ -124,7 +124,15 @@ Item {
+     id: readlinkProc
+     command: ["readlink", "-f", root.currentBackgroundLink]
+     stdout: StdioCollector {
+-      onStreamFinished: root.setBackground(String(text || "").trim(), false)
++      onStreamFinished: {
++        var p = String(text || "").trim()
++        // Force the link target straight into the base image. During a theme
++        // switch currentBackground can already equal the link target while
++        // displayedBackground is still parked on a transition snapshot that
++        // was deleted out from under the shell; the force path skips that
++        // short-circuit so the live background link always wins.
++        if (p) root.transitionBackground("", p, p, true, true)
++      }
+     }
+   }
+ 
+diff --git a/shell/plugins/bar/Bar.qml b/shell/plugins/bar/Bar.qml
+index 5dcd205..7c99e62 100644
+--- a/shell/plugins/bar/Bar.qml
++++ b/shell/plugins/bar/Bar.qml
+@@ -1,5 +1,4 @@
+ import Quickshell
+-import Quickshell.Hyprland
+ import Quickshell.Io
+ import Quickshell.Wayland
+ import QtQuick
+@@ -488,7 +487,7 @@ Item {
+   // belongs. Empty until Hyprland reports one, which leaves panel routing on
+   // its per-monitor fallback rather than guessing at an output.
+   function focusedScreenName() {
+-    var monitor = Hyprland.focusedMonitor
++    var monitor = Niri.focusedMonitor
+     return monitor ? String(monitor.name || "") : ""
+   }
+ 
+diff --git a/shell/plugins/bar/widgets/Workspaces.qml b/shell/plugins/bar/widgets/Workspaces.qml
+index ec0482a..985d1d9 100644
+--- a/shell/plugins/bar/widgets/Workspaces.qml
++++ b/shell/plugins/bar/widgets/Workspaces.qml
+@@ -1,6 +1,5 @@
+ import QtQuick
+ import QtQuick.Layouts
+-import Quickshell.Hyprland
+ import qs.Commons
+ import qs.Ui
+ 
+@@ -9,7 +8,7 @@ BarWidget {
+   moduleName: "omarchy.workspaces"
+ 
+   function workspaceById(id) {
+-    var values = Hyprland.workspaces.values
++    var values = Niri.workspaces.values
+     for (var i = 0; i < values.length; i++) {
+       if (values[i].id === id) return values[i]
+     }
+@@ -19,7 +18,7 @@ BarWidget {
+ 
+   function workspaceIds() {
+     var ids = [1, 2, 3, 4, 5]
+-    var values = Hyprland.workspaces.values
++    var values = Niri.workspaces.values
+ 
+     for (var i = 0; i < values.length; i++) {
+       var id = values[i].id
+@@ -56,7 +55,7 @@ BarWidget {
+ 
+         readonly property var workspace: root.workspaceById(modelData)
+         readonly property bool occupied: workspace !== null && workspace.toplevels.values.length > 0
+-        readonly property bool focused: Hyprland.focusedWorkspace !== null && Hyprland.focusedWorkspace.id === modelData
++        readonly property bool focused: Niri.focusedWorkspace !== null && Niri.focusedWorkspace.id === modelData
+ 
+         bar: root.bar
+         text: focused ? "\uDB85\uDCFB" : (modelData === 10 ? "0" : String(modelData))

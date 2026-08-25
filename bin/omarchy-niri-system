@@ -1,0 +1,68 @@
+#!/bin/bash
+# omarchy-niri-system — standardised system-action handler for the niri port.
+#
+# Single entry point the three omarchy-system-* scripts call on niri. It shows an
+# OSD notice, gracefully closes windows, then dispatches. The dispatch is SCHEDULED
+# DETACHED FIRST so that closing windows (which may kill the calling script) cannot
+# cancel it — the Omarchy-fixed pattern. All dispatches are passwordless on niri:
+#   logout   -> niri msg action quit --skip-confirmation  (no Super+Shift+E confirm; OSD + close-all, back to greetd)
+#   reboot   -> logind Reboot D-Bus    (org.freedesktop.login1.Manager.Reboot, allow_active=yes)
+#   shutdown -> logind PowerOff D-Bus  (org.freedesktop.login1.Manager.PowerOff, allow_active=yes)
+#
+# NOTE: `loginctl reboot` is NOT a valid verb (that belongs to systemctl); it
+# prints "Unknown command verb 'reboot'". The logind D-Bus methods are the
+# passwordless path from an active session (polkit allow_active=yes).
+#
+# Usage: omarchy-niri-system <logout|reboot|shutdown>
+
+set -e
+
+LOG="${XDG_RUNTIME_DIR:-/tmp}/omarchy-niri-system.log"
+say() { printf '%s %s\n' "$(date +%H:%M:%S)" "$*" >> "$LOG"; }
+
+action="${1:-}"
+case "$action" in
+  logout)   title="Logging out"   ;;
+  reboot)   title="Rebooting"     ;;
+  shutdown) title="Shutting down" ;;
+  *) echo "usage: omarchy-niri-system <logout|reboot|shutdown>" >&2; exit 2 ;;
+esac
+
+if [[ ${XDG_CURRENT_DESKTOP:-} != niri ]]; then
+  echo "omarchy-niri-system: not on niri (XDG_CURRENT_DESKTOP=${XDG_CURRENT_DESKTOP:-unset})" >&2
+  exit 1
+fi
+
+case "$action" in
+  logout)
+    # Omarchy-native logout: do NOT go through niri's Super+Shift+E confirm
+    # ("Press Enter to confirm") — a menu logout should just leave the session.
+    # Schedule the exit detached via nohup (which inherits the NIRI_SOCKET /
+    # WAYLAND_DISPLAY session env) BEFORE closing windows, so close-all cannot
+    # cancel it. OSD + graceful close + greetd follow in the shared block below.
+    nohup bash -c 'sleep 2 && niri msg action quit --skip-confirmation' >/dev/null 2>&1 &
+    say "logout: scheduled niri quit (--skip-confirmation) via nohup"
+    ;;
+  reboot)
+    systemd-run --user --collect --quiet --on-active="3s" --timer-property=AccuracySec=100ms \
+      busctl --system call org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager Reboot b false \
+      >/dev/null 2>&1 || { say "reboot: schedule failed"; exit 1; }
+    say "reboot scheduled (systemd-run --user busctl login1 Reboot)"
+    ;;
+  shutdown)
+    systemd-run --user --collect --quiet --on-active="3s" --timer-property=AccuracySec=100ms \
+      busctl --system call org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager PowerOff b false \
+      >/dev/null 2>&1 || { say "shutdown: schedule failed"; exit 1; }
+    say "shutdown scheduled (systemd-run --user busctl login1 PowerOff)"
+    ;;
+esac
+
+# logout/reboot/shutdown: the action is scheduled detached first, so closing
+# windows (which may kill this script) cannot cancel it. Then OSD + graceful close.
+omarchy-osd -i "$action" -m "$title" -d 5000 >/dev/null 2>&1 || true
+omarchy-state clear 're*-required' >/dev/null 2>&1 || true
+omarchy-hyprland-window-close-all >/dev/null 2>&1 || true
+sleep 1 # Let apps like Chrome shut down cleanly
+say "windows closed, action will land on schedule"
+
+exit 0

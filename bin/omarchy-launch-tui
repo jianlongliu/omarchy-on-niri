@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# omarchy:summary=Launch a TUI command in the default terminal with Omarchy styling
+# omarchy:args=[--app-id=<app-id>] <command> [args...]
+
+if [[ ${1:-} == --app-id=* ]]; then
+  APP_ID="${1#--app-id=}"
+  shift
+else
+  APP_ID="org.omarchy.$(basename $1)"
+fi
+
+# Hyprland/uwsm session: uwsm-app + xdg-terminal-exec. niri has neither, so
+# fall back to a Wayland terminal (ghostty, matching niri's Mod+Return bind).
+if command -v uwsm-app >/dev/null 2>&1 && command -v xdg-terminal-exec >/dev/null 2>&1; then
+  exec setsid uwsm-app -- xdg-terminal-exec --app-id=$APP_ID -e "$1" "${@:2}"
+fi
+
+for term in ghostty kitty alacritty foot; do
+  if command -v "$term" >/dev/null 2>&1; then
+    exec setsid "$term" -e "$1" "${@:2}"
+  fi
+done
+
+exec "$1" "${@:2}"

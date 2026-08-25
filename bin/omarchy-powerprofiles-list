@@ -1,0 +1,48 @@
+#!/bin/bash
+
+# omarchy:summary=Returns a list of all the available power profiles on the system.
+# omarchy:args=[--active-state]
+#
+# yvonne port: prefers power-profiles-daemon's `powerprofilesctl`, and falls back
+# to the TLP backend (tlp-pd) via D-Bus net.hadess.PowerProfiles when
+# powerprofilesctl is absent. Lives in ~/bin so it survives `omarchy update`.
+
+if [[ $# -gt 1 || ( $# -eq 1 && $1 != "--active-state" ) ]]; then
+  echo "Usage: omarchy-powerprofiles-list [--active-state]" >&2
+  exit 1
+fi
+
+if command -v powerprofilesctl >/dev/null 2>&1; then
+  powerprofilesctl list 2>/dev/null |
+    awk -v with_state="${1:+1}" '/^\s*[* ]\s*[a-zA-Z0-9-]+:$/ {
+      active = ($1 == "*") ? 1 : 0
+      gsub(/^[*[:space:]]+|:$/, "")
+      print $0 (with_state ? "\t" active : "")
+    }' |
+    tac
+  exit 0
+fi
+
+active=$(busctl --system --json=short get-property \
+  net.hadess.PowerProfiles /net/hadess/PowerProfiles \
+  net.hadess.PowerProfiles ActiveProfile 2>/dev/null | jq -r .data)
+
+mapfile -t names < <(busctl --system --json=short get-property \
+  net.hadess.PowerProfiles /net/hadess/PowerProfiles \
+  net.hadess.PowerProfiles Profiles 2>/dev/null | jq -r '.data[].Profile.data')
+
+if [[ -z ${active:-} || ${#names[@]} -eq 0 ]]; then
+  exit 0
+fi
+
+for n in "${names[@]}"; do
+  if [[ -n $1 ]]; then
+    if [[ $n == "$active" ]]; then
+      printf '%s\t1\n' "$n"
+    else
+      printf '%s\t0\n' "$n"
+    fi
+  else
+    printf '%s\n' "$n"
+  fi
+done | tac
