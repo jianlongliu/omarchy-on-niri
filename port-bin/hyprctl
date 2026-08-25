@@ -1,0 +1,597 @@
+#!/usr/bin/env python3
+"""hyprctl -> niri shim.
+
+Translates the subset of `hyprctl ...` calls that Omarchy v4 (quickshell +
+bin scripts) issues into niri equivalents so the Omarchy shell can run on niri.
+
+High-frequency JSON queries (clients/monitors/activewindow/activeworkspace/
+devices/binds) are mapped to niri's JSON schema and reshaped into Hyprland's
+schema. `dispatch ...` is mapped to `niri msg action ...`. Anything niri has no
+equivalent for (hyprsunset nightlight, hl.config cursor, hl.device, hl.monitor
+mode, hl.workspace_rule, setprop opaque, ...) degrades to a safe no-op /
+sensible default so scripts and the shell never break.
+
+Deliberately jq-free: uses only the stdlib so it runs without installing jq.
+"""
+
+import json
+import os
+import re
+import subprocess
+import sys
+
+
+def niri(args):
+    try:
+        out = subprocess.run(["niri", "msg"] + args,
+                             capture_output=True, text=True, timeout=10)
+        return out.stdout, out.returncode
+    except Exception:
+        return "", 1
+
+
+def niri_json(args):
+    """Run `niri msg -j <args...>` and return parsed JSON or None."""
+    out, rc = niri(["-j"] + args)
+    if rc != 0 or not out.strip():
+        return None
+    try:
+        return json.loads(out)
+    except Exception:
+        return None
+
+
+def niri_action(action):
+    subprocess.run(["niri", "msg", "action"] + action, capture_output=True, text=True)
+    return 0
+
+
+MONITOR_BOOTSTRAP = {
+    "id": 0, "name": "eDP-1", "width": 0, "height": 0, "scale": 1.0,
+    "x": 0, "y": 0, "active": True, "disabled": False, "focused": True,
+    "refreshRate": 60.0, "make": "", "model": "", "serial": None,
+    "availableModes": [],
+}
+
+
+def _focused_output_name():
+    out, _ = niri(["focused-output"])
+    if not out:
+        return "eDP-1"
+    line = out.splitlines()[0] if out.splitlines() else ""
+    m = re.search(r'\(([^)]+)\)\s*$', line)
+    if m:
+        return m.group(1).strip()
+    return line.split()[-1] if line else "eDP-1"
+
+
+TRANSFORM_MAP = {"Normal": 0, "90": 1, "180": 2, "270": 3, "Flipped": 4,
+                 "Flipped90": 5, "Flipped180": 6, "Flipped270": 7}
+
+
+def _active_workspace_by_output():
+    ws = niri_json(["workspaces"])
+    by_output = {}
+    if not isinstance(ws, list):
+        return by_output
+    for w in ws:
+        out = w.get("output")
+        if out and (w.get("is_active") or w.get("is_focused")):
+            by_output[out] = w.get("id", 0)
+    return by_output
+
+
+def cmd_monitors(json_out):
+    outputs = niri_json(["outputs"])
+    if outputs is None:
+        return ([] if json_out else "")
+    focused = _focused_output_name()
+    ws_by_output = _active_workspace_by_output()
+    res = []
+    for i, (name, o) in enumerate(outputs.items()):
+        logical = o.get("logical") or {}
+        mode_idx = o.get("current_mode") or 0
+        modes = o.get("modes") or []
+        cur = modes[mode_idx] if mode_idx < len(modes) else {}
+        transform = TRANSFORM_MAP.get(logical.get("transform"), logical.get("transform", 0))
+        res.append({
+            "id": i, "name": name,
+            # Hyprland reports physical resolution; format_geo divides by scale.
+            "width": cur.get("width", logical.get("width", 0)),
+            "height": cur.get("height", logical.get("height", 0)),
+            "scale": logical.get("scale", 1.0),
+            "x": logical.get("x", 0), "y": logical.get("y", 0),
+            "transform": transform if isinstance(transform, int) else 0,
+            "active": True, "disabled": False,
+            "focused": (name == focused) or bool(logical.get("is_focused")),
+            "refreshRate": (cur.get("refresh_rate") or 60000) / 1000.0,
+            "make": o.get("make") or "", "model": o.get("model") or "",
+            "serial": o.get("serial"),
+            "availableModes": modes,
+            "activeWorkspace": {"id": ws_by_output.get(name, 0)},
+            "specialWorkspace": {"id": 0},
+            "dpmsStatus": False,
+            "vrr": bool(o.get("vrr_enabled")),
+        })
+    if json_out:
+        return json.dumps(res)
+    # text form
+    lines = []
+    for m in res:
+        lines.append(f"Monitor {m['name']} (ID {m['id']}):")
+        lines.append(f"\t{m['width']}x{m['height']}@{m['refreshRate']} at {m['x']},{m['y']}")
+        lines.append(f"\tscale: {m['scale']}")
+    return "\n".join(lines)
+
+
+def _window_to_client(w):
+    layout = w.get("layout") or {}
+    tile = layout.get("tile_size") or [0, 0]
+    # Hyprland address is a hex string; niri ids are ints. Keep them in sync.
+    address = "0x%x" % w.get("id", 0)
+    return {
+        "address": address,
+        "mapped": True,
+        "hidden": False,
+        "at": layout.get("tile_pos_in_workspace_view") or layout.get("pos_in_scrolling_layout") or [0, 0],
+        "size": [int(tile[0]), int(tile[1])] if tile else [0, 0],
+        "workspace": {"id": w.get("workspace_id", 0)},
+        "floating": bool(w.get("is_floating", False)),
+        "class": w.get("app_id", ""),
+        "initialClass": w.get("app_id", ""),
+        "title": w.get("title", ""),
+        "pid": w.get("pid", 0),
+        "focusHistoryID": w.get("id", 0),
+        "pinned": False,
+        "fullscreen": 0,
+        "grouped": [],
+        "tags": [],
+    }
+
+
+def cmd_clients(json_out):
+    windows = niri_json(["windows"])
+    if windows is None:
+        return ([] if json_out else "")
+    res = [_window_to_client(w) for w in windows]
+    if json_out:
+        return json.dumps(res)
+    lines = []
+    for c in res:
+        lines.append(f"Client {c['address']} -> {c['title']}")
+        lines.append("\tclass: " + c["class"])
+        lines.append("\tpid: " + str(c["pid"]))
+    return "\n".join(lines)
+
+
+def cmd_activewindow(json_out):
+    w = niri_json(["focused-window"])
+    if w is None:
+        return ({} if json_out else "")
+    c = _window_to_client(w)
+    if json_out:
+        return json.dumps(c)
+    lines = [
+        f"Window 0x{c['address'][2:]} -> {c['title']}",
+        "\tclass: " + c["class"],
+        "\tpid: " + str(c["pid"]),
+        "\taddress: " + c["address"],
+    ]
+    return "\n".join(lines)
+
+
+def cmd_activeworkspace(json_out):
+    ws = niri_json(["workspaces"]) or []
+    fw = None
+    for w in ws:
+        if w.get("is_focused") or w.get("is_active"):
+            fw = w
+    if fw is None and ws:
+        fw = ws[0]
+    if fw is None:
+        return ({"id": 1, "name": "", "monitor": "", "tiledLayout": "tile", "windows": 0} if json_out else "")
+    res = {
+        "id": fw.get("idx", fw.get("id", 1)),
+        "name": fw.get("name") or "",
+        "monitor": fw.get("output", ""),
+        "tiledLayout": "tile",
+        "windows": len([w for w in (niri_json(["windows"]) or []) if w.get("workspace_id") == fw.get("id")]),
+    }
+    return json.dumps(res) if json_out else f"workspace ID {res['id']} ({res['name']}) on {res['monitor']}"
+
+
+def cmd_devices(json_out):
+    keyboards = []
+    kl = niri_json(["keyboard-layouts"])
+    if kl:
+        names = kl.get("names") or []
+        cur = kl.get("current_idx", 0)
+        for i, name in enumerate(names):
+            keyboards.append({
+                "name": "keyboard-%d" % i, "active_keymap": name,
+                "main": (i == cur),
+            })
+    res = {"mice": [], "keyboards": keyboards, "touch": [], "tablets": []}
+    if json_out:
+        return json.dumps(res)
+    lines = []
+    for k in keyboards:
+        lines.append("Keyboard %s:\n\tactive keymap: %s" % (k["name"], k["active_keymap"]))
+    return "\n".join(lines)
+
+
+# niri bind-syntax modifier masks (Hyprland-compatible). Mod maps to Super here
+# (niri on a TTY); the user confirmed this account uses Super as Mod.
+MOD_MASK = {
+    "mod": 64, "super": 64, "meta": 64, "logo": 64, "cmd": 64, "win": 64,
+    "ctrl": 4, "control": 4, "alt": 8, "shift": 1,
+}
+
+
+def _unquote_kdl(value):
+    value = value.strip()
+    if len(value) >= 2 and value[0] in "\"'" and value[-1] == value[0]:
+        return value[1:-1].strip()
+    return value.strip()
+
+
+def _kdl_action_to_command(action):
+    """Turn a niri bind body ('spawn "x"' / 'spawn-sh "c"' / bare action) into a
+    shell command that reproduces it on niri."""
+    a = action.strip().rstrip(";").strip()
+    if not a:
+        return ""
+    if a.startswith("spawn-sh"):
+        return _unquote_kdl(a[len("spawn-sh"):]) or _unquote_kdl(a)
+    if a.startswith("spawn"):
+        toks = re.findall(r'"([^"]*)"|\'([^\']*)\'|(\S+)', a[len("spawn"):])
+        return " ".join(t[0] or t[1] or t[2] for t in toks)
+    return ("niri msg action " + a).strip()
+
+
+def _kdl_action_description(attrs, action):
+    """Description shown in the keybindings menu: hotkey-overlay-title when set,
+    else a readable form of the action (or the command for spawn binds)."""
+    m = re.search(r'hotkey-overlay-title="([^"]*)"', attrs)
+    if m and m.group(1):
+        return m.group(1)
+    a = action.strip().rstrip(";").strip()
+    if a.startswith("spawn"):
+        return _kdl_action_to_command(a)
+    name = " ".join(a.replace("-", " ").split())
+    return name if name else a
+
+
+def _config_bindings():
+    """Parse keybindings out of the niri config (the compositor source of truth
+    after the A+C split) and return (modmask, key, description, command) rows."""
+    cfg = os.path.expanduser("~/.config/niri/config.kdl")
+    try:
+        with open(cfg) as handle:
+            lines = handle.readlines()
+    except OSError:
+        return []
+
+    rows = []
+    in_binds = False
+    depth = 0
+    for raw in lines:
+        line = raw.split("//", 1)[0].strip()
+        if not line:
+            continue
+        if not in_binds:
+            if re.match(r"binds\s*\{", line):
+                in_binds = True
+                depth = 1
+            continue
+        depth += line.count("{") - line.count("}")
+        if depth <= 0:
+            in_binds = False
+            continue
+
+        m = re.match(r"(\S+)\s+", line)
+        if not m:
+            continue
+        chord = m.group(1)
+        rest = line[m.end():]
+        bm = re.search(r"\{([^}]*)\}", rest)
+        if not bm:
+            continue
+        attrs = rest[:bm.start()]
+        action = bm.group(1).strip()
+        if not action:
+            continue
+
+        modmask = 0
+        key = chord
+        for part in chord.split("+"):
+            part = part.strip()
+            if part.lower() in MOD_MASK:
+                modmask |= MOD_MASK[part.lower()]
+            else:
+                key = part
+        rows.append((modmask, key, _kdl_action_description(attrs, action),
+                     _kdl_action_to_command(action)))
+    return rows
+
+
+def cmd_binds(json_out):
+    binds = _config_bindings()
+    if json_out:
+        return json.dumps([
+            {"modmask": m, "key": k, "keycode": 0, "description": d,
+             "dispatcher": "exec", "arg": a}
+            for (m, k, d, a) in binds
+        ])
+    lines = []
+    for (m, k, d, a) in binds:
+        lines.append("bind")
+        lines.append("\tmodmask: %d" % m)
+        lines.append("\tkey: %s" % k)
+        lines.append("\tkeycode: 0")
+        lines.append("\tdescription: %s" % d)
+        lines.append("\tdispatcher: exec")
+        lines.append("\targ: %s" % a)
+    return "\n".join(lines)
+
+def cmd_cursorpos():
+    return "0, 0"
+
+
+def cmd_getoption(opt, json_out):
+    # Hyprland getoption: {option, int, bool, float, str}. Sensible defaults.
+    val = {"int": 0, "bool": False, "float": 0.0, "str": "", "option": opt}
+    if "rounding" in opt:
+        val["int"] = 12
+        val["float"] = 12.0
+    if "gaps" in opt:
+        val["int"] = 8
+    return json.dumps(val) if json_out else f"int: {val['int']}"
+
+
+# ---- dispatch parsing ----------------------------------------------------
+
+def _parse_bare_list(pairs):
+    """Parse 'key = value, key = value' inside hl.dsp.focus({...})."""
+    m = re.search(r"\{([^}]*)\}", pairs)
+    if not m:
+        return {}
+    body = m.group(1)
+    result = {}
+    for part in body.split(","):
+        kv = part.split("=", 1)
+        if len(kv) != 2:
+            continue
+        k = kv[0].strip()
+        v = kv[1].strip().strip('"').strip("'")
+        result[k] = v
+    return result
+
+
+def do_dispatch(payload):
+    payload = payload.strip()
+    # Normalize combined "dispatcher arg" single-string calls.
+    parts = payload.split(None, 1)
+    dispatcher = parts[0]
+    arg = parts[1] if len(parts) > 1 else ""
+
+    # exec / hl.dsp.exec_cmd
+    if dispatcher == "exec":
+        return do_exec(arg)
+    m = re.search(r"hl\.dsp\.exec_cmd\(\s*(.*?)\s*\)", payload)
+    if m:
+        return do_exec(_unquote(m.group(1)))
+
+    # hl.dsp.dpms
+    m = re.search(r"hl\.dsp\.dpms\(\s*\{(.*?)\}\s*\)", payload)
+    if m:
+        act = re.search(r'action\s*=\s*"(\w+)"', m.group(1))
+        if act and act.group(1) == "disable":
+            return niri_action(["power-off-monitors"])
+        return niri_action(["power-on-monitors"])
+
+    # hl.dsp.focus({ workspace = "N" }) / hl.dsp.focus({ window = "address:A" })
+    m = re.search(r"hl\.dsp\.focus\(\s*\{(.*?)\}\s*\)", payload)
+    if m:
+        kv = _parse_bare_list("{" + m.group(1) + "}")
+        if "workspace" in kv:
+            return _focus_workspace(kv["workspace"])
+        if "window" in kv:
+            return _focus_window_addr(kv["window"])
+        if "monitor" in kv:
+            return niri_action(["focus-monitor-left"])  # best-effort
+        return 0
+
+    # hl.dsp.window.close
+    m = re.search(r"hl\.dsp\.window\.close\(\s*\{(.*?)\}\s*\)", payload)
+    if m:
+        kv = _parse_bare_list("{" + m.group(1) + "}")
+        return _close_window_addr(kv.get("window", ""))
+
+    # hl.dsp.window.fullscreen_state
+    if "fullscreen_state" in payload or dispatcher == "fullscreenstate":
+        return niri_action(["fullscreen-window"])
+
+    # simple dispatchers
+    if dispatcher == "workspace":
+        return _focus_workspace(arg)
+    if dispatcher == "focuswindow":
+        return _focus_window_addr(arg)
+    if dispatcher == "focusmonitor":
+        return niri_action(["focus-monitor-left"])  # best-effort
+    if dispatcher == "closewindow":
+        return niri_action(["close-window"])
+    if dispatcher == "sendshortcut":
+        return 0
+    # movetoworkspace / movewindowtoworkspace
+    if dispatcher.startswith("movewin") or dispatcher == "movetoworkspace":
+        return _move_window_to_workspace(arg)
+
+    return 0  # unknown -> safe no-op
+
+
+def do_exec(cmd):
+    cmd = _unquote(cmd)
+    if not cmd:
+        return 0
+    # spawn via shell so pipes/redirects work; niri spawn runs through sh -c
+    subprocess.run(["sh", "-c", f'niri msg action spawn -- sh -c {_shq(cmd)}'], capture_output=True, text=True)
+    return 0
+
+
+def _shq(s):
+    return "'" + s.replace("'", "'\\''") + "'"
+
+
+def _unquote(s):
+    s = s.strip()
+    if len(s) >= 2 and s[0] == s[-1] and s[0] in "\"'":
+        return s[1:-1]
+    if s.startswith("[[") and s.endswith("]]"):
+        return s[2:-2]
+    return s
+
+
+def _parse_int(v):
+    v = v.strip()
+    m = re.search(r"(\d+)", v)
+    return int(m.group(1)) if m else 0
+
+
+def _addr_to_id(addr):
+    m = re.search(r"0x?([0-9a-fA-F]+)", str(addr))
+    if m:
+        try:
+            return int(m.group(1), 16)
+        except Exception:
+            pass
+    return _parse_int(addr)
+
+
+def _find_window(world_id):
+    windows = niri_json(["windows"]) or []
+    for w in windows:
+        if w.get("id") == world_id:
+            return w
+    return None
+
+
+def _focus_window_addr(addr):
+    wid = _addr_to_id(addr)
+    return niri_action(["focus-window", "--", str(wid)])
+
+
+def _close_window_addr(addr):
+    wid = _addr_to_id(addr)
+    return niri_action(["close-window"]) if not wid else niri_action(["focus-window", "--", str(wid)])
+
+
+def _focus_workspace(ref):
+    if isinstance(ref, str):
+        ref = _unquote(ref)
+    return niri_action(["focus-workspace", "--", str(_parse_int(ref))])
+
+
+def _move_window_to_workspace(ref):
+    if isinstance(ref, str):
+        parts = re.split(r"\s+", _unquote(ref))
+        ref = parts[-1]
+    return niri_action(["move-window-to-workspace", "--", str(_parse_int(ref))])
+
+
+def cmd_eval(payload):
+    # hl.dispatch(hl.dsp.cursor.move(...)) etc. Extract the inner call.
+    inner = re.search(r"hl\.dispatch\((.*?)\)", payload)
+    if inner:
+        return do_dispatch(inner.group(1))
+    if "hl.monitor(" in payload:
+        return _eval_monitor(payload)
+    return 0  # hl.config / hl.device / hl.workspace_rule -> no-op
+
+
+def _eval_monitor(payload):
+    m = re.search(r"hl\.monitor\(\s*\{(.*?)\}\s*\)", payload)
+    if not m:
+        return 0
+    kv = _parse_bare_list("{" + m.group(1) + "}")
+    output = kv.get("output") or kv.get("name") or ""
+    if not output:
+        return 0
+    # niri msg output accepts exactly one action per call; Omarchy's monitor
+    # eval bundles mode+scale+position, so apply each separately. Skip `mode`:
+    # Omarchy re-sends the *current* mode (as "WxH@Hz") just to hold the
+    # resolution, and niri rejects that @Hz form; the output is already on it.
+    if kv.get("scale"):
+        subprocess.run(["niri", "msg", "output", output, "scale", kv["scale"]],
+                       capture_output=True, text=True)
+    if kv.get("position") and kv["position"] != "auto":
+        pos = re.findall(r"(\d+)", kv["position"])
+        if len(pos) >= 2:
+            subprocess.run(["niri", "msg", "output", output, "position"] + pos[:2],
+                           capture_output=True, text=True)
+    return 0
+
+
+# ---- main ----------------------------------------------------------------
+
+def main(argv):
+    # strip --instance <sig> (multiple-instance hyprland form)
+    if len(argv) >= 2 and argv[0] == "--instance":
+        argv = argv[2:]
+
+    json_out = False
+    if "-j" in argv or "--json" in argv:
+        json_out = True
+        argv = [a for a in argv if a not in ("-j", "--json")]
+
+    if not argv:
+        return 0
+
+    cmd = argv[0]
+    rest = argv[1:]
+
+    if cmd == "monitors":
+        sys.stdout.write(cmd_monitors(json_out) + "\n")
+        return 0
+    if cmd == "clients":
+        sys.stdout.write(cmd_clients(json_out) + "\n")
+        return 0
+    if cmd == "activewindow":
+        sys.stdout.write(cmd_activewindow(json_out) + "\n")
+        return 0
+    if cmd == "activeworkspace":
+        sys.stdout.write(cmd_activeworkspace(json_out) + "\n")
+        return 0
+    if cmd == "devices":
+        sys.stdout.write(cmd_devices(json_out) + "\n")
+        return 0
+    if cmd == "binds":
+        sys.stdout.write(cmd_binds(json_out) + "\n")
+        return 0
+    if cmd == "cursorpos":
+        sys.stdout.write(cmd_cursorpos() + "\n")
+        return 0
+    if cmd == "getoption":
+        opt = rest[-1] if rest else ""
+        sys.stdout.write(cmd_getoption(opt, json_out) + "\n")
+        return 0
+    if cmd == "dispatch":
+        payload = " ".join(rest)
+        return do_dispatch(payload)
+    if cmd == "eval":
+        payload = " ".join(rest)
+        return cmd_eval(payload)
+    if cmd in ("reload",):
+        return 0
+    if cmd == "hyprsunset":
+        return 0
+    if cmd in ("keyword", "setprop", "print", "binary", "hyprctl"):
+        return 0
+    if cmd in ("instance", "instances"):
+        return 0
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -1,0 +1,11 @@
+#!/bin/bash
+
+# niri port: an upstream `omarchy update` runs git pull on the repo, which can
+# clobber our on-niri customisations (hyprctl shim wiring, menu remap, QuickShell
+# niri integration).  Re-apply the stored overlay after every update.  Idempotent;
+# if it conflicts with an upstream change it leaves the repo untouched and tells
+# the user to merge manually.
+
+if [[ ${XDG_CURRENT_DESKTOP:-} == niri ]] && [[ -x "$HOME/bin/omarchy-niri-repatch" ]]; then
+  "$HOME/bin/omarchy-niri-repatch" || true
+fi

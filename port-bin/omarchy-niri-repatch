@@ -1,0 +1,47 @@
+#!/bin/bash
+
+# Reapply the Omarchy-on-niri port overlay after an upstream update.
+#
+# The port customises files inside the omarchy git repo (compositor shim, menu
+# remap, QuickShell niri integration, theme-set fixes).  An upstream `omarchy
+# update` is a git pull that would clobber those.  This script replays our stored
+# patch and restores the new Niri.qml integration file.  It is idempotent and is
+# run automatically from the post-update hook; run it manually if a pull leaves
+# the repo without our customisations.
+
+set -u
+
+OVL="$HOME/.config/omarchy/niri-port"
+OMARCHY_PATH="${OMARCHY_PATH:-$HOME/.local/share/omarchy}"
+
+if [[ ${XDG_CURRENT_DESKTOP:-} != niri ]]; then
+  echo "omarchy-niri-repatch: not on niri, skipping" >&2
+  exit 0
+fi
+if [[ ! -d $OMARCHY_PATH/.git ]]; then
+  echo "omarchy-niri-repatch: no omarchy git repo at $OMARCHY_PATH" >&2
+  exit 0
+fi
+if [[ ! -f $OVL/niri.patch || ! -f $OVL/Niri.qml ]]; then
+  echo "omarchy-niri-repatch: overlay missing ($OVL/niri.patch or Niri.qml)" >&2
+  exit 1
+fi
+
+cd "$OMARCHY_PATH" || exit 1
+
+# Restore the new QuickShell compositor integration module.
+cp -f "$OVL/Niri.qml" shell/Commons/Niri.qml
+
+if git apply --reverse --check "$OVL/niri.patch" 2>/dev/null; then
+  echo "omarchy-niri-repatch: overlay already applied, nothing to do"
+  exit 0
+fi
+
+if git apply --check "$OVL/niri.patch" 2>/dev/null; then
+  git apply "$OVL/niri.patch"
+  echo "omarchy-niri-repatch: overlay applied cleanly"
+else
+  echo "omarchy-niri-repatch: overlay CONFLICTS with upstream changes" >&2
+  echo "omarchy-niri-repatch: run a manual merge (ask Ante) -- leaving repo untouched" >&2
+  exit 2
+fi

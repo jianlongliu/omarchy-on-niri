@@ -1,435 +1,129 @@
-# Omarchy on niri — 移植方案与运维文档
+# Omarchy on niri
 
-> 目的：把 DHH 的 Omarchy v4（原本 Arch + Hyprland + QuickShell）移植到 niri
-> 滚动平铺 Wayland 合成器上，运行在 `yvonne` 账户，并保持 niri 原生体验。
-> 本文档是"上下文丢失也能重建"的持久记录。最后更新：2026-08-25。
+Port of [basecamp/omarchy](https://github.com/basecamp/omarchy) (`quattro` / `4.0.0.alpha`) to the
+[niri](https://github.com/YaLTeR/niri) Wayland compositor, instead of Hyprland.
 
----
+This repo contains the ported Omarchy source plus the glue that makes it run on niri. It is **not a
+standalone installer** — it assumes a working Arch + niri login session and an existing Omarchy install
+(or that you install Omarchy first). What it gives you is:
 
-## 1. 硬性约束（不可违背）
+- The Omarchy source with the QML/Niri port applied (`shell/Commons/Niri.qml`, patched
+  `Bar.qml` / `Workspaces.qml` / `Background.qml`).
+- `port-bin/` — the PATH-first override scripts that translate the Hyprland-coupled bits to niri
+  (the `hyprctl` shim is the critical one).
+- `niri-port/` — the idempotent overlay patch (`niri.patch` + `Niri.qml`) that survives `omarchy update`.
+- `niri-config/` — the niri-side wiring (`omarchy.kdl.template` to merge into `config.kdl`, plus a
+  `shell.json` sample).
+- `hooks/` — Omarchy update/theme hooks that reapply the port.
+- `install.sh` — pushes everything into place for a fresh machine.
+- `docs/omarchy-on-niri-port.md` — the full port decision log / notes.
 
-1. **不破坏隔壁 `jianlongliu` 账户（uid 1000）**，用户仍在使用。
-   - 所有改动只落在 `/home/yvonne/`（`~/.config`, `~/.local`, `~/bin`）。
-   - 不写 `/home/jianlongliu`，不运行影响全系统的安装。
-2. **系统底层不做变动**：
-   - 保持 systemd-boot 引导加载器不变。
-   - 保持 greetd / dms-greeter 显示管理器不变。
-   - 保持 plymouth 不变。
-   - 不装/不删任何系统包（`pacman` 需 sudo 密码，非交互不可用，天然保护）。
-3. **视觉效果维持 Omarchy 原样**（Quickshell bar / menu / 配色）。
-4. **快捷键 `Super+Space` 维持 Omarchy 那套**（`omarchy-menu toggle`）。
-
----
-
-## 2. 架构总览
+## Repository layout
 
 ```
-niri (Wayland compositor, KDL config)
-   │   niri msg -j (JSON IPC)   ▲ 命令行调用
-   ▼                           │
-hyprctl 垫片 (~/bin/hyprctl, Python)     Niri.qml 单例 (Commons)
-   │  为 Omarchy bin/* 脚本翻译          │  为 Quickshell Bar 提供
-   │  hyprctl → niri msg                 │  Hyprland.* 等效数据模型
-   ▼                           │
-Quickshell (layer-shell UI, compositor-agnostic)
-   ▼
-Omarchy shell (~/.local/share/omarchy/shell)
+omarchy-on-niri/
+├── shell/        <- ported Omarchy Quickshell source (Layer 1)
+├── bin/          <- Omarchy's own scripts (unchanged upstream)
+├── port-bin/     <- port glue: hyprctl shim + niri system/power/theme/repatch scripts
+│                     install.sh copies these into ~/bin (PATH-first, survives `omarchy update`)
+├── niri-port/    <- overlay: niri.patch + Niri.qml (reapplied after each update)
+├── niri-config/  <- omarchy.kdl.template (merge into ~/.config/niri/config.kdl)
+│                     + shell.json sample (Omarchy config layer 1)
+├── hooks/        <- post-update.d/10-niri-repatch, theme-set.d/10-niri-border
+├── install.sh    <- positional bootstrap
+├── docs/omarchy-on-niri-port.md   <- full port notes
+└── README.md
 ```
 
-Omarchy v4 本身是 **Hyprland-only** 的（`config/` 内有 80 处 hyprland 引用，无 niri）。
-但它的 shell 是 QuickShell 写的，仅 `import Quickshell` / `Quickshell.Io`，**不依赖 Hyprland
-原生模块**。真正与合成器打交道只有两条链路，都已被桥接：
+## Requirements / dependencies
 
-- **`hyprctl` 命令调用**（53 个 `bin/` 脚本）→ 用 Python 垫片翻译成 `niri msg`。
-- **QuickShell `Hyprland` QML 模块**（bar 读 `workspaces/.focusedWorkspace/.focusedMonitor`）
-  → 用 `Niri.qml` 单例轮询 `niri msg -j workspaces|windows` 提供等效数据。
+Install these on the target Arch machine. Everything below was verified in use on the porting machine
+(March 2026 / Arch rolling, systemd 261, niri 26.04); verify package availability on your box.
 
-参考的中间层模式：DankMaterialShell (DMS, AvengeMedia) —— Go daemon + unix socket JSON 协议，
-原生支持 niri。本方案选用的是更轻量的"hyprctl 垫片"而非 DMS daemon，因为 Omarchy 的
-hyprctl 调用面有界、可直接映射。
-
----
-
-## 3. 文件清单（改动/新建/备份）
-
-### 3.1 新建的核心交付物
-
-| 路径 | 作用 |
+### Required — the shell engine
+| Package | Why |
 |---|---|
-| `~/bin/hyprctl` (453 行, +x) | hyprctl 垫片：Omarchy 的 `hyprctl` 调用 → `niri msg`，纯 stdlib，不依赖 jq |
-| `~/.local/share/omarchy/shell/Commons/Niri.qml` (130 行) | QuickShell 单例，轮询 niri，暴露 `workspaces/focusedWorkspace/focusedMonitor` |
-| `~/bin/omarchy-niri-apply-theme` (Python, +x) | 把当前 Omarchy theme 的边框色写进 `config.kdl` 的 `focus-ring`（C 层换色） |
-| `~/bin/omarchy-niri-system` (+x) | **统一系统动作入口**：logout→`niri msg action quit --skip-confirmation`、reboot→logind D-Bus `Manager.Reboot`、shutdown→logind D-Bus `Manager.PowerOff`（均免密），统一 OSD+关窗+分发 |
-| `~/bin/omarchy-niri-repatch` (+x) | 上游更新后重放 niri 移植覆盖层（patch + Niri.qml + qmldir）|
-| `~/bin/omarchy-powerprofiles-list` + `~/bin/omarchy-powerprofiles-set` (+x) | **TLP 感知**的电源 profile 脚本（见 §8.11）：优先 `powerprofilesctl`，缺则回退 D-Bus `net.hadess.PowerProfiles` |
-| `~/.config/omarchy/hooks/theme-set.d/10-niri-border` | 换 style 时自动 `omarchy-niri-apply-theme`（只写不重载，保护 SCALE）|
-| `~/.config/omarchy/hooks/post-update.d/10-niri-repatch` | `omarchy update` 后自动重放覆盖层 |
-| `~/.config/omarchy/niri-port/niri.patch` + `Niri.qml` | 移植覆盖层产物（仓库外，重放用）|
-| `~/.ante/projects/-home-yvonne/memory/project-omarchy-niri.md` | 项目记忆 |
+| `niri` | The compositor itself. This port targets niri (26.x). |
+| `quickshell` | The layer-shell QML engine that renders the Omarchy bar/menus/OSD. Omarchy's shell is Quickshell-based. Install via repo/AUR as appropriate. |
+| `git`, `base-devel` | To clone/build/install Omarchy (and this port). |
 
-### 3.2 修改
-
-| 路径 | 改动 |
+### Required — Omarchy runtime helpers
+| Package | Why |
 |---|---|
-| `~/.local/share/omarchy/shell/Commons/qmldir` | 加一行 `singleton Niri 1.0 Niri.qml` |
-| `~/.local/share/omarchy/shell/plugins/bar/widgets/Workspaces.qml` | 去掉 `import Quickshell.Hyprland`；`Hyprland.workspaces`→`Niri.workspaces`、`Hyprland.focusedWorkspace`→`Niri.focusedWorkspace` |
-| `~/.local/share/omarchy/shell/plugins/bar/Bar.qml` | 去掉 import；`Hyprland.focusedMonitor`→`Niri.focusedMonitor` |
-| `~/.local/share/omarchy/shell/plugins/background/Background.qml` | `readlinkProc` 回调强制即时切换背景（见 §8.1b）|
-| `~/.local/share/omarchy/bin/omarchy-launch-tui` | 加 uid 终端回退（ghostty），因 niri 无 `uwsm-app`/`xdg-terminal-exec` |
-| `~/.local/share/omarchy/bin/omarchy-theme-set` | `set_theme_background` 传实际背景文件而非过渡快照 |
-| `~/.local/share/omarchy/bin/omarchy-refresh-hyprland` | **niri 感知**：`XDG_CURRENT_DESKTOP=niri` 时整脚本变 no-op（不再重建 `~/.config/hypr`）|
-| `~/.local/share/omarchy/default/omarchy/omarchy-menu.jsonc` | **菜单指向 niri 真配置**（见 §8.6）|
-| `~/.config/niri/config.kdl` | 见 §5；`focus-ring` 颜色现**由主题驱动**（见 §5.6）|
+| `jq` | Used by many `omarchy-*` scripts and the `hyprctl` shim to parse JSON. |
+| `qt6-imageformats` | **Critical.** Lets Qt Quick decode the `.webp` Omarchy wallpapers. Without it you get a black wallpaper. |
+| `inotify-tools` | Provides `inotifywait`, used by the Omarchy plugin watcher (`~/.config/omarchy/plugins`). |
+| `wl-clipboard` | Provides `wl-copy` / `wl-paste`, used by the clipboard manager plugin. |
+| `brightnessctl` | Backlight control for the brightness media keys / OSD. |
 
-### 3.3 备份（重要，可回滚）
-
-| 备份 | 对应 |
+### Required — audio/media
+| Package | Why |
 |---|---|
-| `~/.config/niri/config.kdl.bak-20260824-185918` | 最原始 niri 配置（未加 environment/spawn/binds） |
-| `~/.config/niri/config.kdl.bak-port-20260824-193206` | 加了 environment 后、改 spawn/binds 前 |
+| `pipewire` + `wireplumber` (and `pipewire-pulse`) | Audio backend; `wpctl` drives the volume OSD. |
+| `playerctl` | Media transport keys (play/pause/next/prev). |
+| `ghostty` | The default terminal (`Mod+Return` / `Mod+T`). |
 
----
+### Power backend (one of these)
+| Package | Why |
+|---|---|
+| `power-profiles-daemon` | Provides `powerprofilesctl`. `port-bin/omarchy-powerprofiles-*` prefers this. |
+| **or** `tlp` + `tlp-pd` | The porting machine uses TLP (`powerprofilesctl` absent). The shim falls back to TLP's `net.hadess.PowerProfiles` D-Bus interface. |
 
-## 4. hyprctl 垫片（`~/bin/hyprctl`）
+### Optional
+| Package | Why |
+|---|---|
+| `satty` | Screenshot annotation. |
+| `swappy` | Alternate screenshot editor. |
+| `grim` / `slurp` | Niri screenshots / region capture (niri provides its own, but some capture helpers call these). |
 
-### 设计原则
-- 纯 Python stdlib，无 jq / 无外部依赖。
-- 目标是**让 Omarchy `bin/` 脚本能跑**，只覆盖实际用到的 hyprctl 子命令。
-- 对 Hyprland-only 的特性（`hyprsunset`, `hl.config cursor`, `hl.device`, `hl.monitor`,
-  `hl.workspace_rule`, `setprop opaque`）降级为安全的无操作（no-op），避免脚本报错。
+### Non-package prerequisites
+- A **backlight device** under `/sys/class/backlight/` (e.g. `intel_backlight`). `brightnessctl` needs the
+  `video` group / a matching udev rule to write without root:
+  - `/etc/udev/rules.d/90-backlight.rules`: `SUBSYSTEM=="backlight" GROUP="video" MODE="0664"`
+  - `usermod -aG video <user>`
+- A **logind session** with polkit `org.freedesktop.login1.reboot` / `power-off` set to `allow_active=yes`
+  (systemd defaults to this on Arch) so the system switch works passwordless.
 
-### 已映射的查询（可 `-j` 出 JSON，Hyprland schema）
-- `clients`, `monitors`, `activewindow`, `activeworkspace`, `devices`, `binds`, `getoption`, `cursorpos`
-- 辅助函数：`_window_to_client()`, `_addr_to_id()`, `cmd_monitors()`, `cmd_clients()`,
-  `cmd_activewindow()`, `cmd_activeworkspace()`, `cmd_devices()`, `cmd_getoption()`。
+## Install
 
-### 已映射的 dispatch/eval
-- `exec` → niri 启动窗口；`hl.dsp.focus workspace/window` → 切换 workspace/窗口；
-  `hl.dsp.dpms` → 关/开屏；`hl.dsp.window.close` → 关闭窗口；`fullscreen`。
-- 其余 Hyprland-only dispatch 一律 no-op。
-
-### 验证命令
-```sh
-~/bin/hyprctl -j clients            # 返回合法 Hyprland schema JSON
-~/bin/hyprctl dispatch exec ghostty # 启动终端
-~/bin/hyprctl dispatch hl.dsp.focus workspace 3
-```
-
-> 已知限制：Hyprland 的 `clients` schema 字段（如 `address`、`class`）按 niri 数据映射，
-> 若某脚本依赖 Hyprland 独有的字段值可能拿到空/占位，但不至于崩溃。
-
----
-
-## 5. niri 配置（`~/.config/niri/config.kdl`）
-
-### 5.1 environment 块（注意语法：`KEY "value"`，无 `=`，无 `$PATH` 展开）
-
-```kdl
-environment {
-    OMARCHY_PATH "/home/yvonne/.local/share/omarchy"
-    PATH "/home/yvonne/bin:/home/yvonne/.local/share/omarchy/bin:/home/yvonne/.local/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin"
-}
-```
-
-niri 语法要点：**不能写 `=`，不能写 `$PATH`**（不会展开），必须写全字面 PATH。
-
-### 5.2 启动 QuickShell（替换 niri 自带的 waybar）
-
-```kdl
-spawn-sh-at-startup "quickshell -n -p /home/yvonne/.local/share/omarchy/shell"
-```
-
-### 5.3 Omarchy 绑定（不冲突子集）
-
-```kdl
-Mod+Space        hotkey-overlay-title="Omarchy Menu" { spawn-sh "omarchy-menu toggle"; }
-Mod+Alt+Space    hotkey-overlay-title="Apps menu"    { spawn-sh "omarchy-menu toggle apps"; }
-Mod+K             hotkey-overlay-title="Keybindings"  { spawn-sh "omarchy-menu-keybindings"; }
-Mod+Ctrl+L        hotkey-overlay-title="Lock system"  { spawn-sh "omarchy-system-lock"; }
-Mod+Ctrl+V       hotkey-overlay-title="Clipboard"    { spawn-sh "omarchy-shell shell toggle omarchy.clipboard"; }
-Mod+Ctrl+E       hotkey-overlay-title="Emojis"       { spawn-sh "omarchy-shell shell toggle omarchy.emojis"; }
-Mod+Ctrl+A       hotkey-overlay-title="Audio"        { spawn-sh "omarchy-shell shell toggle omarchy.audio"; }
-Mod+Ctrl+B       hotkey-overlay-title="Bluetooth"    { spawn-sh "omarchy-shell shell toggle omarchy.bluetooth"; }
-Mod+Ctrl+D       hotkey-overlay-title="Display"      { spawn-sh "omarchy-shell shell toggle omarchy.monitor"; }
-Mod+Ctrl+W       hotkey-overlay-title="Network"      { spawn-sh "omarchy-shell shell toggle omarchy.network"; }
-Mod+Ctrl+P       hotkey-overlay-title="Power"        { spawn-sh "omarchy-shell shell toggle omarchy.power"; }
-Mod+Ctrl+Alt+D   hotkey-overlay-title="Calendar"     { spawn-sh "omarchy-shell shell toggle omarchy.clock"; }
-Mod+Return       hotkey-overlay-title="Terminal"     { spawn "ghostty"; }
-Print            { spawn-sh "omarchy-capture-screenshot"; }
-```
-
-### 5.4 niri 平铺/焦点/工作区键位（用户自定义方向键方案）
-
-已移除 niri vim 键（`Mod+H/J/K/L`），改用方向键；`Mod+K`/`Mod+Ctrl+L` 让给 Omarchy：
-
-```kdl
-Mod+Left   { focus-column-left; }            // 向左移动
-Mod+Right  { focus-column-right; }           // 向右移动
-Mod+Up     { focus-window-up; }              // 垂直聚焦
-Mod+Down   { focus-window-down; }
-Mod+Page_Down { focus-workspace-down; }      // 下一个工作区（按编号）
-Mod+Page_Up   { focus-workspace-up; }        // 上一个工作区
-Mod+Ctrl+Up    { move-window-to-workspace-up; }   // 窗口移到上一工作区
-Mod+Ctrl+Down  { move-window-to-workspace-down; } // 窗口移到下一工作区
-Mod+Ctrl+Left  { move-column-left; }         // 列左移
-Mod+Ctrl+Right { move-column-right; }        // 列右移
-Mod+O          { toggle-overview; }          // 总览（Mod+O 保留）
-Mod+Tab repeat=false { toggle-overview; }    // 总览（用户指定 Super+Tab）
-```
-
-### 5.5 仍未改绑定的 Omarchy 键（保留 niri 原生 tiling）
-
-这些 Omarchy 默认键仍被 niri 平铺/窗口占用，未强行覆盖，如需再让出可后续处理：
-- `Mod+Escape`（keyboard-shortcuts-inhibit / 快捷键抑制）
-- `Mod+comma` / `Mod+Period`（consume / expel-column）
-- `Mod+Ctrl+R`（reset-window-height）
-- `Mod+Tab`（Omarchy 为 Next workspace，现让给 niri overview —— 用户指定）
-
-### 5.6 窗口边框色跟随 Omarchy 主题（A+C 的 C 层）
-
-Omarchy 的 look'n'feel（`looknfeel.lua`）默认把 gaps/rounding/动画/layout 全注释掉走 Hyprland
-默认值，style 真正落到合成器上的只有**窗口边框色**：生成的 `theme/hyprland.lua` 里
-`active_border_color` / `inactive_border_color`（catppuccin 为 `#89b4fa` / `rgba(595959aa)`）。
-
-niri 上这个颜色由 `config.kdl` 的 `focus-ring` 块决定。`omarchy-niri-apply-theme`（Python）读当前
-`theme/hyprland.lua`，把 `active-color`/`inactive-color` 就地写进 `focus-ring`（Hyprland 的
-`rgba(rrggbbaa)` 归一化成 niri 的 `#rrggbbaa`），并备份
-`config.kdl.bak-niri-theme`。默认只写不重载：重载会重置 niri 的运行时覆盖
-（如 SCALE 按钮改的 scale/mode），所以换色在下次 `load-config-file`/重启时生效。
+The port assumes Omarchy is already installed (its own installer puts it at
+`~/.local/share/omarchy`). To lay down the port glue on a fresh machine:
 
 ```sh
-~/bin/omarchy-niri-apply-theme        # 只写 config.kdl
-~/bin/omarchy-niri-apply-theme --reload  # 写 + niri msg action load-config-file
+# 1. Install the packages above via your package manager.
+# 2. Clone this repo and run the bootstrap:
+git clone https://github.com/jianlongliu/omarchy-on-niri
+cd omarchy-on-niri
+./install.sh               # installs port-bin -> ~/bin, writes niri config, hooks, shell.json
 ```
 
-换 style 时由 `theme-set.d/10-niri-border` 钩子自动触发（只写，不重载）。
+`install.sh` will:
+- copy the 6 `port-bin/` scripts into `~/bin` (PATH-first, survives `omarchy update`);
+- merge `niri-config/omarchy.kdl.template` (substituting `__HOME__`) into `~/.config/niri/config.kdl`
+  (backs up first; validates with `niri validate`);
+- write `~/.config/omarchy/shell.json` (only if absent);
+- create the omarchy hooks under `~/.config/omarchy/hooks/`;
+- apply the `niri-port/niri.patch` overlay to `~/.local/share/omarchy` (idempotent).
 
----
+Then log out and back in — `spawn-sh-at-startup` starts the Quickshell shell.
 
-## 6. Niri.qml（QuickShell 数据单例）
+## Per-machine adjustments (must check)
 
-核心逻辑：每 500ms 轮询 `niri msg -j workspaces` 和 `niri msg -j windows`，
-组装出一个仿 `Hyprland.workspaces` 的模型，供 Bar 的 Workspaces.qml / Bar.qml 使用。
+These are hardware/OS specific and **cannot be auto-detected reliably**:
 
-- `root.workspaces.values[]` 每项含：`niriId, id, name, output, active, focused,
-  toplevels.values[]`（`toplevels.values.length` 由 windows 按 workspace_id 计数得出）。
-- `root.focusedWorkspace` = 当前聚焦 workspace。
-- `root.focusedMonitor` = `{ "name": 聚焦 workspace 的 output }`。
-- 写成 `property Process x: Process { id: x; ... }` 形式（匹配 Omarchy Style.qml 惯例），
-  并给 StdioCollector 加 `waitForEnd: true`，否则编译报
-  "Cannot assign to non-existent default property"。
+1. **Monitor output name** — port uses `eDP-1` in a few places; run `niri msg outputs` and adjust.
+2. **Backlight device** — `intel_backlight` on the porting box; check `/sys/class/backlight/*`.
+3. **Power backend** — TLP vs power-profiles-daemon changes what `omarchy-powerprofiles-*` reports.
+4. **niri version** — tested on 26.04; keybind/overview behavior may differ across releases.
+5. **overview wallpaper** — the overview backdrop is compositor-drawn (niri), not the desktop wall;
+   this is still an open limitation (see the port notes).
 
-> 注意：只读数据才走这里。真正执行合成器动作靠 `hyprctl` 垫片。Hyprland 原生模块中
-> 用来发信号的 `HyprlandFocusGrab`（target: Hyprland）等其他 import 会继续解析为
-> QuickShell 的内建模块，但 run（轮询）只喂给 Niri.qml。
+## Why it's not a single-click guarantee
 
----
+The port reuses Omarchy's own install but swaps Hyprland for niri via the `hyprctl` shim and a
+`Niri.qml` Quickshell model. Because Omarchy scripts call `hyprctl` ~50 times, the shim must be on
+`PATH` for the shell to function. Files in `~/.local/share/omarchy` are patched in the working tree and
+kept **uncommitted** so the `niri.patch` overlay can be reapplied after each `omarchy update` — do not
+commit inside `~/.local/share/omarchy` or the fast-forward update will break.
 
-## 7. 部署步骤（全新环境重现用）
-
-> Omarchy v4 的 `install/` 是**全系统安装器**（udev/snapper/firewall/pacman），
-> 出于约束**刻意跳过**，只部署 config/bin/shell 到 home。
-
-1. 克隆仓库（branch `quattro`，4.0.0.alpha）到 `~/.local/share/omarchy`：
-   ```sh
-   git clone -b quattro --depth 1 https://github.com/basecamp/omarchy ~/.local/share/omarchy
-   ```
-2. 写入 `~/bin/hyprctl` 垫片（见 §4），`chmod +x`。
-3. 生成 `~/.local/share/omarchy/shell/Commons/Niri.qml` 并追加到 `qmldir`。
-4. patch `Bar.qml` / `Workspaces.qml`（见 §3.2）。
-5. 编辑 `~/.config/niri/config.kdl`：environment 块 + `spawn-sh-at-startup` quickshell + 绑定。
-6. 校验并应用：
-   ```sh
-   niri validate
-   niri msg action reload-config
-   ```
-7. 启动 QuickShell（如需手动，设置 `HYPRLAND_INSTANCE_SIGNATURE=1` 以消除只读警告）：
-   ```sh
-   HYPRLAND_INSTANCE_SIGNATURE=1 quickshell -n -p ~/.local/share/omarchy/shell
-   ```
-8. A 层（菜单指向 niri 真配置 + Hyprland 层降级）：
-   - patch `default/omarchy/omarchy-menu.jsonc`（§8.6）。
-   - patch `bin/omarchy-refresh-hyprland` 加 niri no-op 守卫（§8.6）。
-9. C 层（边框色跟随主题）：
-   - 写 `~/bin/omarchy-niri-apply-theme`，跑一次写入 `focus-ring`；建
-     `~/.config/omarchy/hooks/theme-set.d/10-niri-border`。
-10. 更新覆盖层（让上游更新能重放我们的改动）：
-    - `git diff > ~/.config/omarchy/niri-port/niri.patch`，`cp shell/Commons/Niri.qml ~/.config/omarchy/niri-port/`。
-    - 写 `~/bin/omarchy-niri-repatch`，建
-      `~/.config/omarchy/hooks/post-update.d/10-niri-repatch`。
-    - 每次 `omarchy update` 之后钩子自动重放；若冲突（上游改了同一函数）则手动合并（找 Ante）。
-
----
-
-## 8. 已知缺口与待办
-
-1. **CLI 依赖已装**：`jq` / `satty` / `inotify-tools` 已用 `pkexec pacman -S --needed jq satty inotify-tools` 装好
-   `wl-clipboard`（`wl-copy`/`wl-paste`）系统自带，`swappy`（可选截图编辑器）仍缺，非核心。
-   Omarchy 的 `bin/` CLI 脚本（截图、剪贴板等）此前因缺 jq 报错，现已正常。
-   另装 **`qt6-imageformats`**（`pkexec pacman -S --needed qt6-imageformats`）：提供 Qt 的 webp
-   图像插件（`libqwebp.so`）。此前缺它，Qt Quick 无法解码 Omarchy 的 `.webp` 壁纸 → 桌面背景全黑，
-   bar 用 QML 渲染所以正常。这是"没有壁纸"的真正根因。
-1b. **壁纸/背景已修**（2026-08-24）：除装 `qt6-imageformats` 外，两处代码改动——
-   - `shell/plugins/background/Background.qml`：`readlinkProc` 回调改用 `transitionBackground("",p,p,true,true)`
-     （force+instant）。避免切换主题时 `currentBackground` 已等于链接目标、而 `displayedBackground`
-     还停在已删除的过渡快照上被短路卡死；强制让实时背景链接始终覆盖。
-   - `bin/omarchy-theme-set`：`set_theme_background` 的 `background themeTransition` 改为传**实际背景文件**
-     （old/new），不再传会被 `sleep 3`+`rm` 提前删除的 `next-/previous-*.webp` 快照，消除异步加载竞争。
-   - 验证：`grim` 截图底部条带出现波纹高光像素（壁纸已显示）。
-2. **`hyprctl` 垫片本轮修复**：`monitors` 输出补上 `activeWorkspace.id` 与 `transform`，并把
-   `width`/`height` 修正为物理分辨率（`format_geo` 需 `width/scale` 得逻辑尺寸）。
-   这修复了 `omarchy-capture-region` 的 `active_workspace()` 取空 → `""|tonumber` 报错。
-   同时修正 `_focused_output_name()`：niri `focused-output` 输出形如 `Output "..." (eDP-1)`，
-   原正则 `^[^:]+` 无冒号时吞掉整行，现改为提取末尾括号。
-3. **快捷键重映射已按用户方案落地**（2026-08-24）：tiling 改成方向键方案、移除 vim 键，
-   `Mod+K`=keybindings、`Mod+Ctrl+L`=锁屏 让给 Omarchy。`Mod+Ctrl+R`/`Mod+comma`/`Mod+Escape`
-   仍被 niri 占用，待后续让出。
-4. **显示器缩放 SCALE 生效**：`omarchy-hyprland-monitor-scaling` → `hyprctl eval hl.monitor(...)` 被
-   `_eval_monitor` 处理。原实现把 `mode`+`scale`+`position` 塞进**一次** `niri msg output`，而 niri
-   一次只能接受一个 action，导致整条命令失败、scale 不生效（字体大小走 shell 内部所以正常）。
-   现拆成独立多次 `niri msg output` 调用，并**跳过 `mode`**（Omarchy 重发当前 `WxH@Hz` 会被 niri 拒绝，
-   且输出本就在该模式上）。验证：1.5→1.6 生效。
-5. **hyprctl schema 精度**：个别 Hyprland-only 字段可能是占位值；如遇脚本异常再补映射。
-6. **锁屏**：niri 侧 `Super+Alt+L`（swaylock）与 Omarchy `Mod+Ctrl+L`（`omarchy-system-lock`
-   → `omarchy-shell lock lock`）两条路线并存；后者依赖 QuickShell 的 `omarchy.lock` 插件，
-   在 niri 上是否真正锁住待实测。
-7. **TUI 编辑器启动已修**：`omarchy-launch-tui` 原本走 `uwsm-app`+`xdg-terminal-exec`（Hyprland/uwsm
-   组件，niri 会话没有），导致菜单 "Edit config file" 点了无反应。已回退到 `ghostty`（匹配 niri
-   `Mod+Return` 终端），实测链路通（ghostty 打开→运行→退出）。
-   **菜单指向已由 A 层重定向到 niri 真配置**（见 §8.6），不再打开 `~/.config/hypr/*.lua` 空文件。
-8. **A+C 落地 / 更新覆盖层（2026-08-24）**：本节最后两项。
-   - **§8.6 A 层（菜单指向 niri 真配置 + Hyprland 层降级）**。
-   - **§8.7 更新覆盖层（上游更新自动重放我们的移植改动）**。
-9. **system 开关已修并统一标准化（2026-08-25）**：菜单 `system.logout/reboot/shutdown` 走 `omarchy-system-*`，
-   原实现依赖 Hyprland/uwsm，niri 上失灵。已新增**单一统一入口 `~/bin/omarchy-niri-system`**：三个脚本的
-   niri 分支都 `exec omarchy-niri-system <logout|reboot|shutdown>`，它统一做 OSD 提示 + 优雅关窗 +
-   免密分发（以下动作全部免密，见提权结论）：
-   - `logout` → `niri msg action quit --skip-confirmation`（不吃 niri 的 Super+Shift+E 确认框，合成器退出 → greetd 回登录页）。
-   - `reboot` → logind D-Bus `Manager.Reboot`；`shutdown` → logind D-Bus `Manager.PowerOff`（均经
-     `busctl --system call`,免密）。
-   - `omarchy-niri-system` 对非法参数退出 2、非 niri 退出 1（已测）；3 脚本 + 分流器 `bash -n` 通过；
-     覆盖层 patch 含这 3 个文件（共 11 个），stash 往返重放验证干净。
-   - 非 niri 分支保留原 Hyprland 实现（`uwsm stop` / `systemd-run --user … systemctl …`）。
-   - **提权结论（实测）**：logout/reboot/shutdown **均免密**。区分两层接口：
-     `systemctl reboot`（systemd1，polkit `allow_active=auth_admin_keep`，需 root、且本会话无 polkit 认证
-     agent 弹不出框）→ 需提权；但 **logind**：`login1.reboot/power-off`（`allow_active=yes`）、
-     `login1.manage`（terminate，`auth_admin_keep`→需密码）。故用 logind D-Bus `Manager.Reboot/PowerOff`
-     （免密）配 `niri msg action quit`（免密）；不用 `Session.Terminate`（manage 门控、要密码）。
-     已验证：logind 会话 `Active=yes`（seat0），`pkcheck --process $$` 对 `login1.reboot/power-off` 返回
-     exit 0（已授权），`login1.manage` 返回 auth_admin_keep（需认证）。
-   - **根因：reboot/shutdown 之前"执行不了"= `loginctl` 没有 `reboot`/`poweroff` verb（2026-08-25 修）**：
-     `loginctl` 帮的是 session/user/seat 管理，电源动作属于 `systemctl`（systemd1）。dispatcher 里写的
-     `loginctl reboot` 运行时日志报 `loginctl[pid]: Unknown command verb 'reboot', did you mean 'help'?`，
-     service 以 status=1/FAILURE 退出，机器自然不重启。已改为 `busctl --system call … Manager.Reboot b false`
-     与 `Manager.PowerOff b false`（签名 `b`=interactive，`false` 免提示）。`loginctl reboot` 根本不会走到提权
-     那一步；改完才真正用上 `login1.reboot/power-off` 的 `allow_active=yes` 免密。
-   - **dispatch 必须先调度再关窗（2026-08-25 修复）**：最初 `omarchy-niri-system` 是「先 close-all 再同步
-     `loginctl`」——一旦 close-all（或父进程/Quickshell 退散）把跑动作的进程杀掉，reboot/shutdown 就到不了
-     （用户实测「执行不了」）。已改为**先把动作 detach 调度好，再 close-all**：logout 用
-     `nohup … niri msg action quit --skip-confirmation`（保留会话 env；`--skip-confirmation` 去掉 niri 的
-     Super+Shift+E 确认框，注销时不再弹确认、直接回 greetd），reboot/shutdown 用 `systemd-run --user --on-active=3s`
-     调 logind D-Bus `Manager.Reboot/PowerOff`（`busctl --system call`,免密）。已验证 `systemd-run --user`
-     （用户管理器里的进程，`user@1001.service/app.slice/run-*.service`）对 `login1.reboot` 授权
-     `pkcheck --process <该进程pid>` return 0（免密仍成立），瞬时定时器机制可用。即使脚本被关窗杀掉，
-     动作也会按计划落地。
-   - **实测证据（未触发真实重启/关机，未破坏会话）**：`bash -n` 通过；`busctl --system call … CanReboot` 返回
-     `s "yes"`、`CanPowerOff` 返回 `s "yes"`（logind 允许）；同结构 dry-run：`systemd-run --user --on-active=2s`
-     → busctl `CanReboot`，3 秒后落地返回 `s "yes"`（证明 detach 链端到端可用）。真实 Reboot/PowerOff 仍需用户触发。
-   - **排查日志**：`omarchy-niri-system` 会写 `${XDG_RUNTIME_DIR:-/tmp}/omarchy-niri-system.log`
-     （记录 `reboot/shutdown scheduled`、`windows closed` 等步骤）；若仍未生效可查该文件与
-     `journalctl --user -b` 中 logind 相关条目。
-   - **待运行实测**：logout/reboot/shutdown 需在真实会话触发（会结束本会话/重启），留给用户验证。
-10. **overview 壁纸与桌面统一（需求，2026-08-25 实测收窄）**：niri 总览（`Mod+O` / `Mod+Tab` 触发
-    `toggle-overview`）的背景是**不透明深色**，不与桌面一致。桌面壁纸由 `shell/plugins/background/Background.qml`
-    的 layer-shell（`Background` 层，namespace `omarchy-background`）绘制；本回合实测：
-    - overview 开启时 `niri msg layers` 只有 `omarchy-background` + `omarchy-bar`，**没有**其它深色填充层，
-      即那层深色背景是 niri overview 自己合成上去的。
-    - 把 `config.kdl` 的 `layout { background-color "#ff00ff" }` 设成品红并 `load-config-file` 后，
-      overview 背景**仍是深色不变**，证明 overview 的背景**不是** `background-color` 驱动。
-    - 结论：overview 深色垫层由 niri 合成器绘制、压在 layer-shell 壁纸之上，且不吃 `background-color`。
-      要复用桌面壁纸需要另想办法（如让壁纸元素在 overview 时上浮/换层级），待定。
-11. **电池面板 POWER PROFILE 区为空（2026-08-25 已修）**：系统电源后端是 **TLP**（`tlp` + `tlp-pd`
-    `1.10.2`），**不是** power-profiles-daemon —— `powerprofilesctl` 不存在，而 Omarchy 的
-    `omarchy-powerprofiles-list`/`-set` 硬依赖它，故电池面板的 POWER PROFILE 区读不到任何 profile（空）。
-    修复：在 `~/bin/` 放同名适配脚本（PATH 优先于仓库、挺过 `omarchy update`），**优先**用
-    `powerprofilesctl`，缺则回退 D-Bus `net.hadess.PowerProfiles`（`/net/hadess/PowerProfiles`，
-    `.ActiveProfile` 可写、`.Profiles` 为 `a{sv}`）。实测：
-    - list 返回 3 个 profile（performance/balanced/power-saver），`--active-state` 正确标出 active（power-saver）。
-    - set 写入经 `busctl set-property` 生效，但 tlp-pd 是**异步**经 detached TLP 应用，立即读会是旧值，
-      需稍等再读。当前活跃 profile 已恢复为 power-saver。
-
-### 8.6 A 层：菜单指向 niri 真配置，Hyprland 层降级
-
-Omarchy 有两层配置，只有层1在 niri 上真正生效：
-- **层1（与合成器无关，生效）**：`~/.config/omarchy/shell.json`+`shell.toml`、`theme/*` 生成的
-  配色/终端/编辑器配置（Omarchy 视觉来源）。
-- **层2（Hyprland 耦合，niri 上是死配置）**：`config/hypr/*.lua` + `hyprsunset.conf`，niri 用
-  `~/.config/niri/config.kdl`，故层2不驱动任何可见行为。
-
-`omarchy-menu.jsonc` 下列项现指向真实文件（`$HOME/.config/niri/config.kdl`）而非空 `~/.config/hypr/*.lua`：
-
-| 菜单项 | 原→新 action |
-|---|---|
-| `style.hyprland`（label 改 "Niri"）| `looknfeel.lua` → `config.kdl` |
-| `setup.monitors` | `monitors.lua` → `config.kdl` |
-| `setup.keybindings`（移除 hypr 文件存在守卫）| `bindings.lua` → `config.kdl` |
-| `setup.input`（移除守卫）| `input.lua` → `config.kdl` |
-| `setup.config.hyprland`（label 改 "Niri"）| `hyprland.lua` → `config.kdl` |
-| `update.config.hyprland`（label 改 "Niri Theme"）| `omarchy-refresh-hyprland` → `omarchy-niri-apply-theme` |
-| 三个 `*hyprsunset*` 项 | 加 `"when":"false"` 隐藏（niri 无 hyprsunset）|
-
-`bin/omarchy-refresh-hyprland` 加守卫：`XDG_CURRENT_DESKTOP=niri` 时直接 `exit 0`（打印提示并跳过），
-不再把整棵死配置树重建进 `~/.config/hypr/`。菜单 JSONC 修改用 string-aware 注释剥离 + 尾逗号容差
-校验通过（326 顶层条目）。
-
-### 8.7 更新覆盖层：上游更新后自动重放
-
-- `omarchy update` = `git pull --ff-only`（`omarchy-update-dev`，在 `post-update` 钩子**之前**）+ 迁移。
-- **仓库外不碰**：`config.kdl` / `shell.json` / `~/bin/hyprctl` 都不在 omarchy 仓库内，`git pull` 动不到。
-- **仓库内会撞**：我们改了仓库内 8 个文件（launch-tui、refresh-hyprland、theme-set、menu.jsonc、qmldir、
-  Background.qml、Bar.qml、Workspaces.qml）+ 新增 `Niri.qml`。上游改到其中任何一个，
-  `git pull --ff-only` 会因本地未提交改动而**失败中止**整个更新——这是需要手动合并的情况。
-- **自动重放**：`post-update.d/10-niri-repatch` 在每次更新后跑 `omarchy-niri-repatch`：
-  1. 把 `~/.config/omarchy/niri-port/Niri.qml` 拷回 `shell/Commons/`。
-  2. `git apply` `niri.patch`；已应用则 `--reverse --check` 判 no-op（幂等）。
-  3. 冲突则**不做任何改动**、退出码 2，提示手动合并（找 Ante）。
-- 说明：覆盖层脚本只处理"上游没改到我们文件"的更新（此时 FF 成功、重放是 no-op）；
-  "上游改到同一函数"才需要我重新翻译合并——这是任何移植都绕不开的兜底。
-
----
-
-## 9. 验证清单
-
-- [x] `niri validate` 通过。
-- [x] QuickShell 启动无报错（"Configuration Loaded"）。
-- [x] grim 截图：bar 渲染出 workspaces 1-5、"3"高亮、时钟、EN/安 键盘布局、日历弹窗。
-- [x] `omarchy-menu toggle` 开/关根菜单（截图确认，rc=0）。
-- [x] hyprctl 垫片查询与 dispatch 均工作。
-- [x] `jq` / `satty` / `inotify-tools` 安装（pkexec）。
-- [x] `omarchy-capture-region` / `omarchy-capture-screenshot` 无 jq 报错（monitors 补 activeWorkspace 后）。
-- [x] `jianlongliu` 未被触碰（mtime 未变）。
-- [x] 键位重映射：方向键方案 + `Mod+K`/`Mod+Ctrl+L` 让给 Omarchy（`load-config-file` 重载后）。
-- [x] 背景壁纸显示：`qt6-imageformats` + QML/theme-set 修复后，`grim` 见波纹像素。
-- [x] A 层：菜单项全部指向 `config.kdl`（不再出空文件），`omarchy-refresh-hyprland` niri no-op。
-- [x] C 层：`omarchy-niri-apply-theme` 写入 `#89b4fa`/`#595959aa`，`niri validate` 通过、热重载 OK。
-- [x] 更新覆盖层：`omarchy-niri-repatch` 幂等（已应用判 no-op；stash 还原后能干净重放）。
-- [x] `theme-set`/`post-update` 钩子触发正常、非 niri 静默跳过。
-- [ ] 截图/剪贴板 CLI 全链路实测（slurp/grim 交互，需桌面环境）。
-- [ ] Omarchy 锁屏（`Mod+Ctrl+L`）在 niri 上实测。
-- [ ] 真实跑一次 `omarchy update`，确认上游变更时覆盖层自动重放或明确报冲突。
-- [x] **logout/reboot/shutdown** 统一标准化：`~/bin/omarchy-niri-system` 单一入口（logout→niri quit、reboot/shutdown→logind D-Bus `Manager.Reboot/PowerOff`；`loginctl` 无该 verb 是本 bug，已改；`pkcheck` 免密 exit 0 验证）。
-- [x] **电源 profile**：`~/bin/omarchy-powerprofiles-list` 返回 3 个 profile、active 标记正确；set 经 TLP D-Bus 生效（异步应用，恢复为 power-saver）。
-- [ ] 运行实测：注销、关机、重启（会结束会话/重启，交给用户）。
-- [ ] **overview 壁纸与桌面统一**。
-
----
-
-## 10. 关键环境信息
-
-- 用户 `yvonne`（uid 1001, gid 1003, groups wheel）；隔壁 `jianlongliu` uid 1000。
-- niri 26.04 (8ed0da4) 位于 `/usr/bin/niri`。
-- 显示管理器：greetd / dms-greeter。包管理器 paru。
-- 电源后端：**TLP**（`tlp` + `tlp-pd` 1.10.2，D-Bus `net.hadess.PowerProfiles`），**无** power-profiles-daemon（`powerprofilesctl` 缺失）。
-- `sudo` 需密码（非交互不可用）。
-- 读取 `HYPRLAND_INSTANCE_SIGNATURE is unset` 警告仅影响便捷性，QuickShell 在 layer-shell
-  下照常渲染。
+See `docs/omarchy-on-niri-port.md` for the full decision log.

@@ -1,0 +1,111 @@
+#!/usr/bin/env python3
+"""Re-apply the current Omarchy theme's border colors into niri's config.kdl.
+
+Omarchy's only compositor-facing look setting (beyond Hyprland defaults) is the
+window focus-ring/border colour, emitted as active_border_color / inactive_border_color
+in the generated theme/hyprland.lua.  niri's composer look lives in config.kdl, so this
+writes those two colours into the focus-ring block in place.
+
+By default it only writes config.kdl; the new colour lands on the next niri config
+reload.  Pass --reload to also run `niri msg action load-config-file` immediately.
+"""
+
+import re
+import shutil
+import subprocess
+import sys
+
+THEME_LUA = "/home/yvonne/.local/state/omarchy/current/theme/hyprland.lua"
+NIRI_CFG = "/home/yvonne/.config/niri/config.kdl"
+
+
+def normalize(color: str):
+    """Normalise a Hyprland/Omarchy colour to niri's hex form.  None if unparseable."""
+    c = color.strip().strip('"')
+    m = re.fullmatch(r"rgba\(([0-9a-fA-F]{6,8})\)", c)
+    if m:
+        return "#" + m.group(1).lower()
+    m = re.fullmatch(r"rgba?\((\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\)", c)
+    if m:
+        r, g, b = (int(m.group(i)) for i in (1, 2, 3))
+        a = m.group(4)
+        if a is None:
+            return "#%02x%02x%02x" % (r, g, b)
+        return "#%02x%02x%02x%02x" % (r, g, b, int(round(float(a) * 255)))
+    m = re.fullmatch(r"#([0-9a-fA-F]{6,8})", c)
+    if m:
+        return "#" + m.group(1).lower()
+    return None
+
+
+def extract_colors():
+    """Pull active_border_color/inactive_border_color out of the generated theme lua."""
+    active = inactive = None
+    try:
+        with open(THEME_LUA) as fh:
+            for line in fh:
+                m = re.match(r"\s*local\s+active_border_color\s*=\s*\"([^\"]+)\"", line)
+                if m:
+                    active = m.group(1)
+                m = re.match(r"\s*local\s+inactive_border_color\s*=\s*\"([^\"]+)\"", line)
+                if m:
+                    inactive = m.group(1)
+    except OSError:
+        return None, None
+    return normalize(active), normalize(inactive)
+
+
+def patch_focus_ring(text, active, inactive):
+    """Set active-color/inactive-color inside the first focus-ring block."""
+    lines = text.splitlines(keepends=True)
+    depth = 0
+    in_ring = False
+    ring_open = -1
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if not in_ring and re.match(r"focus-ring\s*\{", stripped):
+            in_ring = True
+            depth = 1
+            ring_open = i
+            continue
+        if in_ring:
+            depth += stripped.count("{") - stripped.count("}")
+            if depth <= 0:
+                break
+            if re.match(r"active-color\b", stripped):
+                lines[i] = re.sub(r'active-color\s+"[^"]*"', 'active-color "%s"' % active, line)
+            elif re.match(r"inactive-color\b", stripped):
+                lines[i] = re.sub(r'inactive-color\s+"[^"]*"', 'inactive-color "%s"' % inactive, line)
+    return "".join(lines), ring_open
+
+
+def main():
+    reload_now = "--reload" in sys.argv[1:]
+    active, inactive = extract_colors()
+    if not active and not inactive:
+        print("omarchy-niri-apply-theme: no theme border colours found; leaving config.kdl untouched")
+        return 1
+
+    with open(NIRI_CFG) as fh:
+        original = fh.read()
+
+    patched, block = patch_focus_ring(original, active or "#7fc8ff", inactive or "#505050")
+    if block < 0:
+        print("omarchy-niri-apply-theme: no focus-ring block found in config.kdl")
+        return 1
+
+    if patched == original:
+        print("omarchy-niri-apply-theme: colours already up to date (%s / %s)" % (active, inactive))
+    else:
+        shutil.copy2(NIRI_CFG, NIRI_CFG + ".bak-niri-theme")
+        with open(NIRI_CFG, "w") as fh:
+            fh.write(patched)
+        print("omarchy-niri-apply-theme: wrote focus-ring colours %s / %s" % (active, inactive))
+
+    if reload_now:
+        subprocess.run(["niri", "msg", "action", "load-config-file"], check=False)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

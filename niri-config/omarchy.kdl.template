@@ -1,0 +1,58 @@
+# ============================================================================
+# omarchy-on-niri — niri config.kdl merge snippet
+# ----------------------------------------------------------------------------
+# This is the Omarchy port's compositor-side wiring. Merge it into your niri
+# config.kdl (`~/.config/niri/config.kdl`): the `environment {}` and
+# `spawn-sh-at-startup` blocks go at TOP LEVEL, everything with `hotkey-overlay-*`
+# goes inside your existing `binds { }` block. `__HOME__` is replaced by your
+# home directory by install.sh (or edit by hand).
+#
+# Per-machine values to double-check: your output/monitor name (not covered by
+# this snippet — see `niri msg outputs`), and the backlight device referenced by
+# `omarchy-brightness-display` (see /sys/class/backlight/*).
+# ============================================================================
+
+environment {
+    OMARCHY_PATH "__HOME__/.local/share/omarchy"
+    PATH "__HOME__/bin:__HOME__/.local/share/omarchy/bin:__HOME__/.local/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin"
+}
+
+# Autostart the Omarchy QuickShell layer-shell shell at login.
+spawn-sh-at-startup "quickshell -n -p __HOME__/.local/share/omarchy/shell"
+
+binds {
+    // ---- Omarchy launcher / shell toggles ----
+    Mod+Space         hotkey-overlay-title="Omarchy Menu"  { spawn-sh "omarchy-menu toggle"; }
+    Mod+Alt+Space     hotkey-overlay-title="Apps menu"     { spawn-sh "omarchy-menu toggle apps"; }
+    Mod+Ctrl+V        hotkey-overlay-title="Clipboard manager" { spawn-sh "omarchy-shell shell toggle omarchy.clipboard"; }
+    Mod+Ctrl+E        hotkey-overlay-title="Emojis"        { spawn-sh "omarchy-shell shell toggle omarchy.emojis"; }
+    Mod+Ctrl+A        hotkey-overlay-title="Audio"         { spawn-sh "omarchy-shell shell toggle omarchy.audio"; }
+    Mod+Ctrl+B        hotkey-overlay-title="Bluetooth"     { spawn-sh "omarchy-shell shell toggle omarchy.bluetooth"; }
+    Mod+Ctrl+D        hotkey-overlay-title="Display"       { spawn-sh "omarchy-shell shell toggle omarchy.monitor"; }
+    Mod+Ctrl+W        hotkey-overlay-title="Network"       { spawn-sh "omarchy-shell shell toggle omarchy.network"; }
+    Mod+Ctrl+P        hotkey-overlay-title="Power"         { spawn-sh "omarchy-shell shell toggle omarchy.power"; }
+    Mod+Ctrl+Alt+D    hotkey-overlay-title="Calendar"      { spawn-sh "omarchy-shell shell toggle omarchy.clock"; }
+    Mod+T             hotkey-overlay-title="Open Terminal: ghostty" { spawn "ghostty"; }
+    Mod+Return        hotkey-overlay-title="Terminal"      { spawn "ghostty"; }
+
+    // ---- Omarchy keys reclaimed from niri's default tiling ----
+    Mod+K             hotkey-overlay-title="Keybindings"   { spawn-sh "omarchy-menu-keybindings"; }
+    Mod+Ctrl+L        hotkey-overlay-title="Lock system"   { spawn-sh "omarchy-system-lock"; }
+
+    // ---- Media keys with OSD (via Omarchy scripts) ----
+    XF86AudioRaiseVolume allow-when-locked=true hotkey-overlay-title="Volume up"   { spawn-sh "omarchy-audio-output-volume raise"; }
+    XF86AudioLowerVolume allow-when-locked=true hotkey-overlay-title="Volume down" { spawn-sh "omarchy-audio-output-volume lower"; }
+    XF86AudioMute        allow-when-locked=true hotkey-overlay-title="Mute"        { spawn-sh "omarchy-audio-output-volume mute-toggle"; }
+    XF86AudioMicMute     allow-when-locked=true hotkey-overlay-title="Mute microphone" { spawn-sh "omarchy-audio-input-mute"; }
+    XF86AudioPlay        allow-when-locked=true hotkey-overlay-title="Play/Pause"  { spawn-sh "playerctl play-pause"; }
+    XF86AudioStop        allow-when-locked=true hotkey-overlay-title="Stop"        { spawn-sh "playerctl stop"; }
+    XF86AudioPrev        allow-when-locked=true hotkey-overlay-title="Previous track" { spawn-sh "playerctl previous"; }
+    XF86AudioNext        allow-when-locked=true hotkey-overlay-title="Next track"  { spawn-sh "playerctl next"; }
+    XF86MonBrightnessUp   allow-when-locked=true hotkey-overlay-title="Brightness up"   { spawn-sh "omarchy-brightness-display +5%"; }
+    XF86MonBrightnessDown allow-when-locked=true hotkey-overlay-title="Brightness down" { spawn-sh "omarchy-brightness-display 5%-"; }
+
+    // ---- Screenshots ----
+    Print              { spawn-sh "omarchy-capture-screenshot"; }
+    Ctrl+Print         { screenshot-screen; }
+    Alt+Print          { screenshot-window; }
+}

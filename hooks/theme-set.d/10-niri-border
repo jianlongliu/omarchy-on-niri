@@ -1,0 +1,11 @@
+#!/bin/bash
+
+# niri port: after a theme switch the generated theme/hyprland.lua carries new
+# active/inactive border colours. Bank them into config.kdl so the composed
+# window ring matches the Omarchy style. No reload: reloading would reset niri's
+# runtime-only overrides (e.g. the SCALE button), so the colour lands on the next
+# config reload / boot.
+
+if [[ ${XDG_CURRENT_DESKTOP:-} == niri ]] && [[ -x "$HOME/bin/omarchy-niri-apply-theme" ]]; then
+  "$HOME/bin/omarchy-niri-apply-theme" >/dev/null 2>&1 || true
+fi
