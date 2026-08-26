@@ -224,6 +224,7 @@ index 5dcd205..7c99e62 100644
 +    var monitor = Niri.focusedMonitor
      return monitor ? String(monitor.name || "") : ""
    }
+
  
 diff --git a/shell/plugins/bar/widgets/Workspaces.qml b/shell/plugins/bar/widgets/Workspaces.qml
 index ec0482a..985d1d9 100644
@@ -263,3 +264,53 @@ index ec0482a..985d1d9 100644
  
          bar: root.bar
          text: focused ? "\uDB85\uDCFB" : (modelData === 10 ? "0" : String(modelData))
+diff --git a/shell/plugins/menu/Menu.qml b/shell/plugins/menu/Menu.qml
+index eeaf2e2..563c530 100644
+--- a/shell/plugins/menu/Menu.qml
++++ b/shell/plugins/menu/Menu.qml
+@@ -1,6 +1,7 @@
+ import Quickshell
+ import Quickshell.Io
+ import Quickshell.Wayland
++import Quickshell.Wayland._BackgroundEffect
+ import QtQuick
+ import qs.Commons
+ import qs.Ui
+@@ -1072,6 +1073,11 @@ Item {
+     WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+     exclusionMode: ExclusionMode.Ignore
+ 
++    // Frost only the menu card, not the full-screen scrim: request a shaped
++    // ext-background-effect region that tracks the card item. niri blurs just
++    // behind `card`; the scrim stays a plain dim (no full-screen frost).
++    BackgroundEffect.blurRegion: Region { item: card; radius: root.cornerRadius }
++
+     // The card opens centered exactly as always. The first search keystroke
+     // or submenu move freezes the top line where it currently sits — from
+     // then on the card grows and shrinks downward instead of re-centering
+diff --git a/shell/Ui/KeyboardPanel.qml b/shell/Ui/KeyboardPanel.qml
+index b2fb218..c64a57e 100644
+--- a/shell/Ui/KeyboardPanel.qml
++++ b/shell/Ui/KeyboardPanel.qml
+@@ -1,6 +1,7 @@
+ import QtQuick
+ import Quickshell
+ import Quickshell.Wayland
++import Quickshell.Wayland._BackgroundEffect
+ import qs.Commons
+ 
+ // Layer-shell popup attached to a bar widget icon, designed for
+@@ -82,6 +83,13 @@ PanelWindow {
+   color: "transparent"
+   exclusionMode: ExclusionMode.Ignore
+ 
++  // Frost only the panel card, not the full-screen click-catcher: request a
++  // shaped ext-background-effect region that tracks the card item, so niri
++  // blurs just behind `card`. Every bar-widget popup (audio/bluetooth/
++  // network/power/clock/monitor/tailscale/weather/dropbox) and the agent
++  // panel reuse this surface, so this one attachment frosts them all.
++  BackgroundEffect.blurRegion: Region { item: card; radius: Style.cornerRadius }
++
+   WlrLayershell.namespace: "omarchy-keyboard-panel"
+   WlrLayershell.layer: WlrLayer.Overlay
+   // Keyboard focus follows `open` (NOT `visible`). The window remains

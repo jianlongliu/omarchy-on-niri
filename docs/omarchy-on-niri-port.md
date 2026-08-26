@@ -2,7 +2,7 @@
 
 > 目的：把 DHH 的 Omarchy v4（原本 Arch + Hyprland + QuickShell）移植到 niri
 > 滚动平铺 Wayland 合成器上，运行在 `yvonne` 账户，并保持 niri 原生体验。
-> 本文档是"上下文丢失也能重建"的持久记录。最后更新：2026-08-25。
+> 本文档是"上下文丢失也能重建"的持久记录。最后更新：2026-08-26（新增 §8.8 视觉磨砂）。
 
 ---
 
@@ -74,6 +74,8 @@ hyprctl 调用面有界、可直接映射。
 | `~/.local/share/omarchy/shell/Commons/qmldir` | 加一行 `singleton Niri 1.0 Niri.qml` |
 | `~/.local/share/omarchy/shell/plugins/bar/widgets/Workspaces.qml` | 去掉 `import Quickshell.Hyprland`；`Hyprland.workspaces`→`Niri.workspaces`、`Hyprland.focusedWorkspace`→`Niri.focusedWorkspace` |
 | `~/.local/share/omarchy/shell/plugins/bar/Bar.qml` | 去掉 import；`Hyprland.focusedMonitor`→`Niri.focusedMonitor` |
+| `~/.local/share/omarchy/shell/plugins/menu/Menu.qml` | 加 `import Quickshell.Wayland._BackgroundEffect`；根 `PanelWindow` 挂 `BackgroundEffect.blurRegion: Region { item: card; radius: root.cornerRadius }`（只磨砂菜单卡片，不全屏）|
+| `~/.local/share/omarchy/shell/Ui/KeyboardPanel.qml` | 加 `import Quickshell.Wayland._BackgroundEffect`；根 `PanelWindow` 挂 `BackgroundEffect.blurRegion: Region { item: card; radius: Style.cornerRadius }`（覆盖所有 bar 弹窗面板，见 §8.8）|
 | `~/.local/share/omarchy/shell/plugins/background/Background.qml` | `readlinkProc` 回调强制即时切换背景（见 §8.1b）|
 | `~/.local/share/omarchy/bin/omarchy-launch-tui` | 加 uid 终端回退（ghostty），因 niri 无 `uwsm-app`/`xdg-terminal-exec` |
 | `~/.local/share/omarchy/bin/omarchy-theme-set` | `set_theme_background` 传实际背景文件而非过渡快照 |
@@ -386,8 +388,8 @@ Omarchy 有两层配置，只有层1在 niri 上真正生效：
 
 - `omarchy update` = `git pull --ff-only`（`omarchy-update-dev`，在 `post-update` 钩子**之前**）+ 迁移。
 - **仓库外不碰**：`config.kdl` / `shell.json` / `~/bin/hyprctl` 都不在 omarchy 仓库内，`git pull` 动不到。
-- **仓库内会撞**：我们改了仓库内 8 个文件（launch-tui、refresh-hyprland、theme-set、menu.jsonc、qmldir、
-  Background.qml、Bar.qml、Workspaces.qml）+ 新增 `Niri.qml`。上游改到其中任何一个，
+- **仓库内会撞**：我们改了仓库内 10 个文件（launch-tui、refresh-hyprland、theme-set、menu.jsonc、qmldir、
+  Background.qml、Bar.qml、Workspaces.qml、Menu.qml、KeyboardPanel.qml）+ 新增 `Niri.qml`。上游改到其中任何一个，
   `git pull --ff-only` 会因本地未提交改动而**失败中止**整个更新——这是需要手动合并的情况。
 - **自动重放**：`post-update.d/10-niri-repatch` 在每次更新后跑 `omarchy-niri-repatch`：
   1. 把 `~/.config/omarchy/niri-port/Niri.qml` 拷回 `shell/Commons/`。
@@ -396,7 +398,44 @@ Omarchy 有两层配置，只有层1在 niri 上真正生效：
 - 说明：覆盖层脚本只处理"上游没改到我们文件"的更新（此时 FF 成功、重放是 no-op）；
   "上游改到同一函数"才需要我重新翻译合并——这是任何移植都绕不开的兜底。
 
+### 8.8 视觉磨砂（frosted Quickshell / 状态栏面板毛玻璃）
+
+niri 26.04 的 `background-effect` + Quickshell 的 `ext_background_effect` 形状磨砂，让 Omarchy shell
+的卡片呈毛玻璃。设计原则：**绝不让 niri 侧对整面 layer-shell 做全屏模糊**（那会把整个屏幕霜化），
+而是每个面板用 `BackgroundEffect.blurRegion` 只磨砂自己的卡片区域。
+
+**仓库内改动（已进 `niri-port/niri.patch`，现 13 个 hunk）**：
+- `shell/plugins/menu/Menu.qml`：加 `import Quickshell.Wayland._BackgroundEffect`，根 `PanelWindow`
+  挂 `BackgroundEffect.blurRegion: Region { item: card; radius: root.cornerRadius }`。
+- `shell/Ui/KeyboardPanel.qml`：同上，根 `PanelWindow` 挂
+  `BackgroundEffect.blurRegion: Region { item: card; radius: Style.cornerRadius }`。**所有 bar 弹窗面板**
+  （audio/bluetooth/clock/dropbox/monitor/network/power/tailscale/weather + agent 面板）都复用
+  `KeyboardPanel`，所以这一处改动统一磨砂了它们全部（一次覆盖 9+ 面板）。
+
+**仓库外 Layer-1 配置（pull 安全，不在 `niri.patch` 内）**：
+- `~/.config/niri/effects.kdl`（被 `config.kdl` `include`）：全局
+  `blur { passes 4; offset 3.5; noise 0.03; saturation 1.6 }` + 两条 layer-rule：
+  - `^omarchy-bar$` / `^omarchy-osd$` / `^omarchy-notifications$` → `background-effect { blur true; xray true }`
+    （bar 保留独占区，只磨砂背后壁纸，稳定）。
+  - `^omarchy-keyboard-panel$` → `background-effect { xray false }`（**只设 xray，不设 `blur true`**——
+    Quickshell 已发卡片形状区域，该区域就是唯一磨砂范围，全屏 surface 不会霜化）。`xray false` =
+    磨砂卡片背后的**实时窗口**（真毛玻璃）；`xray true` = 只磨砂壁纸。
+- `~/.config/omarchy/shell.toml`：`[bar]` background-alpha 0.45、`[popups]` 0.65（原 0.8，
+  只为透出磨砂；越低越糊、越高字越清晰）、`[menu]` 0.7、`[notifications]` 0.85、`[tooltip]` 0.85。
+  这些喂给 `Color.*.background`（`Color.qml` 的 `composed(...-alpha...)`）。
+
+**热重载**：niri `blur`/layer-rule 经 `niri msg action load-config-file`（热）；QML 改动需重启
+quickshell：`pkill -x quickshell && niri msg action spawn -- quickshell -n -p $OMARCHY_PATH/shell`。
+`effects.kdl`/`shell.toml` 是 Layer-1，上游 `git pull` 动不到，天然抗更新。
+
+**注意**：`xray false` 是 niri 实验特性——窗口开/关动画、拖拽平铺窗口时磨砂会短暂消失（已知特性，
+非 bug）。要稳定（只磨壁纸）就把 `omarchy-keyboard-panel` 那条 layer-rule 的 `xray` 改 `true`。
+
+**验证**：面板开/关截图，屏幕底部清晰度 on/off ≈ 0.995（一致）→ 确认无全屏霜化；仅卡片区域变化。
+
 ---
+
+
 
 ## 9. 验证清单
 
@@ -421,6 +460,7 @@ Omarchy 有两层配置，只有层1在 niri 上真正生效：
 - [x] **电源 profile**：`~/bin/omarchy-powerprofiles-list` 返回 3 个 profile、active 标记正确；set 经 TLP D-Bus 生效（异步应用，恢复为 power-saver）。
 - [ ] 运行实测：注销、关机、重启（会结束会话/重启，交给用户）。
 - [ ] **overview 壁纸与桌面统一**。
+- [x] **视觉磨砂（frosted Quickshell）**：`Menu.qml` + `KeyboardPanel.qml` 挂 `BackgroundEffect.blurRegion`（只磨砂卡片，不全屏）；`effects.kdl` 给 `omarchy-keyboard-panel` 设 `xray false`（实时窗口毛玻璃）；`[popups]` alpha 0.8→0.65。面板开/关屏幕底部清晰度 on/off≈0.995 → 无全屏霜化。niri.patch 现 13 hunk，覆盖层重放幂等。
 
 ---
 
