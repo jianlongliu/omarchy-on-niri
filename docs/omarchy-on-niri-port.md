@@ -360,6 +360,19 @@ niri 上这个颜色由 `config.kdl` 的 `focus-ring` 块决定。`omarchy-niri-
     - set 写入经 `busctl set-property` 生效，但 tlp-pd 是**异步**经 detached TLP 应用，立即读会是旧值，
       需稍等再读。当前活跃 profile 已恢复为 power-saver。
 
+12. **菜单 Apps 列表启动全部失灵（2026-08-27 已修）**：菜单 "Apps" provider 经
+   `shell/services/AppLibrary.qml` 的 `launch()` 启动桌面应用，原实现写死
+   `uwsm-app -- gtk-launch <id>.desktop`。niri 会话没有 `uwsm-app`（与 `omarchy-launch-tui`
+   当初缺 `uwsm-app`/`xdg-terminal-exec` 同一类问题），导致**菜单里所有应用都点不开**——不只是
+   Zen，用户用 Zen 试出来的。`launch()` 已改为 `uwsm-app` 存在才用、否则回退 `gtk-launch`：
+   `if command -v uwsm-app >/dev/null 2>&1; then uwsm-app -- gtk-launch ...; else gtk-launch ...; fi`。
+   `gtk-launch` 在 niri 上可用且按 `.desktop` ID 解析（实测 `gtk-launch zen-browser.desktop`
+   成功起 Zen）。**`gtk-launch` 与工具箱无关**：Qt / Electron / GTK / EFL 等任意框架应用都只是跑其
+   `.desktop` 的 `Exec=`，niri 看到的是 Wayland surface，框架不影响启动——只要 `.desktop` 合法、
+   应用自身能跑 Wayland/X11 即可（个别 Qt 应用若不能自动探测 Wayland，需 `QT_QPA_PLATFORM=wayland`，
+   那是应用自身行为，不是菜单启动链的问题）。改动已追加进 `niri-port/niri.patch`
+   （reverse-check 通过），重启 Quickshell 生效；尚未推到 `github.com/jianlongliu/omarchy-on-niri`。
+
 ### 8.6 A 层：菜单指向 niri 真配置，Hyprland 层降级
 
 Omarchy 有两层配置，只有层1在 niri 上真正生效：
@@ -388,8 +401,9 @@ Omarchy 有两层配置，只有层1在 niri 上真正生效：
 
 - `omarchy update` = `git pull --ff-only`（`omarchy-update-dev`，在 `post-update` 钩子**之前**）+ 迁移。
 - **仓库外不碰**：`config.kdl` / `shell.json` / `~/bin/hyprctl` 都不在 omarchy 仓库内，`git pull` 动不到。
-- **仓库内会撞**：我们改了仓库内 10 个文件（launch-tui、refresh-hyprland、theme-set、menu.jsonc、qmldir、
-  Background.qml、Bar.qml、Workspaces.qml、Menu.qml、KeyboardPanel.qml）+ 新增 `Niri.qml`。上游改到其中任何一个，
+- **仓库内会撞**：我们改了仓库内 14 个文件（launch-tui、refresh-hyprland、theme-set、menu.jsonc、qmldir、
+  Background.qml、Bar.qml、Workspaces.qml、Menu.qml、KeyboardPanel.qml、AppLibrary.qml，以及
+  2026-08-25 加的 3 个 `omarchy-system-{logout,reboot,shutdown}`）+ 新增 `Niri.qml`。上游改到其中任何一个，
   `git pull --ff-only` 会因本地未提交改动而**失败中止**整个更新——这是需要手动合并的情况。
 - **自动重放**：`post-update.d/10-niri-repatch` 在每次更新后跑 `omarchy-niri-repatch`：
   1. 把 `~/.config/omarchy/niri-port/Niri.qml` 拷回 `shell/Commons/`。
@@ -404,7 +418,7 @@ niri 26.04 的 `background-effect` + Quickshell 的 `ext_background_effect` 形�
 的卡片呈毛玻璃。设计原则：**绝不让 niri 侧对整面 layer-shell 做全屏模糊**（那会把整个屏幕霜化），
 而是每个面板用 `BackgroundEffect.blurRegion` 只磨砂自己的卡片区域。
 
-**仓库内改动（已进 `niri-port/niri.patch`，现 13 个 hunk）**：
+**仓库内改动（已进 `niri-port/niri.patch`，现共 14 个文件 / 23 个 hunk）**：
 - `shell/plugins/menu/Menu.qml`：加 `import Quickshell.Wayland._BackgroundEffect`，根 `PanelWindow`
   挂 `BackgroundEffect.blurRegion: Region { item: card; radius: root.cornerRadius }`。
 - `shell/Ui/KeyboardPanel.qml`：同上，根 `PanelWindow` 挂

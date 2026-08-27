@@ -314,3 +314,19 @@ index b2fb218..c64a57e 100644
    WlrLayershell.namespace: "omarchy-keyboard-panel"
    WlrLayershell.layer: WlrLayer.Overlay
    // Keyboard focus follows `open` (NOT `visible`). The window remains
+diff --git a/shell/services/AppLibrary.qml b/shell/services/AppLibrary.qml
+index 738529d..460565c 100644
+--- a/shell/services/AppLibrary.qml
++++ b/shell/services/AppLibrary.qml
+@@ -82,7 +82,10 @@ Item {
+     // inherit wayland-wm@.service. Keeping gtk-launch as the desktop-entry
+     // resolver supports IDs with spaces and entries that UWSM rejects.
+     // Keep the .desktop suffix or ids like org.telegram.desktop won't resolve.
+-    Util.execDetached("uwsm-app -- gtk-launch " + Util.shellQuote(id + ".desktop"))
++    // niri port: uwsm-app is absent on niri, so fall back to gtk-launch directly.
++    var desktopArg = Util.shellQuote(id + ".desktop")
++    var cmd = "if command -v uwsm-app >/dev/null 2>&1; then uwsm-app -- gtk-launch " + desktopArg + "; else gtk-launch " + desktopArg + "; fi"
++    Util.execDetached(cmd)
+   }
+ 
+   function remove(desktopId, name) {
