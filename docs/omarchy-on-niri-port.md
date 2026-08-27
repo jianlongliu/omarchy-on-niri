@@ -386,12 +386,18 @@ Omarchy 有两层配置，只有层1在 niri 上真正生效：
 | 菜单项 | 原→新 action |
 |---|---|
 | `style.hyprland`（label 改 "Niri"）| `looknfeel.lua` → `config.kdl` |
-| `setup.monitors` | `monitors.lua` → `config.kdl` |
-| `setup.keybindings`（移除 hypr 文件存在守卫）| `bindings.lua` → `config.kdl` |
-| `setup.input`（移除守卫）| `input.lua` → `config.kdl` |
+| `setup.monitors` | `monitors.lua` → `monitor.kdl` |
+| `setup.keybindings`（移除 hypr 文件存在守卫）| `bindings.lua` → `binds.kdl` |
+| `setup.input`（移除守卫）| `input.lua` → `input.kdl` |
 | `setup.config.hyprland`（label 改 "Niri"）| `hyprland.lua` → `config.kdl` |
 | `update.config.hyprland`（label 改 "Niri Theme"）| `omarchy-refresh-hyprland` → `omarchy-niri-apply-theme` |
 | 三个 `*hyprsunset*` 项 | 加 `"when":"false"` 隐藏（niri 无 hyprsunset）|
+
+- **模块化注意（2026-08-27 修正）**：niri 配置已拆成 `include` 模块化
+  （`monitor.kdl` / `binds.kdl` / `input.kdl` / `layout.kdl` / `window-rules.kdl` / `effects.kdl`），
+  根 `config.kdl` 只剩 `include`。原 setup 三项曾错误地全指向 `config.kdl`（打开是空壳），
+  现已分别指向 `monitor.kdl` / `binds.kdl` / `input.kdl`——仓库 `omarchy-menu.jsonc`（进 `niri.patch`）
+  + 用户级 `~/.config/omarchy/extensions/omarchy-menu.jsonc` override 双保险。
 
 `bin/omarchy-refresh-hyprland` 加守卫：`XDG_CURRENT_DESKTOP=niri` 时直接 `exit 0`（打印提示并跳过），
 不再把整棵死配置树重建进 `~/.config/hypr/`。菜单 JSONC 修改用 string-aware 注释剥离 + 尾逗号容差

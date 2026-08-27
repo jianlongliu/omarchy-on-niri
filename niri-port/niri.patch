@@ -1,3 +1,42 @@
+diff --git a/bin/omarchy-launch-editor b/bin/omarchy-launch-editor
+index 8a69dab..2b66583 100755
+--- a/bin/omarchy-launch-editor
++++ b/bin/omarchy-launch-editor
+@@ -29,6 +29,11 @@ nvim | vim | nano | micro | hx | helix | fresh)
+   fi
+   ;;
+ *)
+-  exec setsid uwsm-app -- "$editor" "$@"
++  # Hyprland/uwsm session: uwsm-app wraps the editor. niri has no uwsm, so
++  # fall back to launching the editor directly on the Wayland session.
++  if command -v uwsm-app >/dev/null 2>&1; then
++    exec setsid uwsm-app -- "$editor" "$@"
++  fi
++  exec setsid "$editor" "$@"
+   ;;
+ esac
+diff --git a/bin/omarchy-launch-floating-terminal-with-presentation b/bin/omarchy-launch-floating-terminal-with-presentation
+index c9cb255..0b18ed7 100755
+--- a/bin/omarchy-launch-floating-terminal-with-presentation
++++ b/bin/omarchy-launch-floating-terminal-with-presentation
+@@ -10,4 +10,16 @@ source omarchy-restart-gum
+ cmd="$*"
+ presentation_script="omarchy-show-logo; $cmd; if (( \$? != 130 )); then omarchy-show-done; fi"
+ 
+-exec setsid uwsm-app -- xdg-terminal-exec --app-id=org.omarchy.terminal --title=Omarchy -e bash -c "$presentation_script"
++# Hyprland/uwsm session: uwsm-app + xdg-terminal-exec. niri has neither, so
++# fall back to a Wayland terminal (ghostty, matching niri's Mod+Return bind).
++if command -v uwsm-app >/dev/null 2>&1 && command -v xdg-terminal-exec >/dev/null 2>&1; then
++  exec setsid uwsm-app -- xdg-terminal-exec --app-id=org.omarchy.terminal --title=Omarchy -e bash -c "$presentation_script"
++fi
++
++for term in ghostty kitty alacritty foot; do
++  if command -v "$term" >/dev/null 2>&1; then
++    exec setsid "$term" -e bash -c "$presentation_script"
++  fi
++done
++
++exec bash -c "$presentation_script"
 diff --git a/bin/omarchy-launch-tui b/bin/omarchy-launch-tui
 index bd67c64..57f7610 100755
 --- a/bin/omarchy-launch-tui
@@ -124,7 +163,7 @@ index b0c1cda..98bf58b 100755
    ln -nsf "$new_background" "$CURRENT_BACKGROUND_LINK"
  }
 diff --git a/default/omarchy/omarchy-menu.jsonc b/default/omarchy/omarchy-menu.jsonc
-index 3a24759..694f9c5 100644
+index 3a24759..abe71d7 100644
 --- a/default/omarchy/omarchy-menu.jsonc
 +++ b/default/omarchy/omarchy-menu.jsonc
 @@ -108,7 +108,7 @@
@@ -143,9 +182,9 @@ index 3a24759..694f9c5 100644
 -  "setup.monitors": {"icon":"󰍹","label":"Monitors","action":"omarchy-launch-config-editor \"$HOME/.config/hypr/monitors.lua\""},
 -  "setup.keybindings": {"icon":"","label":"Keybindings","when":"[[ -f ~/.config/hypr/bindings.lua ]]","action":"omarchy-launch-config-editor \"$HOME/.config/hypr/bindings.lua\""},
 -  "setup.input": {"icon":"","label":"Input","when":"[[ -f ~/.config/hypr/input.lua ]]","action":"omarchy-launch-config-editor \"$HOME/.config/hypr/input.lua\""},
-+  "setup.monitors": {"icon":"󰍹","label":"Monitors","action":"omarchy-launch-config-editor \"$HOME/.config/niri/config.kdl\""},
-+  "setup.keybindings": {"icon":"","label":"Keybindings","action":"omarchy-launch-config-editor \"$HOME/.config/niri/config.kdl\""},
-+  "setup.input": {"icon":"","label":"Input","action":"omarchy-launch-config-editor \"$HOME/.config/niri/config.kdl\""},
++  "setup.monitors": {"icon":"󰍹","label":"Monitors","action":"omarchy-launch-config-editor \"$HOME/.config/niri/monitor.kdl\""},
++  "setup.keybindings": {"icon":"","label":"Keybindings","action":"omarchy-launch-config-editor \"$HOME/.config/niri/binds.kdl\""},
++  "setup.input": {"icon":"","label":"Input","action":"omarchy-launch-config-editor \"$HOME/.config/niri/input.kdl\""},
    "setup.network": {"icon":"󰛳","label":"Network","aliases":["network"]},
    "setup.network.dns": {"icon":"󰇖","label":"DNS","aliases":["dns"]},
    "setup.network.dns.dhcp": {"icon":"󰩟","label":"DHCP","checked":"[[ \"$(omarchy-dns)\" == \"DHCP\" ]]","action":"omarchy-dns DHCP"},
@@ -185,6 +224,32 @@ index 4bfd0b7..17edf0c 100644
 +singleton Niri 1.0 Niri.qml
  singleton Style 1.0 Style.qml
  singleton Util 1.0 Util.qml
+diff --git a/shell/Ui/KeyboardPanel.qml b/shell/Ui/KeyboardPanel.qml
+index b2fb218..c64a57e 100644
+--- a/shell/Ui/KeyboardPanel.qml
++++ b/shell/Ui/KeyboardPanel.qml
+@@ -1,6 +1,7 @@
+ import QtQuick
+ import Quickshell
+ import Quickshell.Wayland
++import Quickshell.Wayland._BackgroundEffect
+ import qs.Commons
+ 
+ // Layer-shell popup attached to a bar widget icon, designed for
+@@ -82,6 +83,13 @@ PanelWindow {
+   color: "transparent"
+   exclusionMode: ExclusionMode.Ignore
+ 
++  // Frost only the panel card, not the full-screen click-catcher: request a
++  // shaped ext-background-effect region that tracks the card item, so niri
++  // blurs just behind `card`. Every bar-widget popup (audio/bluetooth/
++  // network/power/clock/monitor/tailscale/weather/dropbox) and the agent
++  // panel reuse this surface, so this one attachment frosts them all.
++  BackgroundEffect.blurRegion: Region { item: card; radius: Style.cornerRadius }
++
+   WlrLayershell.namespace: "omarchy-keyboard-panel"
+   WlrLayershell.layer: WlrLayer.Overlay
+   // Keyboard focus follows `open` (NOT `visible`). The window remains
 diff --git a/shell/plugins/background/Background.qml b/shell/plugins/background/Background.qml
 index 21e1b0a..a32f138 100644
 --- a/shell/plugins/background/Background.qml
@@ -224,7 +289,6 @@ index 5dcd205..7c99e62 100644
 +    var monitor = Niri.focusedMonitor
      return monitor ? String(monitor.name || "") : ""
    }
-
  
 diff --git a/shell/plugins/bar/widgets/Workspaces.qml b/shell/plugins/bar/widgets/Workspaces.qml
 index ec0482a..985d1d9 100644
@@ -288,32 +352,6 @@ index eeaf2e2..563c530 100644
      // The card opens centered exactly as always. The first search keystroke
      // or submenu move freezes the top line where it currently sits — from
      // then on the card grows and shrinks downward instead of re-centering
-diff --git a/shell/Ui/KeyboardPanel.qml b/shell/Ui/KeyboardPanel.qml
-index b2fb218..c64a57e 100644
---- a/shell/Ui/KeyboardPanel.qml
-+++ b/shell/Ui/KeyboardPanel.qml
-@@ -1,6 +1,7 @@
- import QtQuick
- import Quickshell
- import Quickshell.Wayland
-+import Quickshell.Wayland._BackgroundEffect
- import qs.Commons
- 
- // Layer-shell popup attached to a bar widget icon, designed for
-@@ -82,6 +83,13 @@ PanelWindow {
-   color: "transparent"
-   exclusionMode: ExclusionMode.Ignore
- 
-+  // Frost only the panel card, not the full-screen click-catcher: request a
-+  // shaped ext-background-effect region that tracks the card item, so niri
-+  // blurs just behind `card`. Every bar-widget popup (audio/bluetooth/
-+  // network/power/clock/monitor/tailscale/weather/dropbox) and the agent
-+  // panel reuse this surface, so this one attachment frosts them all.
-+  BackgroundEffect.blurRegion: Region { item: card; radius: Style.cornerRadius }
-+
-   WlrLayershell.namespace: "omarchy-keyboard-panel"
-   WlrLayershell.layer: WlrLayer.Overlay
-   // Keyboard focus follows `open` (NOT `visible`). The window remains
 diff --git a/shell/services/AppLibrary.qml b/shell/services/AppLibrary.qml
 index 738529d..460565c 100644
 --- a/shell/services/AppLibrary.qml
