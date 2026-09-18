@@ -99,7 +99,7 @@ hyprctl 调用面有界、可直接映射。
 | `~/.local/share/omarchy/default/omarchy/omarchy-menu.jsonc` | **菜单指向 niri 真配置**（见 §8.6）|
 | `~/.config/niri/config.kdl` | 编排器：`environment`/`spawn`/`animations`/`screenshot-path` + 6 个 `include`（§5.7）；`focus-ring` 在 `layout.kdl`，颜色由主题驱动（§5.6）|
 | `~/.config/niri/{input,monitor,layout,window-rules,effects,binds}.kdl` | 模块化拆分出的子配置（§5.7）：输入/显示器/布局/窗口规则(含圆角)/磨砂(effects)/按键 |
-| `~/.config/niri/effects.kdl` | 2026-09-19 移除 `^omarchy-bar$` 的 blur layer-rule（浮栏后被糊出光晕，§8.8）|
+| `~/.config/niri/effects.kdl` | 2026-09-19 给 `^omarchy-bar$` 配 `background-effect { xray false }`（浮栏磨砂；圆角模糊区域由插件端下发，§8.8）|
 | `~/.config/omarchy/shell.json` | bar：`id` = `charlieras262.floating-bar`、`floatGap` 8、`cornerRadius` 10；`layout.left` = `yvonne.arch-logo` + `yvonne.workspaces`（§8.11）|
 | `~/.config/ghostty/config` | 半透明 (`background-opacity = 0.85`) + 关自带模糊 (`background-blur-radius = 0`)，blur 交给 niri（§5.8） |
 
@@ -727,11 +727,17 @@ niri 26.04 的 `background-effect` + Quickshell 的 `ext_background_effect` 形�
     Quickshell 已发卡片形状区域，该区域就是唯一磨砂范围，全屏 surface 不会霜化）。`xray false` =
     磨砂卡片背后的**实时窗口**（真毛玻璃）；`xray true` = 只磨砂壁纸。
   - `^omarchy-blurwallpaper$` → `place-within-backdrop true`（overview 模糊壁纸插件，§8 第 10 条）。
-  - **`^omarchy-bar$` 于 2026-09-19 移除**（浮栏插件 §8.11 启用后）：niri 的 layer blur 会把 bar
-    **自己的填充一起采样**（与 Hyprland 的 `ignore_alpha` 无 niri 等价物，niri issue #1554 未修），
-    于是 bar 的四角被糊出一圈光晕、圆角看起来是"方的"——问题不在圆角配置，在模糊。浮栏本身不透明
-    （`shell.json` 里 `transparent: false`），这层 backdrop blur 本来也看不见，删掉零损失。
-    代价：将来若把 bar 改回半透明，得先把该 namespace 加回这里，否则没有霜面。
+  - `^omarchy-bar$` → `background-effect { xray false }`（**只设 xray**，同 keyboard-panel；用户明确不要 xray）。
+    浮栏得**半透明**才有霜面可看：`shell.toml [bar] background-alpha 0.45` 喂 `Color.bar.background`，而浮栏插件
+    的 `Bar.qml` 不再把该 alpha 强制成 1（niri 补丁第 5 处，§8.11）。
+    **圆角区域由客户端下发**：补丁给 bar 的 `PanelWindow` 挂
+    `BackgroundEffect.blurRegion: Region { item: barBackground; radius: root.effectiveCornerRadius }`（第 4 处），
+    niri 于是只糊 bar 那块**圆角矩形**——这才是"四角亮晕"的正解（niri 采样合成画面、把 bar 自己的填充糊出圆角，
+    Hyprland 的 `ignore_alpha` 无等价物，niri issue #1554 未修）。早先（同日早些时候）只是把该 namespace 从
+    layer-rule 里摘掉来回避，代价是 bar 没有霜面。
+    **实测**：角上 `(17,17)`/`(20,20)` 与不磨砂时**逐像素相同**（无晕）；栏内 `(25,17,20) → (97,95,109)`
+    （真透出背后并被模糊）；blur 开/关平均差 3.68、最大 26，同一状态连拍两次差仅 0.07（可复现）。
+    透明度是唯一的手感旋钮：`shell.toml [bar] background-alpha`（0.45 现值；调高更暗更清晰、调低更透更糊）。
 - `~/.config/omarchy/shell.toml`：`[bar]` background-alpha 0.45、`[popups]` 0.65（原 0.8，
   只为透出磨砂；越低越糊、越高字越清晰）、`[menu]` 0.7、`[notifications]` 0.85、`[tooltip]` 0.85。
   这些喂给 `Color.*.background`（`Color.qml` 的 `composed(...-alpha...)`）。
@@ -933,16 +939,24 @@ materal-update --print    # 只打印推导出的调色板
 - 来源 `https://github.com/Charlieras262/omarchy-floating-bar.git`，`omarchy plugin add <url> --yes` 安装。
 - **启用方式是 `shell.json` 的 `bar.id = "charlieras262.floating-bar"`**，不是 enable/disable 开关——
   所以 `omarchy plugin list` 里它永远不显示 enabled，别据此判断没生效。
-- niri 适配 4 处（Hyprland 独占调用 → 垫片/niri 等价物），存档在
-  `~/.config/omarchy/niri-port/plugin-patches/charlieras262.floating-bar.patch`；`omarchy plugin update`
-  会用上游版本覆盖工作树，覆盖后要重打这个 patch。该补丁**只存在实机**（插件本体仍从上游安装），未随移植
-  仓库分发。
+- niri 适配 **6 处**：4 处是 Hyprland 独占调用 → 垫片/niri 等价物；2 处是磨砂相关（`Bar.qml` 不再把
+  `Color.bar.background` 的 alpha 强制成 1、给 bar 的 `PanelWindow` 挂圆角 `BackgroundEffect.blurRegion`，
+  见 §8.8）。存档在 `~/.config/omarchy/niri-port/plugin-patches/charlieras262.floating-bar.patch`，
+  补丁基线是上游 `Bar.qml` HEAD，已用 `patch -p1` 从上游重建并 `cmp` 验证与实机文件逐字节一致
+  （旧版留 `.bak-20260919-preblur`）。`omarchy plugin update` 会用上游版本覆盖工作树，覆盖后要重打这个 patch。
+  该补丁**只存在实机**（插件本体仍从上游安装），未随移植仓库分发。
 - 参数：`floatGap = 8`（逻辑）、`cornerRadius = 10`、`transparent: false`。
 - 几何实测（scale 2.0，物理 px）：bar 占 y 16..79、左缘 x = 16（= 8 逻辑 floatGap，bar 高 32 逻辑）；
   平铺窗口停在 728 = 800 − (32 bar + 8 floatGap + 16 niri gaps)——**niri 在自己的独占区之外又加了一次
   gaps，两者不打架**（像素核对过）。
-- 配套改动：`~/.config/niri/effects.kdl` 去掉 `^omarchy-bar$` 的 blur layer-rule（原因见 §8.8）。
+- 配套改动：`~/.config/niri/effects.kdl` 给 `^omarchy-bar$` 配 `background-effect { xray false }`（浮栏磨砂，
+  2026-09-19；模糊区域形状由插件下发的圆角 `blurRegion` 决定，原因与实测见 §8.8）。
 - 保留的第三方部件：`charlieras262.omablur`（圆角/模糊调节）、`ryuhzk.ime`。
+  **omablur 在 niri 上是空转**（2026-09-19 核）：滑块读的是垫子写死的 `hyprctl -j getoption decoration:*`
+  （`{"int":12,...}`），应用走 `hyprctl eval 'hl.config({...})'`——垫子对 `hl.config` 是**空操作**（exit 0、不改
+  任何东西），持久化还写 `~/.config/hypr/looknfeel.lua`（niri 上已被降级的 Layer-2）。niri 的真值在
+  `~/.config/niri/window-rules.kdl` 的 `geometry-corner-radius` 与 `effects.kdl` 的 `blur { passes/offset/... }`，
+  改它们 + `niri msg action load-config-file` 才生效。要么接受它当装饰，要么从 `shell.json` 的 right 数组里摘掉。
 - 已知待修：toast 与 `KeyboardPanel` 家族弹窗没给浮栏让位（§8 第 18 条）。
 
 ### 8.12 共享壁纸库（omarchy-wallpaper-aio）
@@ -1011,6 +1025,7 @@ ln -sfn /data/Pictures/Wallpapers ~/.config/omarchy/backgrounds/catppuccin    # 
 - [x] **overview 背景统一**：`shell/plugins/blurwallpaper/` + `Niri.overviewOpen` 驱动（见 §3.1、§6、§8 第 10 条）。
 - [x] **菜单 override label+icon 修复（2026-08-27）**：`extensions/omarchy-menu.jsonc` 的 3 个 setup 项补全 label+icon，合并后显示 "Monitors"/"Keybindings"/"Input" 且图标正常（不再显示 raw id `setup.monitors` 之类）；根因是 `normalizeItem` 的 `label: value.label || id` 把 action-only override 的 label 退化成 id 并覆盖默认项。
 - [x] **视觉磨砂（frosted Quickshell）**：`Menu.qml` + `KeyboardPanel.qml` 挂 `BackgroundEffect.blurRegion`（只磨砂卡片，不全屏）；`effects.kdl` 给 `omarchy-keyboard-panel` 设 `xray false`（实时窗口毛玻璃）；`[popups]` alpha 0.8→0.65。面板开/关屏幕底部清晰度 on/off≈0.995 → 无全屏霜化。
+- [x] **浮栏磨砂（2026-09-19）**：`Bar.qml` 保住 `[bar] background-alpha`（不再强制 alpha=1）+ 挂**圆角** `blurRegion`，`effects.kdl` 给 `^omarchy-bar$` 设 `xray false`；实测栏内 `(25,17,20)→(97,95,109)`、四角像素与不磨砂时逐像素相同（无亮晕）、blur 开/关平均差 3.68 且连拍可复现（见 §8.8/§8.11）。
 - [x] **媒体键 OSD（2026-08-25）**：`XF86Audio*`/`XF86MicMute`→`omarchy-audio-output-volume`/`omarchy-audio-input-mute`、`XF86MonBrightness*`→`omarchy-brightness-display`，均带 `hotkey-overlay-title`；`omarchy-osd` 已在 niri 渲染确认。
 - [x] **brightnessctl 背光**（2026-08-25）：`brightnessctl --class=backlight set +10%` 实测 76→126→恢复；udev 规则 + usergroup 已生效、免重登。
 - [x] **上游合并（2026-09-18）**：FF 到 `d174d4a`；2 个冲突已解；覆盖层重建为 17 文件 / 30 hunk，`--reverse --check` 通过、repatch 幂等；shell 在新代码上重启无报错、bar/背景图层正常（见 §8.9）。
