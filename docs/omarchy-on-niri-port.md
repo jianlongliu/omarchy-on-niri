@@ -68,6 +68,8 @@ hyprctl 调用面有界、可直接映射。
 | `~/.config/omarchy/hooks/theme-set.d/20-materal` | 换 theme 时重新取色（与 `10-niri-border` 并列，§8.10） |
 | `~/.config/systemd/user/materal-recolor.{path,service}` | 盯 `current/` 与 `current/background` 的 path/service 单元：换壁纸即自动重取色（§8.10） |
 | `~/.config/omarchy/plugins/yvonne.arch-logo/`、`~/.config/omarchy/plugins/yvonne.workspaces/` | 用户级 bar 部件（仓库外、抗 `omarchy update`）：Arch logo、胶囊式工作区指示（§8.11） |
+| `~/.config/omarchy/backgrounds/{tonal-spot,catppuccin}` | 共享壁纸库软链 → `/data/Pictures/Wallpapers`（所有主题翻同一套图，§8.12） |
+| `~/omarchy-wallpaper-aio/` | 参考仓库 `jianlongliu/omarchy-wallpaper-aio` 的克隆：只含 `setup.sh`（把主题背景目录软链到壁纸库，§8.12） |
 | `~/bin/omarchy-niri-system` (+x) | **统一系统动作入口**：logout→`niri msg action quit --skip-confirmation`、reboot→logind D-Bus `Manager.Reboot`、shutdown→logind D-Bus `Manager.PowerOff`（均免密），统一 OSD+关窗+分发 |
 | `~/bin/omarchy-niri-repatch` (+x) | 上游更新后重放 niri 移植覆盖层（patch + `Niri.qml` + `plugins/*`）|
 | `~/bin/omarchy-powerprofiles-list` + `~/bin/omarchy-powerprofiles-set` (+x) | **TLP 感知**的电源 profile 脚本（见 §8 第 11 条）：优先 `powerprofilesctl`，缺则回退 D-Bus `net.hadess.PowerProfiles` |
@@ -427,6 +429,8 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
     - 拷 `~/bin/materal-update`、主题 `~/.config/omarchy/themes/tonal-spot/`、钩子
       `hooks/theme-set.d/20-materal`、单元 `~/.config/systemd/user/materal-recolor.{path,service}`
       （`systemctl --user enable --now materal-recolor.path`，见 §8.10）。
+12. 共享壁纸库（可选，见 §8.12）：`~/omarchy-wallpaper-aio/setup.sh <壁纸库目录>`，再为**仓库层**主题
+    手工补 `ln -s`；库目录要先存在（脚本不建目录、不含图）。
 
 ---
 
@@ -939,6 +943,44 @@ materal-update --print    # 只打印推导出的调色板
 - 保留的第三方部件：`charlieras262.omablur`（圆角/模糊调节）、`ryuhzk.ime`。
 - 已知待修：toast 与 `KeyboardPanel` 家族弹窗没给浮栏让位（§8 第 18 条）。
 
+### 8.12 共享壁纸库（omarchy-wallpaper-aio）
+
+需求：不想"切个主题就回到那几张自带图"，而是**所有主题共用一套自己的壁纸库**。参考仓库
+`github.com/jianlongliu/omarchy-wallpaper-aio`（2026-09-19 由私有转公开；我们克隆在
+`~/omarchy-wallpaper-aio`）：只有 `setup.sh` + README，**不含图、不取色**，只做接线。
+
+**机制**：换壁纸时 Omarchy 合并两处（`omarchy-theme-set` 的 `choose_staged_theme_background`、
+`omarchy-theme-bg-next`，都用 `find -L <用户层> <主题层> -maxdepth 1 -type f` + 扩展名过滤）：
+
+1. `~/.local/state/omarchy/current/theme/backgrounds/` —— 当前主题自带；
+2. `~/.config/omarchy/backgrounds/<当前主题名>/` —— 用户层。
+
+把 (2) 建成**软链**指向壁纸库，于是切到任何主题翻到的都是同一个库（`find -L` 跟随软链）；
+往库里丢图即自动出现，不必重跑脚本、不必重建主题。
+
+**本机接法**
+
+```sh
+~/omarchy-wallpaper-aio/setup.sh /data/Pictures/Wallpapers                    # 遍历 ~/.config/omarchy/themes/*
+ln -sfn /data/Pictures/Wallpapers ~/.config/omarchy/backgrounds/catppuccin    # 仓库层主题，脚本不管
+```
+
+| 主题 | 所在层 | 接线方式 |
+|---|---|---|
+| `tonal-spot` | 用户层 `~/.config/omarchy/themes/` | `setup.sh` 自动建 |
+| `catppuccin` | 仓库层 `~/.local/share/omarchy/themes/` | 手工 `ln -s`（脚本只认用户层主题，其 README 亦注明） |
+
+- **库**：`/data/Pictures/Wallpapers`（71 张，全 png/jpg，无子目录）。路径**大小写敏感**
+  （`Pictures/Wallpapers`，不是 `pictures/wallpaper`）。该目录属 `jianlongliu`、位于共享数据卷
+  `/data`，我们只**读**不写，故不触犯 §1。
+- **验证**：用上游同款 `find -L` 合并两个来源 → **75 = 71（库）+ 4（主题自带）**，且库与主题自带
+  无同名文件（有重名会让轮换里出现重复项）。
+- **还原**：`find ~/.config/omarchy/backgrounds -maxdepth 1 -type l -delete`（只删软链，图不动）。
+- **与取色链路的关系**：换图 → path 单元触发 → `materal-update` 重取色（§8.10）。注意
+  `materal-update` 把 `current/background` 指向的文件**直接**喂给 matugen、不筛扩展名：库里现在全是图
+  没问题；若以后放视频（选择器认 `.mp4/.webm/.mkv` 等），换到视频那次 matugen 会失败、服务非零退出、
+  配色停在上一次结果——失败路径**不写 guard**（guard 只在成功写盘后落），不会卡住后续运行。
+
 ---
 
 ## 9. 验证清单
@@ -977,6 +1019,7 @@ materal-update --print    # 只打印推导出的调色板
 - [x] **浮栏几何（2026-09-19）**：像素实测 bar 占物理 y 16..79、左缘 x = 16；平铺窗口停在 728 = 800 − (32 bar + 8 floatGap + 16 niri gaps)，niri 独占区与自身 gaps 不打架（见 §8.11）。
 - [x] **bar 部件（2026-09-19）**：胶囊工作区（聚焦点拉伸 2.6×、四级 alpha）与 Arch logo 渲染正常，点击经 `hyprctl` 垫片走通（见 §8.11）。
 - [x] **主题精简（2026-09-19）**：仓库自带主题删剩 `catppuccin`（含 `catppuccin-latte` 共删 21 个），用户层保留 `tonal-spot`；`omarchy-theme-list` → 只有 Catppuccin / Tonal Spot；覆盖层 `--reverse --check` 仍通过、当前主题与壁纸无断链（见 §8.7）。
+- [x] **共享壁纸库（2026-09-19）**：`tonal-spot` 与 `catppuccin` 的 `~/.config/omarchy/backgrounds/<主题>` 均软链到 `/data/Pictures/Wallpapers`；上游同款 `find -L` 合并得 75 张（71 库 + 4 自带）、无重名（见 §8.12）。
 
 ---
 
