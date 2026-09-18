@@ -117,8 +117,8 @@ These are hardware/OS specific and **cannot be auto-detected reliably**:
 2. **Backlight device** — `intel_backlight` on the porting box; check `/sys/class/backlight/*`.
 3. **Power backend** — TLP vs power-profiles-daemon changes what `omarchy-powerprofiles-*` reports.
 4. **niri version** — tested on 26.04; keybind/overview behavior may differ across releases.
-5. **overview wallpaper** — the overview backdrop is compositor-drawn (niri), not the desktop wall;
-   this is still an open limitation (see the port notes).
+
+The overview backdrop needs no adjustment: niri draws that layer itself, so the ported `blurwallpaper` shell plugin paints a blurred wallpaper while the overview is open (see the port notes).
 
 ## Why it's not a single-click guarantee
 

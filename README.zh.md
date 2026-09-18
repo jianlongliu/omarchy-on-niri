@@ -113,7 +113,8 @@ cd omarchy-on-niri
 2. **背光设备** — 移植机上为 `intel_backlight`；查 `/sys/class/backlight/*` 确认你的。
 3. **电源后端** — TLP 还是 power-profiles-daemon，会改变 `omarchy-powerprofiles-*` 报告的内容。
 4. **niri 版本** — 在 26.04 上测试过；不同版本的键位/总览行为可能有差异。
-5. **overview 壁纸** — 总览的垫底是合成器（niri）画的，不是桌面壁纸；这仍是一个**未决的限制**（见移植笔记）。
+
+总览的垫底无需调整：那一层由 niri 自己绘制，移植自带的 `blurwallpaper` 插件会在总览打开时铺一张强模糊壁纸（见移植笔记）。
 
 ## 为什么它不是"一键保证"
 
