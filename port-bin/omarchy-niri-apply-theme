@@ -10,6 +10,7 @@ By default it only writes config.kdl; the new colour lands on the next niri conf
 reload.  Pass --reload to also run `niri msg action load-config-file` immediately.
 """
 
+import os
 import re
 import shutil
 import subprocess
@@ -20,8 +21,15 @@ NIRI_CFG = "/home/yvonne/.config/niri/config.kdl"
 
 
 def normalize(color: str):
-    """Normalise a Hyprland/Omarchy colour to niri's hex form.  None if unparseable."""
-    c = color.strip().strip('"')
+    """Normalise a Hyprland/Omarchy colour to niri's hex form.  None if unparseable.
+
+    A Hyprland border may be a gradient ("rgba(..) rgba(..) rgba(..) 45deg"); niri's
+    focus-ring is one flat colour, so use the gradient's leading stop.
+    """
+    tokens = color.strip().strip('"').split()
+    if not tokens:
+        return None
+    c = tokens[0]
     m = re.fullmatch(r"rgba\(([0-9a-fA-F]{6,8})\)", c)
     if m:
         return "#" + m.group(1).lower()
@@ -39,20 +47,31 @@ def normalize(color: str):
 
 
 def extract_colors():
-    """Pull active_border_color/inactive_border_color out of the generated theme lua."""
+    """Pull active_border_color/inactive_border_color out of the generated theme lua.
+
+    A theme may define its active border as a gradient, which Omarchy renders as a Lua
+    table -- `{ colors = { "rgba(..)", .. }, angle = 45 }`.  niri's focus-ring is one
+    flat colour, so unwrap the first entry of such a table.
+    """
     active = inactive = None
     try:
         with open(THEME_LUA) as fh:
             for line in fh:
-                m = re.match(r"\s*local\s+active_border_color\s*=\s*\"([^\"]+)\"", line)
+                m = re.match(r'\s*local\s+active_border_color\s*=\s*"([^"]+)"', line)
                 if m:
                     active = m.group(1)
-                m = re.match(r"\s*local\s+inactive_border_color\s*=\s*\"([^\"]+)\"", line)
+                m = re.match(r"\s*local\s+active_border_color\s*=\s*\{[^}]*?\"([^\"]+)\"", line)
+                if m:
+                    active = m.group(1)
+                m = re.match(r'\s*local\s+inactive_border_color\s*=\s*"([^"]+)"', line)
+                if m:
+                    inactive = m.group(1)
+                m = re.match(r"\s*local\s+inactive_border_color\s*=\s*\{[^}]*?\"([^\"]+)\"", line)
                 if m:
                     inactive = m.group(1)
     except OSError:
         return None, None
-    return normalize(active), normalize(inactive)
+    return normalize(active) if active else None, normalize(inactive) if inactive else None
 
 
 def patch_focus_ring(text, active, inactive):
@@ -79,28 +98,53 @@ def patch_focus_ring(text, active, inactive):
     return "".join(lines), ring_open
 
 
+def candidate_configs():
+    """config.kdl plus the files it includes, in include order.
+
+    The niri port splits the compositor config into included files, and the focus-ring
+    block lives in layout.kdl, so the ring is not necessarily in config.kdl itself.
+    """
+    paths = [NIRI_CFG]
+    try:
+        with open(NIRI_CFG) as fh:
+            text = fh.read()
+    except OSError:
+        return paths
+    for name in re.findall(r'^\s*include\s+"([^"]+)"', text, re.M):
+        candidate = os.path.join(os.path.dirname(NIRI_CFG), name)
+        if os.path.isfile(candidate):
+            paths.append(os.path.realpath(candidate))
+    return paths
+
+
 def main():
     reload_now = "--reload" in sys.argv[1:]
     active, inactive = extract_colors()
     if not active and not inactive:
-        print("omarchy-niri-apply-theme: no theme border colours found; leaving config.kdl untouched")
+        print("omarchy-niri-apply-theme: no theme border colours found; leaving niri config untouched")
         return 1
 
-    with open(NIRI_CFG) as fh:
-        original = fh.read()
+    for path in candidate_configs():
+        with open(path) as fh:
+            original = fh.read()
 
-    patched, block = patch_focus_ring(original, active or "#7fc8ff", inactive or "#505050")
-    if block < 0:
-        print("omarchy-niri-apply-theme: no focus-ring block found in config.kdl")
-        return 1
+        patched, block = patch_focus_ring(original, active or "#7fc8ff", inactive or "#505050")
+        if block < 0:
+            continue
 
-    if patched == original:
-        print("omarchy-niri-apply-theme: colours already up to date (%s / %s)" % (active, inactive))
+        if patched == original:
+            print("omarchy-niri-apply-theme: colours already up to date (%s / %s)" % (active, inactive))
+        else:
+            shutil.copy2(path, path + ".bak-niri-theme")
+            with open(path, "w") as fh:
+                fh.write(patched)
+            print("omarchy-niri-apply-theme: wrote focus-ring colours %s / %s to %s"
+                  % (active, inactive, os.path.basename(path)))
+        break
     else:
-        shutil.copy2(NIRI_CFG, NIRI_CFG + ".bak-niri-theme")
-        with open(NIRI_CFG, "w") as fh:
-            fh.write(patched)
-        print("omarchy-niri-apply-theme: wrote focus-ring colours %s / %s" % (active, inactive))
+        print("omarchy-niri-apply-theme: no focus-ring block found in %s or its includes"
+              % os.path.basename(NIRI_CFG))
+        return 1
 
     if reload_now:
         subprocess.run(["niri", "msg", "action", "load-config-file"], check=False)
