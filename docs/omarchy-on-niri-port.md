@@ -533,9 +533,11 @@ quickshell：`pkill -x quickshell && niri msg action spawn -- quickshell -n -p $
 **迁移带来的配置变化**
 - `~/.config/omarchy/shell.json` 的 bar 布局被上游默认更新：center 变成
   `indicators, clock, keyboard-layout, weather, system-update`（指示器挪到时钟左边、新增
-  keyboard-layout），right 新增 `agents`。用户第三方部件（`local.opencode-go`、`charlieras262.omablur`、
-  `ryuhzk.ime`、`io.github.alexinslc.calendar-agenda`）保留。**不满意可从
-  `~/.config/omarchy/niri-port/backups/20260918-pre-merge/home-config/` 还原。**
+  keyboard-layout），right 新增 `agents`。**用户接受这个上游默认布局，会自行重新定制**，所以不留
+  兼容层去保旧布局。用户随后自行删除了两个部件（`local.opencode-go` usage 部件、
+  `io.github.alexinslc.calendar-agenda`）；保留的第三方部件是 `charlieras262.omablur`、`ryuhzk.ime`。
+  `shell.json` 是 Layer-1（仓库外），这些增删抗 `git pull`；`~/.config/omarchy/niri-port/backups/20260918-pre-merge/`
+  只是当日快照，**不是要复原的目标状态**。
 - 两条"重生成 mise wrapper"迁移（`1784909971`、`1787573629`）把 `~/.local/bin` 里**原本就存在**的
   约 20 个 wrapper 重写成新模板。**没有新装任何 CLI**——那批 wrapper 是 Omarchy `install/user/mise.sh`
   的默认集（codex/claude/crush/agy/gh/omp/hermes…），此前因为没装 mise 一直是死壳；现在装了 mise，
