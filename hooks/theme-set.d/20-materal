@@ -1,0 +1,22 @@
+#!/bin/bash
+
+# materal port: when a matugen-derived theme is set, re-derive its palette from the
+# wallpaper Omarchy has currently selected instead of trusting the colors.toml
+# committed with the theme. $1 is the theme slug omarchy-theme-set was given.
+#
+# materal-update ends with `omarchy theme set`, which fires this hook again; the
+# guard file, created by materal-update just before that re-apply, is what stops
+# the recursion -- consumed (removed) here.
+
+GUARD="$HOME/.cache/materal/guarded-by-internal"
+
+if [[ -e $GUARD ]]; then
+  rm -f "$GUARD"
+  exit 0
+fi
+
+slug="${1:-$(cat "$HOME/.local/state/omarchy/current/theme.name" 2>/dev/null)}"
+[[ -n $slug ]] || exit 0
+[[ -f "$HOME/.config/omarchy/themes/$slug/matugen.toml" ]] || exit 0
+
+"$HOME/bin/materal-update" "$slug" || true

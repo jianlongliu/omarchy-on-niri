@@ -46,8 +46,9 @@ mkdir -p ~/bin
 for f in "$REPO"/port-bin/*; do install -m 0755 "$f" ~/bin/; done
 ```
 
-This installs: `hyprctl` (the shim — **critical**, ~50 omarchy scripts call it), `omarchy-niri-system`,
-`omarchy-niri-apply-theme`, `omarchy-niri-repatch`, `omarchy-powerprofiles-list`, `omarchy-powerprofiles-set`.
+This installs `hyprctl` (the shim — **critical**, ~50 omarchy scripts call it), `omarchy-niri-system`,
+`omarchy-niri-apply-theme`, `omarchy-niri-repatch`, `omarchy-powerprofiles-list`,
+`omarchy-powerprofiles-set`, and `materal-update` (only needed for a matugen-derived theme — see step 5).
 
 ---
 
@@ -118,7 +119,11 @@ install -m 0755 "$REPO"/hooks/theme-set.d/*    ~/.config/omarchy/hooks/theme-set
 ```
 
 `post-update.d/10-niri-repatch` reapplies the overlay after each `omarchy update`;
-`theme-set.d/10-niri-border` writes the focus-ring color on each style switch.
+`theme-set.d/10-niri-border` writes the focus-ring color on each style switch;
+`theme-set.d/20-materal` re-derives the palette of a theme that carries a `matugen.toml` from the wallpaper
+Omarchy currently has selected (needs `matugen`; themes without that file are untouched). The systemd pair
+that also re-colours when the wallpaper changes (`materal-recolor.{path,service}`) is machine-specific — see
+the port notes §8.10.
 
 ---
 

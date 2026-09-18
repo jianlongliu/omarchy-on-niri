@@ -63,9 +63,9 @@ hyprctl 调用面有界、可直接映射。
 | `~/.local/share/omarchy/shell/Commons/Niri.qml` (153 行) | QuickShell 单例，轮询 niri，暴露 `workspaces/focusedWorkspace/focusedMonitor` + `overviewOpen` |
 | `~/.local/share/omarchy/shell/plugins/blurwallpaper/` (`BlurWallpaper.qml` + `manifest.json`) | 移植自有 QuickShell 插件（id `omarchy.blurwallpaper`，kind `service`）：overview 期间渲染强模糊壁纸（§8 第 10 条） |
 | `~/bin/omarchy-niri-apply-theme` (Python, +x) | 把当前 Omarchy theme 的边框色写进 niri 的 `focus-ring`（C 层换色）；**沿 `include` 定位**含 `focus-ring` 的模块、支持渐变取首个色站（§5.6） |
-| `~/bin/materal-update` (Python, +x) | **主题动态取色生成器**：读当前壁纸 → matugen 出 M3 配色 → 映射成 omarchy `colors.toml` → 重套主题（§8.10） |
+| `~/bin/materal-update` (Python, +x) | **主题动态取色生成器**：读当前壁纸 → matugen 出 M3 配色 → 映射成 omarchy `colors.toml` → 重套主题（§8.10；仓库副本 `port-bin/materal-update`） |
 | `~/.config/omarchy/themes/tonal-spot/` | 用户级主题（`matugen.toml` + 自生成 `backgrounds/` + 静态 ANSI 16 色），`omarchy theme set Tonal-Spot` 选用（§8.10） |
-| `~/.config/omarchy/hooks/theme-set.d/20-materal` | 换 theme 时重新取色（与 `10-niri-border` 并列，§8.10） |
+| `~/.config/omarchy/hooks/theme-set.d/20-materal` | 换 theme 时重新取色（与 `10-niri-border` 并列，§8.10；仓库副本 `hooks/theme-set.d/20-materal`） |
 | `~/.config/systemd/user/materal-recolor.{path,service}` | 盯 `current/` 与 `current/background` 的 path/service 单元：换壁纸即自动重取色（§8.10） |
 | `~/.config/omarchy/plugins/yvonne.arch-logo/`、`~/.config/omarchy/plugins/yvonne.workspaces/` | 用户级 bar 部件（仓库外、抗 `omarchy update`）：Arch logo、胶囊式工作区指示（§8.11） |
 | `~/.config/omarchy/backgrounds/{tonal-spot,catppuccin}` | 共享壁纸库软链 → `/data/Pictures/Wallpapers`（所有主题翻同一套图，§8.12） |
@@ -855,6 +855,7 @@ tonal-spot 方案），**下放**到本机、不是照抄那台机器。全部�
 | 生成器 | `~/bin/materal-update` | 跑 matugen、映射调色板、重套主题 |
 | 钩子 | `~/.config/omarchy/hooks/theme-set.d/20-materal` | 换 theme 后重新取色 |
 | 单元 | `~/.config/systemd/user/materal-recolor.{path,service}` | 盯壁纸文件，换壁纸自动重取色 |
+| 仓库副本 | `port-bin/materal-update`、`hooks/theme-set.d/20-materal` | 随 INSTALL 第 2/5 步安装；那对 systemd 单元只在本机，未随仓库分发 |
 
 - 主题的 `backgrounds/` 是我们用 `magick … -quality 90` 从上游 `backgrounds.default/*.png` 生成的
   `.webp`（上游只发 `.default` 变体，不生成则主题没有可用壁纸）。
@@ -934,7 +935,8 @@ materal-update --print    # 只打印推导出的调色板
   所以 `omarchy plugin list` 里它永远不显示 enabled，别据此判断没生效。
 - niri 适配 4 处（Hyprland 独占调用 → 垫片/niri 等价物），存档在
   `~/.config/omarchy/niri-port/plugin-patches/charlieras262.floating-bar.patch`；`omarchy plugin update`
-  会用上游版本覆盖工作树，覆盖后要重打这个 patch。
+  会用上游版本覆盖工作树，覆盖后要重打这个 patch。该补丁**只存在实机**（插件本体仍从上游安装），未随移植
+  仓库分发。
 - 参数：`floatGap = 8`（逻辑）、`cornerRadius = 10`、`transparent: false`。
 - 几何实测（scale 2.0，物理 px）：bar 占 y 16..79、左缘 x = 16（= 8 逻辑 floatGap，bar 高 32 逻辑）；
   平铺窗口停在 728 = 800 − (32 bar + 8 floatGap + 16 niri gaps)——**niri 在自己的独占区之外又加了一次

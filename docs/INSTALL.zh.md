@@ -41,7 +41,8 @@ for f in "$REPO"/port-bin/*; do install -m 0755 "$f" ~/bin/; done
 ```
 
 这会装上：`hyprctl`（垫片——**关键**，约 50 个 omarchy 脚本会调它）、`omarchy-niri-system`、
-`omarchy-niri-apply-theme`、`omarchy-niri-repatch`、`omarchy-powerprofiles-list`、`omarchy-powerprofiles-set`。
+`omarchy-niri-apply-theme`、`omarchy-niri-repatch`、`omarchy-powerprofiles-list`、
+`omarchy-powerprofiles-set`，以及 `materal-update`（只有用 matugen 派生主题时才需要，见第 5 步）。
 
 ---
 
@@ -110,7 +111,10 @@ install -m 0755 "$REPO"/hooks/theme-set.d/*    ~/.config/omarchy/hooks/theme-set
 ```
 
 `post-update.d/10-niri-repatch` 在每次 `omarchy update` 后重放覆盖层；
-`theme-set.d/10-niri-border` 在每次切换 style 时写入 focus-ring 颜色。
+`theme-set.d/10-niri-border` 在每次切换 style 时写入 focus-ring 颜色；
+`theme-set.d/20-materal` 用 Omarchy 当前选中的壁纸重新推导"带 `matugen.toml` 的主题"的配色（需要
+`matugen`；没有该文件的主题不受影响）。另外那对"换壁纸也重新取色"的 systemd 单元
+（`materal-recolor.{path,service}`）属机器专属，见移植笔记 §8.10。
 
 ---
 

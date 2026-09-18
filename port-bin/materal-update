@@ -1,0 +1,320 @@
+#!/usr/bin/env python3
+"""materal-update — re-derive a matugen (Material 3) theme from the current wallpaper.
+
+Reads <themes>/<slug>/matugen.toml, runs matugen against the wallpaper Omarchy has
+selected, rewrites that theme's colors.toml and re-applies the theme so every
+generated artefact (app configs, shell.toml, hyprland.lua) picks the new palette up.
+
+Key mapping, reverse-engineered by running matugen over the reference theme's own
+backgrounds so that this machine's theme agrees with the original:
+
+    accent                   <- primary
+    selection                <- primary_container
+    muted                    <- on_surface_variant
+    background               <- surface
+    dark_background          <- surface_container_lowest
+    darker_background        <- surface_container_lowest, darkened ~18%
+    lighter_background       <- surface_container_high
+    foreground/light/bright  <- on_surface
+    dark_foreground          <- on_surface_variant
+    hyprland_inactive_border <- outline, alpha aa
+    hyprland_active_border   <- primary -> tertiary -> primary_container, 45deg
+
+The ANSI 16 (+ orange/brown) block stays static: it is copied verbatim from the
+upstream catppuccin theme, so terminals keep readable colours while the neutrals
+and accents follow the wallpaper.  That is deliberate, not an oversight.
+
+Usage: materal-update [SLUG] [--force] [--no-apply] [--print]
+
+Companion units `materal-recolor.{path,service}` re-run this whenever the Omarchy
+wallpaper link moves; `~/.config/omarchy/hooks/theme-set.d/20-materal` has it run on
+theme switches.
+"""
+
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tomllib
+from pathlib import Path
+
+HOME = Path.home()
+THEMES = HOME / ".config/omarchy/themes"
+OMARCHY = Path(os.environ.get("OMARCHY_PATH", HOME / ".local/share/omarchy"))
+CURRENT = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state")) / "omarchy/current"
+STATE = HOME / ".cache/materal/state.json"
+GUARD = HOME / ".cache/materal/guarded-by-internal"
+
+# ANSI pass-through: names as they appear in an omarchy theme's colors.toml.
+STATIC_KEYS = [
+    "red", "yellow", "orange", "green", "cyan", "blue", "magenta", "brown",
+    "bright_red", "bright_yellow", "bright_green", "bright_cyan",
+    "bright_blue", "bright_magenta",
+]
+
+DARKEN = 0.82  # darker_background step, matches the reference theme's ramp
+
+
+def die(msg: str) -> "None":
+    print(f"materal-update: {msg}", file=sys.stderr)
+    sys.exit(1)
+
+
+def active_slug() -> "str | None":
+    try:
+        return (CURRENT / "theme.name").read_text().strip()
+    except OSError:
+        return None
+
+
+def omarchy_bin() -> str:
+    """Locate the omarchy CLI.
+
+    A systemd user unit runs with a minimal PATH, which does not include ~/bin, and the
+    port's own wrapper scripts live there -- so resolve it explicitly instead of
+    assuming `omarchy` is on PATH.
+    """
+    found = shutil.which("omarchy")
+    if found:
+        return found
+    for candidate in (OMARCHY / "bin/omarchy", HOME / ".local/bin/omarchy"):
+        if candidate.is_file():
+            return str(candidate)
+    die("cannot find the omarchy executable")
+
+
+def theme_set_env(binary: str) -> dict:
+    """Environment for `omarchy theme set`.
+
+    The CLI shells out to its sibling helpers by bare name (omarchy-theme-set-templates,
+    omarchy-hook, omarchy-restart-*, omarchy-theme-set-*) and the port's own helpers live
+    in ~/bin, so they all need to be on PATH.  A systemd user unit starts from a minimal
+    PATH, and without this the theme is staged with only its checked-in files: the
+    generated configs (shell.toml, hyprland.lua, alacritty.toml, ...) never appear and
+    the theme-set hooks -- including the niri border one -- silently never run.
+    """
+    parts = [str(Path(binary).parent), str(HOME / "bin"), str(HOME / ".local/bin")]
+    parts += [p for p in os.environ.get("PATH", "").split(os.pathsep) if p]
+    env = dict(os.environ, PATH=os.pathsep.join(dict.fromkeys(parts)))
+    env["OMARCHY_PATH"] = str(OMARCHY)
+    # Keep the wallpaper: it is this script's input, and `omarchy theme set` would
+    # otherwise advance to the theme's next background on every run, so the colours
+    # would describe the previous wallpaper and a wallpaper watcher could never settle.
+    # The palette still reaches the running shell (applyTheme).
+    env["OMARCHY_THEME_SKIP_BACKGROUND"] = "1"
+    return env
+
+
+def wallpaper_path() -> Path:
+    link = CURRENT / "background"
+    if not link.exists():
+        die(f"no wallpaper at {link}")
+    return link.resolve()
+
+
+def wallpaper_id(path: Path) -> dict:
+    """Identity of the wallpaper content.
+
+    Not mtime: staging a theme re-copies the theme's backgrounds, which rewrites the
+    file's timestamp without changing the image, so a timestamp would make every run
+    look stale (and a watcher would never settle).
+    """
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            digest.update(chunk)
+    return {"wallpaper": str(path), "sha256": digest.hexdigest()}
+
+
+def parse_toml(path: Path) -> dict:
+    with open(path, "rb") as fh:
+        return tomllib.load(fh)
+
+
+def hex_to_rgb(value: str) -> tuple:
+    return tuple(int(value[i:i + 2], 16) for i in (1, 3, 5))
+
+
+def rgb_to_hex(rgb) -> str:
+    return "#%02x%02x%02x" % tuple(max(0, min(255, int(round(c)))) for c in rgb)
+
+
+def matugen_palette(wallpaper: Path, scheme: str, mode: str) -> dict:
+    cmd = [
+        "matugen", "image", str(wallpaper),
+        "-t", f"scheme-{scheme}", "-m", mode,
+        "-j", "hex", "--prefer=saturation", "--dry-run",
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        die(f"matugen failed: {proc.stderr.strip() or proc.stdout.strip()}")
+    try:
+        return json.loads(proc.stdout)["colors"]
+    except (ValueError, KeyError) as exc:
+        die(f"unexpected matugen output: {exc}")
+
+
+def pick(palette: dict, name: str, mode: str) -> str:
+    entry = palette.get(name)
+    if entry is None:
+        die(f"matugen palette has no {name!r}")
+    for variant in (mode, "default", None):
+        value = entry.get(variant) if variant else entry
+        if isinstance(value, dict) and "color" in value:
+            return value["color"]
+        if isinstance(value, str):
+            return value
+    die(f"matugen palette entry {name!r} has no usable colour")
+
+
+def static_block() -> dict:
+    source = OMARCHY / "themes/catppuccin/colors.toml"
+    try:
+        text = source.read_text()
+    except OSError:
+        die(f"cannot read {source} for the static ANSI colours")
+    found = dict(re.findall(r'^(\w+)\s*=\s*"([^"]+)"', text, re.M))
+    missing = [k for k in STATIC_KEYS if k not in found]
+    if missing:
+        die(f"{source} lacks {', '.join(missing)}")
+    return {k: found[k] for k in STATIC_KEYS}
+
+
+def render_colors(palette: dict, mode: str) -> str:
+    g = lambda name: pick(palette, name, mode)  # noqa: E731
+    surface_lowest = g("surface_container_lowest")
+    darker = rgb_to_hex(c * DARKEN for c in hex_to_rgb(surface_lowest))
+    ansi = static_block()
+
+    lines = [
+        f'mode = "{mode}"',
+        "",
+        f'accent = "{g("primary")}"',
+        f'selection = "{g("primary_container")}"',
+        f'muted = "{g("on_surface_variant")}"',
+        "",
+        f'hyprland_inactive_border = "rgba({g("outline").lstrip("#")}aa)"',
+        'hyprland_active_border = "rgba({0}ff) rgba({1}ff) rgba({2}ff) 45deg"'.format(
+            g("primary").lstrip("#"), g("tertiary").lstrip("#"),
+            g("primary_container").lstrip("#"),
+        ),
+        "",
+        f'background = "{g("surface")}"',
+        f'dark_background = "{surface_lowest}"',
+        f'darker_background = "{darker}"',
+        f'lighter_background = "{g("surface_container_high")}"',
+        "",
+        f'foreground = "{g("on_surface")}"',
+        f'dark_foreground = "{g("on_surface_variant")}"',
+        f'light_foreground = "{g("on_surface")}"',
+        f'bright_foreground = "{g("on_surface")}"',
+        "",
+    ]
+    for key in ("red", "yellow", "orange", "green", "cyan", "blue", "magenta", "brown"):
+        lines.append(f'{key} = "{ansi[key]}"')
+    lines += [f'{key} = "{ansi[key]}"' for key in STATIC_KEYS if key.startswith("bright_")]
+    return "\n".join(lines) + "\n"
+
+
+def main() -> int:
+    argv = [a for a in sys.argv[1:]]
+    flags = {a for a in argv if a.startswith("-")}
+    unknown = flags - {"--force", "--no-apply", "--print"}
+    if unknown:
+        die(f"unknown option(s): {' '.join(sorted(unknown))}")
+    rest = [a for a in argv if not a.startswith("-")]
+    if len(rest) > 1:
+        die("at most one slug argument")
+
+    slug = rest[0] if rest else active_slug()
+    if not slug:
+        die("no slug given and the active theme is unknown")
+    theme_dir = THEMES / slug
+    meta_path = theme_dir / "matugen.toml"
+    if not meta_path.is_file():
+        if rest:
+            die(f"{theme_dir} is not a matugen theme (no matugen.toml)")
+        return 0  # active theme simply is not a materal theme; nothing to do
+
+    meta = parse_toml(meta_path)
+    scheme, mode = meta.get("scheme"), meta.get("mode", "dark")
+    if not scheme:
+        die(f"{meta_path} has no scheme")
+    colors_file = theme_dir / "colors.toml"
+
+    # Applying a theme can swap the file behind the wallpaper link (the staged theme
+    # directory is replaced), so one pass may describe an image that is no longer on
+    # screen.  Re-derive until the palette matches what is displayed; the re-apply
+    # itself never moves the wallpaper (OMARCHY_THEME_SKIP_BACKGROUND below), so this
+    # settles after at most one extra pass.
+    for attempt in range(3):
+        wallpaper = wallpaper_path()
+        wanted = {
+            "slug": slug, "scheme": scheme, "mode": mode, "darken": DARKEN,
+            **wallpaper_id(wallpaper),
+        }
+        if attempt == 0 and not flags & {"--force", "--print"} and colors_file.is_file():
+            try:
+                if json.loads(STATE.read_text()) == wanted:
+                    print(f"materal-update: {slug} already matches {wallpaper.name}; nothing to do")
+                    return 0
+            except (OSError, ValueError):
+                pass
+
+        text = render_colors(matugen_palette(wallpaper, scheme, mode), mode)
+        if "--print" in flags:
+            sys.stdout.write(text)
+            return 0
+
+        colors_file.write_text(text)
+        STATE.parent.mkdir(parents=True, exist_ok=True)
+
+        if "--no-apply" in flags:
+            STATE.write_text(json.dumps(wanted, indent=2) + "\n")
+            print(f"materal-update: rewrote {theme_dir}/colors.toml from {wallpaper.name}")
+            return 0
+
+        GUARD.parent.mkdir(parents=True, exist_ok=True)
+        GUARD.touch()
+        binary = omarchy_bin()
+        proc = subprocess.run([binary, "theme", "set", slug], capture_output=True, text=True,
+                              env=theme_set_env(binary))
+        GUARD.unlink(missing_ok=True)  # normally consumed by the theme-set hook
+        if proc.returncode != 0:
+            sys.stderr.write(proc.stderr + proc.stdout)
+            die(f"omarchy theme set {slug} failed")
+
+        staged = CURRENT / "theme/colors.toml"
+        try:
+            if staged.read_text() != text:
+                print(f"materal-update: warning: {staged} does not match the palette just written",
+                      file=sys.stderr)
+        except OSError as exc:
+            print(f"materal-update: warning: cannot read {staged} ({exc})", file=sys.stderr)
+
+        fresh = wallpaper_path()
+        if wallpaper_id(fresh) == wallpaper_id(wallpaper):
+            # Only now is the palette both applied and describing what is on screen;
+            # recording it earlier would make a failed apply look up to date.
+            STATE.write_text(json.dumps(wanted, indent=2) + "\n")
+            print(f"materal-update: {slug} re-derived from {wallpaper.name} and re-applied")
+            return 0
+        print(f"materal-update: wallpaper moved to {fresh.name} while applying; re-deriving")
+
+        fresh = wallpaper_path()
+        if wallpaper_id(fresh) == wallpaper_id(wallpaper):
+            # Only now is the palette both applied and describing what is on screen;
+            # recording it earlier would make a failed apply look up to date.
+            STATE.write_text(json.dumps(wanted, indent=2) + "\n")
+            print(f"materal-update: {slug} re-derived from {wallpaper.name} and re-applied")
+            return 0
+        print(f"materal-update: wallpaper moved to {fresh.name} while applying; re-deriving")
+
+    die("the wallpaper kept changing; giving up")
+
+
+if __name__ == "__main__":
+    sys.exit(main())
