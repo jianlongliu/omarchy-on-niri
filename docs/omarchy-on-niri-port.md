@@ -45,7 +45,7 @@ Omarchy v4 本身是 **Hyprland-only** 的（`config/` 内有 80 处 hyprland �
 
 - **`hyprctl` 命令调用**（53 个 `bin/` 脚本）→ 用 Python 垫片翻译成 `niri msg`。
 - **QuickShell `Hyprland` QML 模块**（bar 读 `workspaces/.focusedWorkspace/.focusedMonitor`）
-  → 用 `Niri.qml` 单例轮询 `niri msg -j workspaces|windows` 提供等效数据。
+  → 用 `Niri.qml` 单例订阅 `niri msg -j event-stream` 提供等效数据（2026-09-19 前为 500ms 轮询，见 §6）。
 
 参考的中间层模式：DankMaterialShell (DMS, AvengeMedia) —— Go daemon + unix socket JSON 协议，
 原生支持 niri。本方案选用的是更轻量的"hyprctl 垫片"而非 DMS daemon，因为 Omarchy 的
@@ -60,7 +60,7 @@ hyprctl 调用面有界、可直接映射。
 | 路径 | 作用 |
 |---|---|
 | `~/bin/hyprctl` (624 行, +x) | hyprctl 垫片：Omarchy 的 `hyprctl` 调用 → `niri msg`，纯 stdlib，不依赖 jq；`cmd_binds` 支持 `include` 递归展开（config.kdl 模块化后键位仍可见，见 §4） |
-| `~/.local/share/omarchy/shell/Commons/Niri.qml` (153 行) | QuickShell 单例，轮询 niri，暴露 `workspaces/focusedWorkspace/focusedMonitor` + `overviewOpen` |
+| `~/.local/share/omarchy/shell/Commons/Niri.qml` (186 行) | QuickShell 单例，**订阅 niri 事件流**（`niri msg -j event-stream`），暴露 `workspaces/focusedWorkspace/focusedMonitor` + `overviewOpen`（§6、§8.15） |
 | `~/.local/share/omarchy/shell/plugins/blurwallpaper/` (`BlurWallpaper.qml` + `manifest.json`) | 移植自有 QuickShell 插件（id `omarchy.blurwallpaper`，kind `service`）：overview 期间渲染强模糊壁纸（§8 第 10 条） |
 | `~/bin/omarchy-niri-apply-theme` (Python, +x) | 把当前 Omarchy theme 的边框色写进 niri 的 `focus-ring`（C 层换色）；**沿 `include` 定位**含 `focus-ring` 的模块、支持渐变取首个色站（§5.6） |
 | `~/bin/materal-update` (Python, +x) | **主题动态取色生成器**：读当前壁纸 → matugen 出 M3 配色 → 映射成 omarchy `colors.toml` → 重套主题（§8.10；仓库副本 `port-bin/materal-update`） |
@@ -370,22 +370,32 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
 
 ## 6. Niri.qml（QuickShell 数据单例）
 
-核心逻辑：每 500ms 轮询 `niri msg -j workspaces` 和 `niri msg -j windows`，
-组装出一个仿 `Hyprland.workspaces` 的模型，供 Bar 的 Workspaces.qml / Bar.qml 使用。
+核心逻辑：常驻一个 `niri msg -j event-stream` 进程（`SplitParser` 逐行解析 JSON），事件驱动地维护一个
+仿 `Hyprland.workspaces` 的模型，供 Bar 的 Workspaces.qml / Bar.qml 使用。
+（2026-09-19 之前是每 500ms 轮询 `niri msg -j workspaces|windows|overview-state`；改动缘由与实测见 §8.15。）
 
+- 事件流在**连接时会先重放全量状态**（`WorkspacesChanged` / `WindowsChanged`），之后只推增量；
+  所以初始无需额外查询就有完整数据（探针实测：连接后立刻收到这两条）。
+- `OverviewOpenedOrClosed` → 直接翻转 `root.overviewOpen`，不再有最多 500ms 的延迟。
+- `WorkspacesChanged` / `WorkspaceActivated` / `WorkspacesReordered` / `WorkspaceUrgencyChanged`
+  → 触发一次 `niri msg -j workspaces` 全量查询；`WindowsChanged` / `WindowOpenedOrChanged` /
+  `WindowClosed` → 同理查 `windows`。事件只带增量（重建窗口计数最省事），且 40ms 去抖把一串事件
+  合并成一次查询。
+- 断线（niri 重启）→ `onExited` 后 1s 重连；重连即拿到全量状态，无需额外的 resync 逻辑。
+- 空载不再每 500ms 起 ~6 个 `niri msg` 进程；实测空载 quickshell 0.07–0.21%、niri 9.6–11.9% 单核。
 - `root.workspaces.values[]` 每项含：`niriId, id, name, output, active, focused,
   toplevels.values[]`（`toplevels.values.length` 由 windows 按 workspace_id 计数得出）。
 - `root.focusedWorkspace` = 当前聚焦 workspace。
 - `root.focusedMonitor` = `{ "name": 聚焦 workspace 的 output }`。
-- `root.overviewOpen`（bool）：另跑 `niri msg -j overview-state` 取 `is_open`，供 overview
-  模糊壁纸插件（`shell/plugins/blurwallpaper/`）判断何时该显示。
+- `root.overviewOpen`（bool）：由事件流推送，供 overview 模糊壁纸插件
+  （`shell/plugins/blurwallpaper/`）判断何时该显示。
 - 写成 `property Process x: Process { id: x; ... }` 形式（匹配 Omarchy Style.qml 惯例），
   并给 StdioCollector 加 `waitForEnd: true`，否则编译报
   "Cannot assign to non-existent default property"。
 
 > 注意：只读数据才走这里。真正执行合成器动作靠 `hyprctl` 垫片。Hyprland 原生模块中
 > 用来发信号的 `HyprlandFocusGrab`（target: Hyprland）等其他 import 会继续解析为
-> QuickShell 的内建模块，但 run（轮询）只喂给 Niri.qml。
+> QuickShell 的内建模块，但 niri 数据只喂给 Niri.qml。
 
 ---
 
@@ -521,8 +531,8 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
       **不吃 `background-color`**，无法靠配置复用桌面壁纸。
     - **修复**：改由移植自有插件在 overview 期间自绘背景 —— `shell/plugins/blurwallpaper/`
       （id `omarchy.blurwallpaper`，kind `service`）渲染强模糊壁纸，开关由 `Niri.overviewOpen`
-      （轮询 `niri msg -j overview-state` 的 `is_open`）驱动；`effects.kdl` 给该 namespace 配
-      `place-within-backdrop true`。
+      （原为轮询 `niri msg -j overview-state`，2026-09-19 起改为订阅事件流，见 §8.15）驱动；
+      `effects.kdl` 给该 namespace 配 `place-within-backdrop true`。
 11. **电池面板 POWER PROFILE 区为空（2026-08-25 已修）**：系统电源后端是 **TLP**（`tlp` + `tlp-pd`
     `1.10.2`），**不是** power-profiles-daemon —— `powerprofilesctl` 不存在，而 Omarchy 的
     `omarchy-powerprofiles-list`/`-set` 硬依赖它，故电池面板的 POWER PROFILE 区读不到任何 profile（空）。
@@ -1117,6 +1127,52 @@ laravel 从 `~/.config/composer/vendor/bin/laravel` 改成 `~/.local/bin/laravel
 
 ---
 
+### 8.15 overview 模糊壁纸延迟（500ms 轮询 + 每次重解码）（2026-09-19）
+
+**症状**：`Mod+O` / `Mod+Tab` 打开总览时，深色背板先出来，模糊壁纸要"等一下"才补上，观感像掉帧；
+关闭时桌面壁纸同样晚一拍。
+
+**测量方法**（`/tmp/ov_lat.py`）：`grim -g "64,495 350x260" -t ppm` 连拍屏幕左下背板区（逻辑坐标 ——
+输出 scale 2.0，`grim -g` 吃逻辑像素，写物理坐标会报 "supplied geometry did not intersect"），
+判据取**区域亮度均值**：桌面态恒为 ~33，overview 稳定态 ~110，阈值 90。原因是窗口缩略图不在该区，
+背板在"模糊壁纸未到位"时是 niri 画的深色垫层（均值 20–40），只有模糊壁纸真的画上去才会变亮。
+（早期用"标准差/锐度"当判据都不行：开启动画与壁纸本身的光滑度都会污染，见 §8.15 备注。）
+
+| | 第 1 次 | 第 2 次 | 第 3 次 | 说明 |
+| --- | --- | --- | --- | --- |
+| 修复前 | 552 ms | 402 ms | 281 ms | 离散 0–500ms = **轮询抖动** |
+| 修复后 | 152 ms | 153 ms | 124 ms | 抖动消失 = 事件驱动 |
+
+**成因两条**：
+
+1. `Niri.qml` 每 500ms 轮询 `niri msg -j overview-state`，`Niri.overviewOpen` 最多晚 500ms 翻转，
+   `BlurWallpaper.qml` 的图层随之晚映射 → 上表的离散抖动。
+2. 该图层关闭时 unmapped，且 `Image { cache: false }`，每次打开都要**重新解码 + 上传**整屏壁纸
+   （4K 源图 → 2560×1600）。
+
+**修复**：
+
+- `Niri.qml` 改为**事件流驱动**（细节见 §6）：常驻一个 `niri msg -j event-stream`（`SplitParser` 逐行解析），
+  `OverviewOpenedOrClosed` 直接翻转 `overviewOpen`；workspace/window 类事件触发一次去抖 40ms 的全量查询。
+  附带收益：空载时不再每 500ms 起 ~6 个 `niri msg` 进程。
+- `BlurWallpaper.qml`：`cache: false` → `cache: true`，解码结果留在共享 pixmap cache，重新映射时只做上传。
+
+**A/B：图层要不要常驻映射**（`/tmp/ov_ab_layer.py`，两种状态各一次 14s 采样）：
+
+| 状态 | 打开延迟 | quickshell CPU | niri CPU | 电池功耗 |
+| --- | --- | --- | --- | --- |
+| 常驻映射（`visible: true`，用 `Image.opacity` 开关） | 118–138 ms | 0.21% | 11.86% | 13.45 W |
+| 关闭时不映射（`visible: Niri.overviewOpen`） | 152–163 ms | 0.07% | 9.57% | 13.46 W |
+
+结论：常驻映射只快 ~40ms，却让 niri 多烧 ~2% 核，功耗无差别；**采用保守方案**——surface 依旧随 overview
+出现/消失（桌面因此绝不可能被这层碰到），只把解码留下。
+
+**备注（判据的坑）**：`标准差` 判据会在开启动画期间从 24 渐升到 64，看起来像"模糊 183–543ms 才到位"，
+其实测的是动画结束；用"合成模糊壁纸"做参考图也不可靠（`MultiEffect` 的 blurMax 24–32 + brightness 0.15
+与 PIL 的 `GaussianBlur(24)` 不等价，平均差 53–68 分不开）。最终用**亮度均值**这一单调解即可。
+
+---
+
 ## 9. 验证清单
 
 - [x] `niri validate` 通过。
@@ -1158,6 +1214,9 @@ laravel 从 `~/.config/composer/vendor/bin/laravel` 改成 `~/.local/bin/laravel
   "Nothing here yet"（恢复即好）；`Menu.qml` 自愈守卫进 patch（17 文件 / 32 hunk），实测健康 6 项 /
   截断空 / 恢复后不重启也回来；`post-update.d/10-niri-repatch` 末尾加 `omarchy-restart-shell`（见 §8.14）。
 - [x] **共享壁纸库（2026-09-19）**：`tonal-spot` 与 `catppuccin` 的 `~/.config/omarchy/backgrounds/<主题>` 均软链到 `/data/Pictures/Wallpapers`；上游同款 `find -L` 合并得 75 张（71 库 + 4 自带）、无重名（见 §8.12）。
+- [x] **overview 延迟（2026-09-19）**：`Niri.qml` 改事件流 + `BlurWallpaper.qml` 开 `cache` 后，模糊壁纸到位时间
+  由 552/402/281 ms（轮询抖动）降到 152/153/124 ms 且抖动消失；空载只剩 1 个常驻 `niri msg -j event-stream`（父进程
+  quickshell），无 QML 报错；胶囊工作区仍随切工作区更新（§8.15）。
 
 ---
 
