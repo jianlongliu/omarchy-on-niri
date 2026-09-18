@@ -62,7 +62,7 @@ hyprctl 调用面有界、可直接映射。
 | `~/bin/omarchy-niri-apply-theme` (Python, +x) | 把当前 Omarchy theme 的边框色写进 `config.kdl` 的 `focus-ring`（C 层换色） |
 | `~/bin/omarchy-niri-system` (+x) | **统一系统动作入口**：logout→`niri msg action quit --skip-confirmation`、reboot→logind D-Bus `Manager.Reboot`、shutdown→logind D-Bus `Manager.PowerOff`（均免密），统一 OSD+关窗+分发 |
 | `~/bin/omarchy-niri-repatch` (+x) | 上游更新后重放 niri 移植覆盖层（patch + Niri.qml + `plugins/*`）|
-| `~/bin/omarchy-powerprofiles-list` + `~/bin/omarchy-powerprofiles-set` (+x) | **TLP 感知**的电源 profile 脚本（见 §8.11）：优先 `powerprofilesctl`，缺则回退 D-Bus `net.hadess.PowerProfiles` |
+| `~/bin/omarchy-powerprofiles-list` + `~/bin/omarchy-powerprofiles-set` (+x) | **TLP 感知**的电源 profile 脚本（见 §8 第 11 条）：优先 `powerprofilesctl`，缺则回退 D-Bus `net.hadess.PowerProfiles` |
 | `~/.config/omarchy/hooks/theme-set.d/10-niri-border` | 换 style 时自动 `omarchy-niri-apply-theme`（只写不重载，保护 SCALE）|
 | `~/.config/omarchy/hooks/post-update.d/10-niri-repatch` | `omarchy update` 后自动重放覆盖层 |
 | `~/.config/omarchy/niri-port/`（`niri.patch` + `Niri.qml` + `plugins/`）| 移植覆盖层产物（仓库外，重放用）|
@@ -79,7 +79,7 @@ hyprctl 调用面有界、可直接映射。
 | `~/.local/share/omarchy/shell/Ui/KeyboardPanel.qml` | 加 `import Quickshell.Wayland._BackgroundEffect`；根 `PanelWindow` 挂 `BackgroundEffect.blurRegion: Region { item: card; radius: Style.cornerRadius }`（覆盖所有 bar 弹窗面板，见 §8.8）|
 | `~/.local/share/omarchy/shell/plugins/osd/Osd.qml` | 磨砂 OSD 卡片（同 §8.8 手法） |
 | `~/.local/share/omarchy/shell/services/AppLibrary.qml` | 加 `command -v uwsm-app` 回退（niri 无 uwsm-app） |
-| `~/.local/share/omarchy/shell/plugins/background/Background.qml` | `readlinkProc` 回调强制即时切换背景（见 §8.1b）|
+| `~/.local/share/omarchy/shell/plugins/background/Background.qml` | `readlinkProc` 回调强制即时切换背景（见 §8 第 1 条 b）|
 | `~/.local/share/omarchy/bin/omarchy-launch-tui` | 加 uid 终端回退（ghostty），因 niri 无 `uwsm-app`/`xdg-terminal-exec` |
 | `~/.local/share/omarchy/bin/omarchy-launch-editor` | 同上，编辑器路径回退 |
 | `~/.local/share/omarchy/bin/omarchy-launch-floating-terminal-with-presentation` | 同上，浮动终端回退 |
@@ -349,15 +349,15 @@ niri 上这个颜色由 `config.kdl` 的 `focus-ring` 块决定。`omarchy-niri-
      （记录 `reboot/shutdown scheduled`、`windows closed` 等步骤）；若仍未生效可查该文件与
      `journalctl --user -b` 中 logind 相关条目。
    - **待运行实测**：logout/reboot/shutdown 需在真实会话触发（会结束本会话/重启），留给用户验证。
-10. **overview 壁纸与桌面统一（需求，2026-08-25 实测收窄）**：niri 总览（`Mod+O` / `Mod+Tab` 触发
-    `toggle-overview`）的背景是**不透明深色**，不与桌面一致。桌面壁纸由 `shell/plugins/background/Background.qml`
-    的 layer-shell（`Background` 层，namespace `omarchy-background`）绘制；本回合实测：
-    - overview 开启时 `niri msg layers` 只有 `omarchy-background` + `omarchy-bar`，**没有**其它深色填充层，
-      即那层深色背景是 niri overview 自己合成上去的。
-    - 把 `config.kdl` 的 `layout { background-color "#ff00ff" }` 设成品红并 `load-config-file` 后，
-      overview 背景**仍是深色不变**，证明 overview 的背景**不是** `background-color` 驱动。
-    - 结论：overview 深色垫层由 niri 合成器绘制、压在 layer-shell 壁纸之上，且不吃 `background-color`。
-      要复用桌面壁纸需要另想办法（如让壁纸元素在 overview 时上浮/换层级），待定。
+10. **overview 背景与桌面不一致（需求，2026-09-03 已修）**：niri 总览（`Mod+O` / `Mod+Tab` 触发
+    `toggle-overview`）的背景原本是**不透明深色**，与桌面壁纸不一致。
+    - **根因**：overview 开启时 `niri msg layers` 只有 `omarchy-background` + `omarchy-bar`，没有其它
+      填充层；把 `config.kdl` 的 `layout { background-color "#ff00ff" }` 设成品红并 `load-config-file`
+      后 overview 背景仍是深色——说明深色垫层由 niri 合成器自行绘制、压在 layer-shell 壁纸之上，
+      **不吃 `background-color`**，无法靠配置复用桌面壁纸。
+    - **修复**：改由移植自有插件在 overview 期间自绘背景 —— `shell/plugins/blurwallpaper/`
+      （id `omarchy.blurwallpaper`，kind `service`）渲染强模糊壁纸，开关由 `Niri.overviewOpen`
+      （轮询 `niri msg -j overview-state` 的 `is_open`）驱动。
 11. **电池面板 POWER PROFILE 区为空（2026-08-25 已修）**：系统电源后端是 **TLP**（`tlp` + `tlp-pd`
     `1.10.2`），**不是** power-profiles-daemon —— `powerprofilesctl` 不存在，而 Omarchy 的
     `omarchy-powerprofiles-list`/`-set` 硬依赖它，故电池面板的 POWER PROFILE 区读不到任何 profile（空）。
@@ -491,57 +491,97 @@ quickshell：`pkill -x quickshell && niri msg action spawn -- quickshell -n -p $
 
 
 
-### 8.9 上游合并实录（2026-09-18，`43bfe9b` → `d174d4a`）
+### 8.9 上游合并基线（`43bfe9b` → `d174d4a`，2026-09-18）
 
-首次把上游 342 个提交并进在线安装，并把迁移历史一次性归零。**做法**：先 FF，再重放移植，最后按类
-处置迁移——**不跑整包 `omarchy update`**（那会换 bootloader、退役 systemd-networkd、动
-`/etc/sudoers.d`，违反 §1 约束）。
+首次把上游 342 个提交并入在线安装。**不跑整包 `omarchy update`**：它携带引导器、网络栈与 `/etc` 级
+改动（清单见 §8.9.3），违反 §1。采用的流程是「先 FF、再重放移植、最后按类处置迁移」。
 
-**代码合并**
-- `git fetch --depth=400 origin quattro`（`--depth=50` 会挂，用 400+ 长超时）；`origin/quattro` `9d02bb0..d174d4a`。
-- 基线是上游直系祖先 → `git merge --ff-only` 成功，无需真合并。
-- 只有 **2 个文件真冲突**：`bin/omarchy-theme-set`、`default/omarchy/omarchy-menu.jsonc`；
-  Bar/Osd/Menu/Background/KeyboardPanel/Workspaces/AppLibrary/qmldir/launch-floating-terminal **全部自动合并**。
-- `omarchy-theme-set` 取上游新的三分支快照结构，但把移植的真正理由换位置保留：上游的
-  `BACKGROUND_TRANSITION_SNAPSHOTS` 只对**视频**壁纸关快照，修不了 niri 的"快照被删而 QML 仍异步加载
-  → 黑桌面"竞态。移植改为各分支回退到持久文件（`${OLD_BACKGROUND_SNAPSHOT:-$old_background}`），
-  并在 `choose_staged_theme_background` 调用处加 `XDG_CURRENT_DESKTOP != niri` 守卫。
-- 新增未跟踪文件（`Niri.qml`、`blurwallpaper/`）与上游新增路径**不冲突**，合并后原样存活。
+**8.9.1 合并与覆盖层重建**
 
-**迁移：121 个，一次性归零**
-- 因为在线安装是手工部署的，`~/.local/state/omarchy/migrations/` **原本是空的**——`omarchy-migrate`
-  会把 121 条历史全部重放。做法：先把 121 条**全部打上已应用标记**，再只摘下批准的那批执行。
-- **实际跑 33 条**（32 条纯配置类 + `1789310715` 装 Cloudflare CLI `cf`），30 条一次成功。
-- **刻意跳过**（保留已应用标记，不重放）：
-  - 44 条要 root / 改系统底层的：`1789325478` 装 `linux-omarchy` 并让它做 Limine 首启动项（会顶掉
-    systemd-boot）、`1786482992`/`1784917531`/`1786605598`/`1784476564` 重建 initramfs、
-    `1782002156` 退役 systemd-networkd 换 NetworkManager、`1788124236` 关 sshd 密码认证、
-    `1788025225` 删 `/etc/sudoers.d` 与 `/etc/systemd/system` 下的退役文件、
-    `1787589206`/`1784672586`/`1787399318`/`1786952219` 要求 Omarchy 自家签名仓库（本机没配）。
-  - 12 条会装额外 CLI 的（Basecamp 系、各编码 agent）——用户明确"只要 cloudflare，其他不用"。
-  - `1786549201` 交互式询问默认 agent，非交互会挂。
-  - `1785608166` 修 `omarchy-sleep-lock.service` 单元——本机从来没有该单元（那是 Omarchy 的 systemd
-    集成，niri 侧没用到），永远不可能成功，标记跳过。
-- **手工执行方式**：不跑整包 `omarchy-migrate`（一条失败会中止整批）。逐条
-  `bash -euo pipefail migrations/N.sh`，成功才 `touch` 标记，失败单独汇报。
-- **特权通道**：`pkexec` 免密可用；`sudo -n` 不行（要密码）。`omarchy-pkg-add` 走 `sudo pacman`，
-  非交互必失败，所以迁移里装包的一律走不通。
+```bash
+cd ~/.local/share/omarchy
+git fetch --depth=400 origin quattro        # --depth=50 会挂起，须给长超时
+git stash push -u -m "niri-port pre-merge"
+git merge --ff-only FETCH_HEAD              # 基线是上游直系祖先，无需真合并
+git stash pop                               # 冲突集中在这一步
 
-**新增依赖（pkexec 装的系统包）**：`vi`（+`ex-vi-compat`）、`qt6-multimedia` + `qt6-multimedia-ffmpeg`
-（视频壁纸）、`mise`（取 Arch `extra`——Omarchy 用的是自家仓库的 `mise-bin`，本机没配该仓库）。
+# 解决冲突后，把工作区改动固化成新的覆盖层
+git add <已解决的冲突文件>                    # 必须归位 unmerged，否则 git diff 导出不全
+git diff HEAD > ~/.config/omarchy/niri-port/niri.patch
+git reset                                   # 还原为「未暂存」，保持 pull 前置状态
 
-**迁移带来的配置变化**
-- `~/.config/omarchy/shell.json` 的 bar 布局被上游默认更新：center 变成
-  `indicators, clock, keyboard-layout, weather, system-update`（指示器挪到时钟左边、新增
-  keyboard-layout），right 新增 `agents`。**用户接受这个上游默认布局，会自行重新定制**，所以不留
-  兼容层去保旧布局。用户随后自行删除了两个部件（`local.opencode-go` usage 部件、
-  `io.github.alexinslc.calendar-agenda`）；保留的第三方部件是 `charlieras262.omablur`、`ryuhzk.ime`。
-  `shell.json` 是 Layer-1（仓库外），这些增删抗 `git pull`；`~/.config/omarchy/niri-port/backups/20260918-pre-merge/`
-  只是当日快照，**不是要复原的目标状态**。
-- 两条"重生成 mise wrapper"迁移（`1784909971`、`1787573629`）把 `~/.local/bin` 里**原本就存在**的
-  约 20 个 wrapper 重写成新模板。**没有新装任何 CLI**——那批 wrapper 是 Omarchy `install/user/mise.sh`
-  的默认集（codex/claude/crush/agy/gh/omp/hermes…），此前因为没装 mise 一直是死壳；现在装了 mise，
-  它们会在**第一次被调用时**才去下载（惰性，不会自动装）。
+# 必做自检：patch 必须精确等于工作区改动，否则幂等判断失真
+git apply --reverse --check ~/.config/omarchy/niri-port/niri.patch
+```
+
+未跟踪的移植文件（`shell/Commons/Niri.qml`、`shell/plugins/blurwallpaper/`）与上游新增路径不冲突，
+合并后原样存活；但它们**不在 `git diff` 里**，因此 `omarchy-niri-repatch` 必须单独 `cp`（见 §8.7）。
+
+**8.9.2 冲突与处置**
+
+| 文件 | 上游改动 | 移植处置 | 理由 |
+|---|---|---|---|
+| `bin/omarchy-theme-set` | 背景切换改为三分支快照结构，新增 `BACKGROUND_TRANSITION_SNAPSHOTS` | 采用上游结构；各分支回退到持久文件 `${OLD_BACKGROUND_SNAPSHOT:-$old_background}`，并在 `choose_staged_theme_background` 调用处加 `XDG_CURRENT_DESKTOP != niri` 守卫 | 上游开关只对**视频**壁纸关快照，修不了 niri 竞态：快照约 3s 后被删除，而 QML 仍异步加载该路径 → 黑桌面 |
+| `default/omarchy/omarchy-menu.jsonc` | 新增 `setup.security.sudoless-docker` 等条目 | 保留上游新条目；重新应用 niri 侧改动（`setup.config.hyprland` → 指向 `config.kdl`、标签 "Niri"；`hyprsunset` 保持 `"when":"false"`） | 菜单是上游与移植共同维护面，逐项合并而非整文件取舍 |
+
+其余 9 个上游同样改过的移植文件（`Bar.qml`、`Osd.qml`、`Menu.qml`、`Background.qml`、
+`KeyboardPanel.qml`、`Workspaces.qml`、`AppLibrary.qml`、`Commons/qmldir`、
+`omarchy-launch-floating-terminal-with-presentation`）**自动合并**，无需人工介入。
+
+**8.9.3 迁移分类处置**
+
+手工部署的安装没有迁移历史（`~/.local/state/omarchy/migrations/` 为 0/121），直接 `omarchy-migrate`
+会重放全部历史。处置办法：**先把 121 条全部标记为已应用，再只摘下要执行的**。
+
+```bash
+cd ~/.local/share/omarchy
+export OMARCHY_PATH=$PWD XDG_CURRENT_DESKTOP=niri
+STATE=$HOME/.local/state/omarchy/migrations
+
+for f in migrations/*.sh; do touch "$STATE/$(basename "$f")"; done   # 全部标记
+while read -r m; do rm -f "$STATE/$m"; done < run-list.txt            # 只摘出批准项
+
+# 逐条执行：单条失败不影响其余（omarchy-migrate 一条失败会中止整批）
+while read -r m; do
+  if bash -euo pipefail "migrations/$m" >"/tmp/miglogs/$m.log" 2>&1; then
+    touch "$STATE/$m"; echo "OK   $m"
+  else
+    echo "FAIL $m"; tail -1 "/tmp/miglogs/$m.log"
+  fi
+done < run-list.txt
+```
+
+| 类别 | 条数 | 处置 | 理由 |
+|---|---|---|---|
+| 纯配置类（只改 `$HOME`） | 32 | **执行** | 与系统底层无关 |
+| 安装类：Cloudflare CLI `cf` | 1 | **执行** | 用户指定只装 `cf` |
+| 需 root / 改系统底层 | 44 | 保留标记，**不执行** | 会顶掉 systemd-boot（`1789325478` 装 `linux-omarchy` 并设为 Limine 首启动项）、重建 initramfs（`1786482992`/`1784917531`/`1786605598`/`1784476564`）、退役 systemd-networkd（`1782002156`）、关 sshd 密码认证（`1788124236`）、删 `/etc/sudoers.d` 与 `/etc/systemd/system` 下退役文件（`1788025225`）、要求本机未配置的 Omarchy 签名仓库（`1787589206`/`1784672586`/`1787399318`/`1786952219`）——均违反 §1 |
+| 安装额外 CLI | 12 | 保留标记，**不执行** | 用户只要 `cf`；Basecamp 系与各编码 agent 不用 |
+| 交互式提问 | 1（`1786549201`） | 保留标记，**不执行** | 非交互环境会挂起 |
+| 本机不适用 | 1（`1785608166`） | 保留标记，**不执行** | 修 `omarchy-sleep-lock.service` 单元；本机无此单元（Omarchy 的 systemd 集成，niri 侧未使用），永远不可能成功 |
+
+执行结果：**33 条实跑，30 条一次通过**；2 条因缺 `mise` 失败（`1787215483`、`1789095456`），装上
+`mise` 后重跑通过。最终 `omarchy-migrate --pending` 为空，后续 `omarchy update` 不会重放历史。
+
+**特权通道**：`pkexec` 免密可用；`sudo -n` 不可用（需密码）。`omarchy-pkg-add` 经 `sudo pacman`，
+非交互必失败——**需要装包的迁移在本机一律走不通**，只能改用 `pkexec pacman -S`。
+
+**8.9.4 新增系统依赖**
+
+| 包 | 用途 |
+|---|---|
+| `vi`（+ `ex-vi-compat`） | 上游 `install/omarchy-base.packages` 显式列出的基础包；`omarchy-menu-tmux-keybindings` 等会调用 `vi` |
+| `qt6-multimedia` + `qt6-multimedia-ffmpeg` | 视频壁纸：`shell/Ui/BackgroundMedia.qml`、`BackgroundVideo.qml` |
+| `mise` | `~/.local/bin` 下 agent wrapper 的执行后端。上游从**自家仓库**装 `mise-bin`；本机未配置该仓库，改取 Arch `extra` |
+
+**8.9.5 合并后配置状态**
+
+| 项 | 状态 |
+|---|---|
+| `~/.config/omarchy/shell.json` bar 布局 | 被上游默认覆盖：center = `indicators, clock, keyboard-layout, weather, system-update`；right 新增 `agents`。**用户接受该默认并自行重新定制**，故不留兼容层 |
+| 第三方 bar 部件 | `charlieras262.omablur`、`ryuhzk.ime` 保留；`local.opencode-go`、`io.github.alexinslc.calendar-agenda` 由**用户自行删除**，勿从备份恢复 |
+| `~/.local/bin` agent wrapper（约 20 个） | 迁移 `1784909971`、`1787573629` 把**原本已存在**的 wrapper 重写为新模板；**未新装任何 CLI**。它们是 `install/user/mise.sh` 的默认集，装上 `mise` 后**首次被调用时**才下载（惰性） |
+| 备份 `~/.config/omarchy/niri-port/backups/20260918-pre-merge/` | 当日快照（含 `~/.config/{omarchy,niri,tmux,kitty,foot}` 打包），**仅作回滚参考，不是要复原的目标状态** |
 
 ---
 
@@ -567,12 +607,12 @@ quickshell：`pkill -x quickshell && niri msg action spawn -- quickshell -n -p $
 - [x] **logout/reboot/shutdown** 统一标准化：`~/bin/omarchy-niri-system` 单一入口（logout→niri quit、reboot/shutdown→logind D-Bus `Manager.Reboot/PowerOff`；`loginctl` 无该 verb 是本 bug，已改；`pkcheck` 免密 exit 0 验证）。
 - [x] **电源 profile**：`~/bin/omarchy-powerprofiles-list` 返回 3 个 profile、active 标记正确；set 经 TLP D-Bus 生效（异步应用，恢复为 power-saver）。
 - [ ] 运行实测：注销、关机、重启（会结束会话/重启，交给用户）。
-- [ ] **overview 壁纸与桌面统一**。
+- [x] **overview 背景统一**：`shell/plugins/blurwallpaper/` + `Niri.overviewOpen` 驱动（见 §3.1、§6、§8 第 10 条）。
 - [x] **菜单 override label+icon 修复（2026-08-27）**：`extensions/omarchy-menu.jsonc` 的 3 个 setup 项补全 label+icon，合并后显示 "Monitors"/"Keybindings"/"Input" 且图标正常（不再显示 raw id `setup.monitors` 之类）；根因是 `normalizeItem` 的 `label: value.label || id` 把 action-only override 的 label 退化成 id 并覆盖默认项。
 - [x] **视觉磨砂（frosted Quickshell）**：`Menu.qml` + `KeyboardPanel.qml` 挂 `BackgroundEffect.blurRegion`（只磨砂卡片，不全屏）；`effects.kdl` 给 `omarchy-keyboard-panel` 设 `xray false`（实时窗口毛玻璃）；`[popups]` alpha 0.8→0.65。面板开/关屏幕底部清晰度 on/off≈0.995 → 无全屏霜化。覆盖层重放幂等。
-- [x] **上游合并（2026-09-18）**：FF 到 `d174d4a`，2 个冲突按"上游优先 + 最小 niri 补丁"解决；覆盖层重建为 17 文件 / 30 hunk，`--reverse --check` 通过、repatch 幂等；shell 在新代码上重启无报错，bar/背景图层正常（详见 §8.9）。
-- [x] **迁移归零**：121 条全部标记，实跑 33 条（30 成功）；跳过项与理由见 §8.9；`omarchy-migrate --pending` 现为空。
-- [x] **`cf`（Cloudflare CLI）可用**：装 `mise` 后 `cf --version` → `cf · v0.10.0`。
+- [x] **上游合并（2026-09-18）**：FF 到 `d174d4a`；2 个冲突已解；覆盖层重建为 17 文件 / 30 hunk，`--reverse --check` 通过、repatch 幂等；shell 在新代码上重启无报错、bar/背景图层正常（见 §8.9）。
+- [x] **迁移归零**：121 条全部标记，实跑 33 条（30 通过）；`omarchy-migrate --pending` 为空（见 §8.9.3）。
+- [x] **`cf`（Cloudflare CLI）**：`cf --version` → `v0.10.0`（依赖 `mise`）。
 
 ---
 
