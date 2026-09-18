@@ -58,7 +58,25 @@ else
   warn "omarchy-niri-repatch not in ~/bin; skipping overlay apply (will be installed next run)."
 fi
 
-# ---- 5. niri compositor wiring: prepare snippet + print manual step ----
+# ---- 5. lock screen PAM authentication (required; machine-wide) ----
+# Without /etc/pam.d/omarchy-lock-password the shell REFUSES to lock: the lock
+# IPC answers "missing-pam" and nothing happens (a session locked with no working
+# PAM has no way back). That file comes from the Omarchy installer
+# (install/config/lockscreen-pam.sh -> omarchy-apply-lock), which a hand-rolled
+# niri port never runs. It is machine-wide, so one run covers every account.
+if [[ -f /etc/pam.d/omarchy-lock-password ]]; then
+  log "Lock screen PAM service present (/etc/pam.d/omarchy-lock-password)"
+else
+  warn "Lock screen PAM service is MISSING - locking the screen will not work"
+  warn "  (check: omarchy-shell lock status -> \"passwordPam\": false). Run once, as root:"
+  warn "    pkexec $OMARCHY_PATH/bin/omarchy-apply-lock"
+  warn "    # or: sudo $OMARCHY_PATH/bin/omarchy-apply-lock"
+  warn "  Aside: upstream's fingerprint check greps 'fprintd-list' for 'finger',"
+  warn "  which also matches 'no fingers enrolled', so it may create a useless"
+  warn "  /etc/pam.d/omarchy-lock-fingerprint. Check 'fprintd-list \$USER' and remove it."
+fi
+
+# ---- 6. niri compositor wiring: prepare snippet + print manual step ----
 log "Preparing niri composeor snippet at ~/.config/niri/omarchy.kdl"
 mkdir -p "$HOME_DIR/.config/niri"
 sed "s|__HOME__|$HOME_DIR|g" "$REPO_DIR/niri-config/omarchy.kdl.template" > "$HOME_DIR/.config/niri/omarchy.kdl"
@@ -72,12 +90,13 @@ else
   warn "No existing niri config.kdl; install the generated ~/.config/niri/omarchy.kdl as a starting point."
 fi
 
-# ---- 6. per-machine reminders ----
+# ---- 7. per-machine reminders ----
 warn ""
 warn "Per-machine checks (cannot be auto-detected reliably):"
 warn "  - monitor output name: run 'niri msg outputs' and adjust any hardcoded eDP-1."
 warn "  - backlight device:    check /sys/class/backlight/* (e.g. intel_backlight) + udev/video group rules."
 warn "  - power backend:       power-profiles-daemon (powerprofilesctl) or TLP (tlp + tlp-pd)."
+warn "  - lock screen auth:    'omarchy-shell lock status' must report \"passwordPam\": true (step 5)."
 warn "  - system deps:         see README.md 'Requirements / dependencies' (jq, qt6-imageformats, inotify-tools, etc.)."
 warn ""
 

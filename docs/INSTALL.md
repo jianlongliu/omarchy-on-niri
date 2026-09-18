@@ -164,7 +164,26 @@ node=$(echo /sys/class/backlight/*/brightness); sudo chgrp video "$node"; sudo c
 
 ---
 
-## 8. Per-machine checks (must verify by hand)
+## 8. Lock screen authentication (required, needs root)
+
+The shell **refuses to lock** when `/etc/pam.d/omarchy-lock-password` is missing: the lock IPC answers
+`missing-pam` and the screen stays unlocked. That is deliberate — a locked session with no working PAM has
+no way back. The file comes from the **Omarchy installer** (`install/config/lockscreen-pam.sh` →
+`omarchy-apply-lock`), which this manual install path skips, so run it yourself once:
+
+```sh
+pkexec ~/.local/share/omarchy/bin/omarchy-apply-lock     # or: sudo omarchy-apply-lock
+omarchy-shell lock status | grep passwordPam             # want: "passwordPam":true
+```
+
+It is machine-wide, so one run covers every account on the box. Upstream's fingerprint probe greps
+`fprintd-list` output for `finger`, which also matches "no fingers enrolled" — so it may write a useless
+`/etc/pam.d/omarchy-lock-fingerprint`. If `fprintd-list "$USER"` reports no enrolled finger, `sudo rm` that
+file. (Port notes §8.18 has the full analysis, including why dms-greeter is not involved.)
+
+---
+
+## 9. Per-machine checks (must verify by hand)
 
 These can't be auto-detected and will differ per box:
 
@@ -174,10 +193,12 @@ These can't be auto-detected and will differ per box:
 3. **Power backend** — power-profiles-daemon (`powerprofilesctl`) vs TLP (`tlp + tlp-pd`); this changes what
    `omarchy-powerprofiles-*` reports and what the Power menu shows.
 4. **niri version** — tested on 26.04; keybind/overview behavior can differ across releases.
+5. **Lock screen auth** — `omarchy-shell lock status` must report `"passwordPam":true` (step 8), else `Mod+Ctrl+L`
+   does nothing at all.
 
 ---
 
-## 9. Start and verify
+## 10. Start and verify
 
 Log out and back in — `spawn-sh-at-startup` starts the Quickshell shell. Then check:
 

@@ -409,6 +409,8 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
    ```sh
    git clone -b quattro --depth 1 https://github.com/basecamp/omarchy ~/.local/share/omarchy
    ```
+1b. **锁屏认证（必做，安装器步骤）**：`pkexec ~/.local/share/omarchy/bin/omarchy-apply-lock`
+   —— 手工部署漏掉它会让锁屏**直接拒绝执行**（`lock()` 返回 `missing-pam`），详见 §8.18。
 2. 写入 `~/bin/hyprctl` 垫片（见 §4），`chmod +x`。
 3. 生成 `~/.local/share/omarchy/shell/Commons/Niri.qml` 并追加到 `qmldir`。
 4. patch `Bar.qml` / `Workspaces.qml`（见 §3.2），并把自研插件 `shell/plugins/blurwallpaper/` 拷进去。
@@ -1272,6 +1274,65 @@ A/B 实测：摘掉后 bar 只有逻辑 x 706..742（宽 36）这一块像素变
 若要绑快捷键，`Mod+Space`（Omarchy 菜单）与 `Mod+Alt+Space`（Apps 菜单）已占用（§5.3），需另挑。
 fcitx5 自身由 `/etc/xdg/autostart/org.fcitx.Fcitx5.desktop` 在登录时拉起（非 systemd 用户单元）。
 
+### 8.18 锁屏"不能锁"：PAM 门禁（手工部署漏了安装器步骤）（2026-09-19）
+
+**症状**：`Mod+Ctrl+L`（以及菜单里的锁屏）毫无反应——不黑屏、不出锁屏界面、没有报错弹窗。
+
+**依赖链（实测）**：锁屏要能工作，系统里必须存在 **`/etc/pam.d/omarchy-lock-password`**。
+stock 的 `shell/plugins/lock/Service.qml` 用 `FileView { path: "/etc/pam.d/omarchy-lock-password";
+onLoadFailed: passwordPamConfigured = false }` 探测它，然后：
+
+- `beginLock()` 首行 `if (!passwordPamConfigured) { logEvent("lock-denied: missing-pam"); return false }`；
+- IPC `function lock(): string { if (!root.passwordPamConfigured) return "missing-pam" … }`。
+
+即**故意拒绝锁屏**，不是"静默失败"：会话锁走 `ext-session-lock-v1`，没有 PAM 就没有任何解锁路径，
+锁上等于把自己永久关在外面。第三方锁屏插件（`io.github.sirjul1337.lock-explorer`，manifest
+`clonedFrom: omarchy.lock` 的替换关系）是**同款门禁**（其 `Service.qml` 2711/2712 行探测、`lock()` 同判据），
+所以"换个锁屏实现"治不了，stock 一样锁不了。
+
+**根因**：该文件由 `bin/omarchy-apply-lock` 写入，而它的调用方只有 Omarchy **安装器**
+（`install/config/lockscreen-pam.sh`）与 `omarchy-upgrade-to-quattro`。本移植是手工部署
+config/bin/shell（§7 开头的"刻意跳过 `install/`"），这两条都没跑过 → 文件从未生成。
+**与 niri 无关、与第三方插件无关**：`omarchy-shell lock status` 当时是 `"passwordPam": false`。
+
+**修法**（一次性，需 root；`/etc/` 不受 `omarchy update` 影响）：
+
+```
+pkexec ~/.local/share/omarchy/bin/omarchy-apply-lock     # 或 sudo omarchy-apply-lock 后重启壳层
+```
+
+写入的是上游原样的 PAM 栈：`pam_faillock(preauth, deny=10 unlock_time=120)` + `pam_systemd_home` +
+`pam_unix(try_first_pass nullok)` + `pam_faillock(authfail/authsucc)` + `pam_env` +
+`account include system-local-login`（依赖的 `pam_*` 模块系统自带，已逐个核对存在）。
+**验证判据**：`omarchy-shell lock status` 的 `"passwordPam"` 由 `false` → `true`，随后按 `Mod+Ctrl+L` 真人实测。
+
+**顺带上游 bug（`omarchy-apply-lock` 的指纹误判）**：脚本用
+`fprintd-list "$user" | grep -qi finger` 判断"是否注册过指纹"，而**未注册**时 fprintd-list 的输出是
+`User <name> has no finger**s** enrolled for …` —— 同样命中该 `grep`。于是没指纹也会生成
+`/etc/pam.d/omarchy-lock-fingerprint`，锁屏会去敲一条永远不成功的指纹路径。本机已 `pkexec rm -f` 删掉
+（`lock status` 的 `fingerprint`/`fingerprintConfigured` 均为 `false`）；判据应改成排除 `no … enrolled`
+或解析 fprintd 的条目/退出码。
+
+**与 dms-greeter 无关（同时排除）**——两者用**不同的 PAM 服务**，物理上不重叠：
+
+| | 用途 | PAM 服务 | 谁写 |
+|---|---|---|---|
+| dms-greeter | 登录 | `/etc/pam.d/greetd`（howdy `pam_python.so` + `/usr/local/bin/ir-light` + `system-local-login`） | dms-greeter 自带的 PAM sync；其二进制字符串只提 `/etc/pam.d/greetd`，且"externally managed → skipping DMS greeter PAM sync" |
+| 锁屏 | 会话锁 | `/etc/pam.d/omarchy-lock-password` | `omarchy-apply-lock`（安装器/升级） |
+
+- greeter 跑**自己的 niri 实例与配置**（`/etc/greetd/niri/config.kdl`：`DMS_RUN_GREETER=1`、黑底、
+  **没有** `spawn-at-startup quickshell`），不加载我们的壳层；`/etc/greetd/config.toml` 是 `jianlongliu`
+  的 0600 文件（读不到，也没碰）。
+- 时序也对不上：`passwordPam:false` 在**发起锁屏之前**就成立，装插件前即如此。
+
+**迁移/重装注意**：同一台机器上**换账户不需要重跑**（`/etc/pam.d/<服务名>` 是全机共享的，
+`pam_unix` 认的是锁屏界面里输入的用户名）；但**换机器或重装必须重跑**——它是安装器步骤，
+`install.sh` 现在会检测缺失并打印命令（见 §7 步骤 1b）。
+
+**旁证：`niri --session` 那堆进程不是第二个会话**。`ps` 里成排的 `niri --session`（comm
+`Command Spawner`、0 CPU、1 个 pipe fd、子进程 `<defunct>`）是 niri 自己 `spawn` 命令时的派生辅助进程，
+与 greeter、与我们的移植都无关。
+
 ---
 
 ## 9. 验证清单
@@ -1291,7 +1352,11 @@ fcitx5 自身由 `/etc/xdg/autostart/org.fcitx.Fcitx5.desktop` 在登录时拉�
 - [x] 更新覆盖层：`omarchy-niri-repatch` 幂等（已应用判 no-op；stash 还原后能干净重放）。
 - [x] `theme-set`/`post-update` 钩子触发正常、非 niri 静默跳过。
 - [ ] 截图/剪贴板 CLI 全链路实测（slurp/grim 交互，需桌面环境）。
-- [ ] Omarchy 锁屏（`Mod+Ctrl+L`）在 niri 上实测。
+- [x] **锁屏 PAM 门禁（2026-09-19）**：定位到"锁不了"的真因是手工部署漏了安装器步骤 →
+  `/etc/pam.d/omarchy-lock-password` 不存在，`lock()` 直接返回 `missing-pam`（stock 与第三方插件同款门禁）；
+  `pkexec omarchy-apply-lock` 补上后 `lock status` 的 `passwordPam` = `true`；顺带删掉被上游 `grep -qi finger`
+  误判生成的 `omarchy-lock-fingerprint`，并排除 dms-greeter（它只写 `/etc/pam.d/greetd`）（见 §8.18）。
+- [ ] Omarchy 锁屏（`Mod+Ctrl+L`）在 niri 上**真人**实测：锁上 → 输密码解锁（PAM 文件已就位，未按过键）。
 - [ ] 真实跑一次 `omarchy update`，确认上游变更时覆盖层自动重放或明确报冲突。**2026-09-19 部分验证**：手动走了等价的 `git merge --ff-only` 路径（§8.13，上游只改到我们 patch 内文件的"其他区域"），重放幂等成立；官方脚本本身仍没跑过（它要 sudo + snapper 快照 + 包升级）。
 - [x] **logout/reboot/shutdown** 统一标准化：`~/bin/omarchy-niri-system` 单一入口（logout→niri quit、reboot/shutdown→logind D-Bus `Manager.Reboot/PowerOff`；`loginctl` 无该 verb 是本 bug，已改；`pkcheck` 免密 exit 0 验证）。
 - [x] **电源 profile**：`~/bin/omarchy-powerprofiles-list` 返回 3 个 profile、active 标记正确；set 经 TLP D-Bus 生效（异步应用，恢复为 power-saver）。

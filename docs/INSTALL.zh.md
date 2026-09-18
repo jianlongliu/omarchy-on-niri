@@ -154,7 +154,26 @@ node=$(echo /sys/class/backlight/*/brightness); sudo chgrp video "$node"; sudo c
 
 ---
 
-## 8. 每机检查（必须手动核对）
+## 8. 锁屏认证（必做，需要 root）
+
+`/etc/pam.d/omarchy-lock-password` 不存在时，外壳**会拒绝锁屏**：锁屏 IPC 直接返回 `missing-pam`，屏幕
+根本不会锁。这是刻意的设计——会话锁一旦锁上而 PAM 又不可用，就没有任何回退路径。该文件由 **Omarchy
+安装器**写入（`install/config/lockscreen-pam.sh` → `omarchy-apply-lock`），而本手动安装路径跳过了安装器，
+所以要自己跑一次：
+
+```sh
+pkexec ~/.local/share/omarchy/bin/omarchy-apply-lock     # 或者：sudo omarchy-apply-lock
+omarchy-shell lock status | grep passwordPam             # 期望 "passwordPam":true
+```
+
+它是**全机共享**的，一台机器跑一次就覆盖所有账户。另外上游探测指纹时用 `grep` 在 `fprintd-list` 输出里
+找 `finger`，而"未注册"时的输出 `no finger**s** enrolled` 同样命中，于是可能写出一条无用的
+`/etc/pam.d/omarchy-lock-fingerprint`；若 `fprintd-list "$USER"` 显示没有注册指纹，就 `sudo rm` 掉它。
+（完整分析——含"为什么与 dms-greeter 无关"——见移植笔记 §8.18。）
+
+---
+
+## 9. 每机检查（必须手动核对）
 
 这些无法自动检测，每台机器都不同：
 
@@ -162,10 +181,11 @@ node=$(echo /sys/class/backlight/*/brightness); sudo chgrp video "$node"; sudo c
 2. **背光设备** — 移植机上是 `intel_backlight`；对照你 `/sys/class/backlight/*` 里的确认。
 3. **电源后端** — power-profiles-daemon（`powerprofilesctl`）还是 TLP（`tlp + tlp-pd`）；这会改变 `omarchy-powerprofiles-*` 报告的内容和 Power 菜单显示什么。
 4. **niri 版本** — 在 26.04 上测试过；不同版本的键位/总览行为可能有差异。
+5. **锁屏认证** — `omarchy-shell lock status` 必须报 `"passwordPam":true`（第 8 步），否则 `Mod+Ctrl+L` 完全没反应。
 
 ---
 
-## 9. 启动并验证
+## 10. 启动并验证
 
 注销再登录——`spawn-sh-at-startup` 会拉起 QuickShell 外壳。然后检查：
 

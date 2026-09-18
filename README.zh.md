@@ -113,6 +113,9 @@ cd omarchy-on-niri
 2. **背光设备** — 移植机上为 `intel_backlight`；查 `/sys/class/backlight/*` 确认你的。
 3. **电源后端** — TLP 还是 power-profiles-daemon，会改变 `omarchy-powerprofiles-*` 报告的内容。
 4. **niri 版本** — 在 26.04 上测试过；不同版本的键位/总览行为可能有差异。
+5. **锁屏认证** — `/etc/pam.d/omarchy-lock-password` 来自 Omarchy 安装器，而本手动路径跳过了安装器。
+   缺它时锁屏**完全锁不上**（`omarchy-shell lock status` → `"passwordPam":false`）；跑一次
+   `pkexec ~/.local/share/omarchy/bin/omarchy-apply-lock`（INSTALL 第 8 步）。
 
 总览的垫底无需调整：那一层由 niri 自己绘制，移植自带的 `blurwallpaper` 插件会在总览打开时铺一张强模糊壁纸（见移植笔记）。
 
