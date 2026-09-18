@@ -6,22 +6,27 @@ import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
 
-// Blurred wallpaper shown ONLY while the niri overview is open.
+// Blurred wallpaper painted into the niri overview backdrop.
 //
 // niri renders the overview on top of the compositor "backdrop". By default
 // that backdrop is a flat dark color; this layer opts into the backdrop via
 // the `place-within-backdrop` layer-rule in ~/.config/niri/effects.kdl, so it
 // paints the strongly blurred wallpaper behind the window thumbnails instead.
 //
-// While the overview is closed the surface is unmapped, so the normal desktop
-// keeps the crisp wallpaper from Background.qml untouched -- and it can never be
-// tinted by this layer. Keeping it mapped instead was measured (2026-09-19) to
-// save only ~40 ms of opening latency while costing niri ~2% of a core, so the
-// surface still comes and goes with the overview; what is cached is the decode
-// (`cache: true` below), which is the expensive part.
+// The surface stays MAPPED at all times (`visible: true` below) and niri
+// composites it only inside the overview -- measured 2026-09-19: with the layer
+// mapped, the closed desktop is bit-identical (0.00 mean pixel diff). Unmapping
+// it per toggle instead made the wallpaper animation run backwards against the
+// window animation: on open the backdrop arrived 60-220 ms late as one-frame
+// +48 flash, and on close it vanished within ~25 ms while niri kept drawing its
+// own dark backdrop around the expanding thumbnail (a dark ring). Always-mapped
+// hands the timing back to niri, which fades our backdrop in and out with its
+// own animation: open ramps +4.4/+6.7/.../127, close ramps 127/125/.../110,
+// no jumps either way. Cost: ~2% of one niri core while closed, no measurable
+// difference in battery draw.
 //
 // The wallpaper link is re-resolved whenever the overview opens, so a theme
-// switch since the previous overview is picked up.
+// switch since the previous overview is picked up (a no-op if unchanged).
 Item {
   id: root
 
@@ -69,7 +74,10 @@ Item {
       anchors { top: true; bottom: true; left: true; right: true }
       color: "transparent"
 
-      visible: Niri.overviewOpen
+      // Always mapped: niri composites this surface only inside the overview,
+      // so the desktop is untouched while the timing stays niri's own (see the
+      // header comment).
+      visible: true
 
       // Keep render updates enabled: a parked surface can lose its committed
       // buffer (same lesson as Background.qml), which would show a black

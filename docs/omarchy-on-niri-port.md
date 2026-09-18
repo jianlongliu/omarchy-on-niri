@@ -61,7 +61,7 @@ hyprctl 调用面有界、可直接映射。
 |---|---|
 | `~/bin/hyprctl` (624 行, +x) | hyprctl 垫片：Omarchy 的 `hyprctl` 调用 → `niri msg`，纯 stdlib，不依赖 jq；`cmd_binds` 支持 `include` 递归展开（config.kdl 模块化后键位仍可见，见 §4） |
 | `~/.local/share/omarchy/shell/Commons/Niri.qml` (186 行) | QuickShell 单例，**订阅 niri 事件流**（`niri msg -j event-stream`），暴露 `workspaces/focusedWorkspace/focusedMonitor` + `overviewOpen`（§6、§8.15） |
-| `~/.local/share/omarchy/shell/plugins/blurwallpaper/` (`BlurWallpaper.qml` + `manifest.json`) | 移植自有 QuickShell 插件（id `omarchy.blurwallpaper`，kind `service`）：overview 期间渲染强模糊壁纸（§8 第 10 条） |
+| `~/.local/share/omarchy/shell/plugins/blurwallpaper/` (`BlurWallpaper.qml` + `manifest.json`) | 移植自有 QuickShell 插件（id `omarchy.blurwallpaper`，kind `service`）：overview 期间渲染强模糊壁纸；图层**常驻映射**、由 niri 只在 overview 内合成（§8 第 10 条、§8.16） |
 | `~/bin/omarchy-niri-apply-theme` (Python, +x) | 把当前 Omarchy theme 的边框色写进 niri 的 `focus-ring`（C 层换色）；**沿 `include` 定位**含 `focus-ring` 的模块、支持渐变取首个色站（§5.6） |
 | `~/bin/materal-update` (Python, +x) | **主题动态取色生成器**：读当前壁纸 → matugen 出 M3 配色 → 映射成 omarchy `colors.toml` → 重套主题（§8.10；仓库副本 `port-bin/materal-update`） |
 | `~/.config/omarchy/themes/tonal-spot/` | 用户级主题（`matugen.toml` + 自生成 `backgrounds/` + 静态 ANSI 16 色），`omarchy theme set Tonal-Spot` 选用（§8.10） |
@@ -388,7 +388,7 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
 - `root.focusedWorkspace` = 当前聚焦 workspace。
 - `root.focusedMonitor` = `{ "name": 聚焦 workspace 的 output }`。
 - `root.overviewOpen`（bool）：由事件流推送，供 overview 模糊壁纸插件
-  （`shell/plugins/blurwallpaper/`）判断何时该显示。
+  （`shell/plugins/blurwallpaper/`）在打开时重解析壁纸软链（图层本身**常驻映射**，见 §8.16）。
 - 写成 `property Process x: Process { id: x; ... }` 形式（匹配 Omarchy Style.qml 惯例），
   并给 StdioCollector 加 `waitForEnd: true`，否则编译报
   "Cannot assign to non-existent default property"。
@@ -530,9 +530,10 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
       后 overview 背景仍是深色——说明深色垫层由 niri 合成器自行绘制、压在 layer-shell 壁纸之上，
       **不吃 `background-color`**，无法靠配置复用桌面壁纸。
     - **修复**：改由移植自有插件在 overview 期间自绘背景 —— `shell/plugins/blurwallpaper/`
-      （id `omarchy.blurwallpaper`，kind `service`）渲染强模糊壁纸，开关由 `Niri.overviewOpen`
-      （原为轮询 `niri msg -j overview-state`，2026-09-19 起改为订阅事件流，见 §8.15）驱动；
-      `effects.kdl` 给该 namespace 配 `place-within-backdrop true`。
+      （id `omarchy.blurwallpaper`，kind `service`）渲染强模糊壁纸；该图层**常驻映射**（`visible: true`），
+      由 niri 只在 overview 内合成，时序因此和窗口动画一致（§8.16）。`effects.kdl` 给该 namespace 配
+      `place-within-backdrop true`；`Niri.overviewOpen`（2026-09-19 起由事件流推送，见 §8.15）现仅用于
+      打开时重解析壁纸软链。
 11. **电池面板 POWER PROFILE 区为空（2026-08-25 已修）**：系统电源后端是 **TLP**（`tlp` + `tlp-pd`
     `1.10.2`），**不是** power-profiles-daemon —— `powerprofilesctl` 不存在，而 Omarchy 的
     `omarchy-powerprofiles-list`/`-set` 硬依赖它，故电池面板的 POWER PROFILE 区读不到任何 profile（空）。
@@ -1164,12 +1165,47 @@ laravel 从 `~/.config/composer/vendor/bin/laravel` 改成 `~/.local/bin/laravel
 | 常驻映射（`visible: true`，用 `Image.opacity` 开关） | 118–138 ms | 0.21% | 11.86% | 13.45 W |
 | 关闭时不映射（`visible: Niri.overviewOpen`） | 152–163 ms | 0.07% | 9.57% | 13.46 W |
 
-结论：常驻映射只快 ~40ms，却让 niri 多烧 ~2% 核，功耗无差别；**采用保守方案**——surface 依旧随 overview
-出现/消失（桌面因此绝不可能被这层碰到），只把解码留下。
+当时的结论是"保守方案"——常驻映射只快 ~40ms，却让 niri 多烧 ~2% 核、功耗无差别，于是让 surface 依旧随
+overview 出现/消失。**该结论已被 §8.16 推翻**：延迟判据只量"亮起来要多久"，量不到"背板与窗口动画的先后
+顺序反了"；改成常驻映射后两者同步，代价仍是 ~2% 核、功耗无差别。
 
 **备注（判据的坑）**：`标准差` 判据会在开启动画期间从 24 渐升到 64，看起来像"模糊 183–543ms 才到位"，
 其实测的是动画结束；用"合成模糊壁纸"做参考图也不可靠（`MultiEffect` 的 blurMax 24–32 + brightness 0.15
 与 PIL 的 `GaussianBlur(24)` 不等价，平均差 53–68 分不开）。最终用**亮度均值**这一单调解即可。
+
+### 8.16 overview 背板与窗口动画错位（"壁纸和窗口是反的"）（2026-09-19）
+
+**症状**（用户肉眼）：打开总览时窗口先动、模糊壁纸后到；关闭时壁纸先消失，缩略图周围露出一圈暗带，
+窗口再慢慢展开。
+
+**测量方法**（这次要看的是"**先后顺序**"，不是"延迟"）：
+
+- 密集采样用 `grim -g "<逻辑坐标>" -t ppm`：**ppm 比 png 快约 10 倍**（~30ms/帧 vs 200–300ms/帧）。
+- overview 打开期间整屏 `grim` 本身要 ~300ms/帧，所以先把 niri 动画整体放慢再研究顺序：
+  `~/.config/niri/config.kdl` 的 `animations { slowdown 12.0 }` + `niri msg action load-config-file`
+  （**不必重启壳层**），测完恢复注释状态 `// slowdown 3.0`。
+- 判据用 **1/4 全屏截图（`grim -s 0.25`）的平均亮度**：桌面 110.4、我们的背板 127.3、niri 原生暗背板压到 ~55。
+- 坑：工作区是动态的，`niri msg action focus-workspace 3` 可能指向根本不存在的号；工作区上有窗口时整屏均值
+  被窗口内容带偏（曾因此整轮复测作废）。改层前后对比务必同场次采集。
+
+| | 打开 | 关闭 |
+| --- | --- | --- |
+| 每次开关都 map/unmap（原实现） | 背板 60–220ms 后才出现，且**一帧内 +48/+49**（硬闪） | 切换后 ~25ms 背板即不见，露出 niri 自己的暗背板 → 缩略图周围一圈暗带；均值 55.4 起步，随缩略图展开 3.3s 才回到 110 |
+| 图层常驻映射（现在） | 平滑 +4.4 / +6.7 / +1.6 / +0.8 … → 127.3 | 平滑 127.3 / 125.0 / 122.9 / 121.3 / 117.2 / 114.2 … → 110.4 |
+
+正速（未放慢）复测同一区域 350×260：打开 `33 → 56 → 82 → 87 → 89 → 91 → 93`（2–3 帧淡入，不再是单帧 +48），
+关闭 `92 → 77 → 45 → 33`（平滑落回桌面，中间不出现暗背板值 43）。
+
+**成因**：图层按开关 map/unmap。niri 只在 overview 期间合成 backdrop，映射那一帧要重新渲染整屏模糊并提交，
+所以打开时晚到、而且是整块出现；关闭时图层立刻消失，而 niri 仍在画自己的暗背板并展开缩略图 —— 于是出现
+"窗口还在动、壁纸已经走了"的反向观感。
+
+**修复**：`plugins/blurwallpaper/BlurWallpaper.qml` 里 `visible: Niri.overviewOpen` → `visible: true`。
+niri 只在 overview 内合成 `place-within-backdrop` 的图层，所以桌面**逐像素不变**（实测平均差 0.00、最大 0），
+时序完全交还给 niri 自己的动画；`Image { cache: true }` 与 `brightness: 0.15` 都不必动。
+
+**代价与副作用**：overview 关闭时 niri 多约 2% 单核（见 §8.15 的 A/B 表，功耗无差异）；`Niri.overviewOpen`
+现在只用于"每次打开时重新解析壁纸软链"，换主题后仍能跟上（路径没变是空操作）。
 
 ---
 
@@ -1196,7 +1232,7 @@ laravel 从 `~/.config/composer/vendor/bin/laravel` 改成 `~/.local/bin/laravel
 - [x] **电源 profile**：`~/bin/omarchy-powerprofiles-list` 返回 3 个 profile、active 标记正确；set 经 TLP D-Bus 生效（异步应用，恢复为 power-saver）。
 - [x] **Ghostty 磨砂模糊**：`window-rules.kdl` 给 `com.mitchellh.ghostty` 加 `background-effect {xray true; blur true}` + `draw-border-with-background false`；ghostty `background-opacity = 0.85`、`background-blur-radius = 0`；焦点环穿透"诡异"问题已解（§5.8）。
 - [ ] 运行实测：注销、关机、重启（会结束会话/重启，交给用户）。
-- [x] **overview 背景统一**：`shell/plugins/blurwallpaper/` + `Niri.overviewOpen` 驱动（见 §3.1、§6、§8 第 10 条）。
+- [x] **overview 背景统一**：`shell/plugins/blurwallpaper/`，图层**常驻映射**、由 niri 只在 overview 内合成（见 §3.1、§6、§8.16）。
 - [x] **菜单 override label+icon 修复（2026-08-27）**：`extensions/omarchy-menu.jsonc` 的 3 个 setup 项补全 label+icon，合并后显示 "Monitors"/"Keybindings"/"Input" 且图标正常（不再显示 raw id `setup.monitors` 之类）；根因是 `normalizeItem` 的 `label: value.label || id` 把 action-only override 的 label 退化成 id 并覆盖默认项。
 - [x] **视觉磨砂（frosted Quickshell）**：`Menu.qml` + `KeyboardPanel.qml` 挂 `BackgroundEffect.blurRegion`（只磨砂卡片，不全屏）；`effects.kdl` 给 `omarchy-keyboard-panel` 设 `xray false`（实时窗口毛玻璃）；`[popups]` alpha 0.8→0.65。面板开/关屏幕底部清晰度 on/off≈0.995 → 无全屏霜化。
 - [x] **浮栏磨砂（2026-09-19）**：`Bar.qml` 保住 `[bar] background-alpha`（不再强制 alpha=1）+ 挂**圆角** `blurRegion`，`effects.kdl` 给 `^omarchy-bar$` 设 `xray false`；实测栏内 `(25,17,20)→(97,95,109)`、四角像素与不磨砂时逐像素相同（无亮晕）、blur 开/关平均差 3.68 且连拍可复现（见 §8.8/§8.11）。
@@ -1216,7 +1252,10 @@ laravel 从 `~/.config/composer/vendor/bin/laravel` 改成 `~/.local/bin/laravel
 - [x] **共享壁纸库（2026-09-19）**：`tonal-spot` 与 `catppuccin` 的 `~/.config/omarchy/backgrounds/<主题>` 均软链到 `/data/Pictures/Wallpapers`；上游同款 `find -L` 合并得 75 张（71 库 + 4 自带）、无重名（见 §8.12）。
 - [x] **overview 延迟（2026-09-19）**：`Niri.qml` 改事件流 + `BlurWallpaper.qml` 开 `cache` 后，模糊壁纸到位时间
   由 552/402/281 ms（轮询抖动）降到 152/153/124 ms 且抖动消失；空载只剩 1 个常驻 `niri msg -j event-stream`（父进程
-  quickshell），无 QML 报错；胶囊工作区仍随切工作区更新（§8.15）。
+  quickshell），无 QML 报错；胶囊工作区仍随切工作区更新（§8.15；该节的"不常驻映射"结论已被 §8.16 修正）。
+- [x] **overview 背板动画同步（2026-09-19）**：`BlurWallpaper.qml` 改 `visible: true` 常驻映射后，背板不再
+  单帧硬闪（+48 → 平滑 +4.4/+6.7/…），关闭时不再出现 niri 暗背板的暗圈；桌面逐像素不变（平均差 0.00）；
+  代价 ~2% 单核、功耗无差异（§8.16）。
 
 ---
 
