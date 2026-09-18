@@ -100,7 +100,7 @@ hyprctl 调用面有界、可直接映射。
 | `~/.config/niri/config.kdl` | 编排器：`environment`/`spawn`/`animations`/`screenshot-path` + 6 个 `include`（§5.7）；`focus-ring` 在 `layout.kdl`，颜色由主题驱动（§5.6）|
 | `~/.config/niri/{input,monitor,layout,window-rules,effects,binds}.kdl` | 模块化拆分出的子配置（§5.7）：输入/显示器/布局/窗口规则(含圆角)/磨砂(effects)/按键 |
 | `~/.config/niri/effects.kdl` | 2026-09-19 给 `^omarchy-bar$` 配 `background-effect { xray false }`（浮栏磨砂；圆角模糊区域由插件端下发，§8.8）|
-| `~/.config/omarchy/shell.json` | bar：`id` = `charlieras262.floating-bar`、`floatGap` 8、`cornerRadius` 10；`layout.left` = `yvonne.arch-logo` + `yvonne.workspaces`（§8.11）|
+| `~/.config/omarchy/shell.json` | bar：`id` = `charlieras262.floating-bar`、`floatGap` 8、`cornerRadius` 10；`layout.left` = `yvonne.arch-logo` + `yvonne.workspaces`；`layout.right` 2026-09-19 摘掉空转的 `charlieras262.omablur`（§8.11）|
 | `~/.config/ghostty/config` | 半透明 (`background-opacity = 0.85`) + 关自带模糊 (`background-blur-radius = 0`)，blur 交给 niri（§5.8） |
 
 ### 3.3 备份（重要，可回滚）
@@ -951,12 +951,14 @@ materal-update --print    # 只打印推导出的调色板
   gaps，两者不打架**（像素核对过）。
 - 配套改动：`~/.config/niri/effects.kdl` 给 `^omarchy-bar$` 配 `background-effect { xray false }`（浮栏磨砂，
   2026-09-19；模糊区域形状由插件下发的圆角 `blurRegion` 决定，原因与实测见 §8.8）。
-- 保留的第三方部件：`charlieras262.omablur`（圆角/模糊调节）、`ryuhzk.ime`。
-  **omablur 在 niri 上是空转**（2026-09-19 核）：滑块读的是垫子写死的 `hyprctl -j getoption decoration:*`
+- 第三方部件：`ryuhzk.ime` 保留；`charlieras262.omablur` **已于 2026-09-19 从 `shell.json` 的 right 数组摘掉**
+  （插件文件仍留在 `~/.config/omarchy/plugins/`，想加回就把它填回 right 数组；备份
+  `~/.config/omarchy/niri-port/backups/shell.json.bak-20260919-032126-pre-omablur`）。
+  **它在 niri 上是空转**（2026-09-19 核）：滑块读的是垫子写死的 `hyprctl -j getoption decoration:*`
   （`{"int":12,...}`），应用走 `hyprctl eval 'hl.config({...})'`——垫子对 `hl.config` 是**空操作**（exit 0、不改
   任何东西），持久化还写 `~/.config/hypr/looknfeel.lua`（niri 上已被降级的 Layer-2）。niri 的真值在
   `~/.config/niri/window-rules.kdl` 的 `geometry-corner-radius` 与 `effects.kdl` 的 `blur { passes/offset/... }`，
-  改它们 + `niri msg action load-config-file` 才生效。要么接受它当装饰，要么从 `shell.json` 的 right 数组里摘掉。
+  改它们 + `niri msg action load-config-file` 才生效。
 - 已知待修：toast 与 `KeyboardPanel` 家族弹窗没给浮栏让位（§8 第 18 条）。
 
 ### 8.12 共享壁纸库（omarchy-wallpaper-aio）
