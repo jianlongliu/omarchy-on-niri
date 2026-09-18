@@ -32,6 +32,16 @@ cd "$OMARCHY_PATH" || exit 1
 # Restore the new QuickShell compositor integration module.
 cp -f "$OVL/Niri.qml" shell/Commons/Niri.qml
 
+# Restore the port's extra shell plugins (new files, so they are not in the
+# patch -- git diff only carries tracked files).
+if [[ -d $OVL/plugins ]]; then
+  for plugin in "$OVL/plugins"/*; do
+    [[ -d $plugin ]] || continue
+    mkdir -p "shell/plugins/$(basename "$plugin")"
+    cp -a "$plugin/." "shell/plugins/$(basename "$plugin")/"
+  done
+fi
+
 if git apply --reverse --check "$OVL/niri.patch" 2>/dev/null; then
   echo "omarchy-niri-repatch: overlay already applied, nothing to do"
   exit 0

@@ -19,6 +19,7 @@ QtObject {
     property var workspaces: ({ values: [] })
     property var focusedWorkspace: null
     property var focusedMonitor: null
+    property bool overviewOpen: false
 
     property string _focusedOutput: ""
     property int _pollMs: 500
@@ -27,6 +28,16 @@ QtObject {
     function refresh() {
         wsProcess.running = true
         winProcess.running = true
+        ovProcess.running = true
+    }
+
+    function applyOverview(text) {
+        try {
+            var data = JSON.parse(text)
+            root.overviewOpen = !!data.is_open
+        } catch (e) {
+            // ignore malformed/empty output
+        }
     }
 
     function countArray(n) {
@@ -116,6 +127,17 @@ QtObject {
         stdout: StdioCollector {
             waitForEnd: true
             onStreamFinished: root.applyWindows(text)
+        }
+        stderr: StdioCollector {}
+    }
+
+    property Process ovProcess: Process {
+        id: ovProcess
+        command: ["niri", "msg", "-j", "overview-state"]
+        running: false
+        stdout: StdioCollector {
+            waitForEnd: true
+            onStreamFinished: root.applyOverview(text)
         }
         stderr: StdioCollector {}
     }

@@ -56,15 +56,16 @@ hyprctl 调用面有界、可直接映射。
 
 | 路径 | 作用 |
 |---|---|
-| `~/bin/hyprctl` (453 行, +x) | hyprctl 垫片：Omarchy 的 `hyprctl` 调用 → `niri msg`，纯 stdlib，不依赖 jq |
-| `~/.local/share/omarchy/shell/Commons/Niri.qml` (130 行) | QuickShell 单例，轮询 niri，暴露 `workspaces/focusedWorkspace/focusedMonitor` |
+| `~/bin/hyprctl` (624 行, +x) | hyprctl 垫片：Omarchy 的 `hyprctl` 调用 → `niri msg`，纯 stdlib，不依赖 jq；支持 `include` 递归展开（config.kdl 模块化后绑定仍可见） |
+| `~/.local/share/omarchy/shell/Commons/Niri.qml` (153 行) | QuickShell 单例，轮询 niri，暴露 `workspaces/focusedWorkspace/focusedMonitor` + `overviewOpen`（overview 状态） |
+| `~/.local/share/omarchy/shell/plugins/blurwallpaper/` (`BlurWallpaper.qml` 102 行 + `manifest.json`) | 移植自有 QuickShell 插件（id `omarchy.blurwallpaper`，kind `service`）：给 niri overview 背景渲染强模糊壁纸 |
 | `~/bin/omarchy-niri-apply-theme` (Python, +x) | 把当前 Omarchy theme 的边框色写进 `config.kdl` 的 `focus-ring`（C 层换色） |
 | `~/bin/omarchy-niri-system` (+x) | **统一系统动作入口**：logout→`niri msg action quit --skip-confirmation`、reboot→logind D-Bus `Manager.Reboot`、shutdown→logind D-Bus `Manager.PowerOff`（均免密），统一 OSD+关窗+分发 |
-| `~/bin/omarchy-niri-repatch` (+x) | 上游更新后重放 niri 移植覆盖层（patch + Niri.qml + qmldir）|
+| `~/bin/omarchy-niri-repatch` (+x) | 上游更新后重放 niri 移植覆盖层（patch + Niri.qml + `plugins/*`）|
 | `~/bin/omarchy-powerprofiles-list` + `~/bin/omarchy-powerprofiles-set` (+x) | **TLP 感知**的电源 profile 脚本（见 §8.11）：优先 `powerprofilesctl`，缺则回退 D-Bus `net.hadess.PowerProfiles` |
 | `~/.config/omarchy/hooks/theme-set.d/10-niri-border` | 换 style 时自动 `omarchy-niri-apply-theme`（只写不重载，保护 SCALE）|
 | `~/.config/omarchy/hooks/post-update.d/10-niri-repatch` | `omarchy update` 后自动重放覆盖层 |
-| `~/.config/omarchy/niri-port/niri.patch` + `Niri.qml` | 移植覆盖层产物（仓库外，重放用）|
+| `~/.config/omarchy/niri-port/`（`niri.patch` + `Niri.qml` + `plugins/`）| 移植覆盖层产物（仓库外，重放用）|
 | `~/.ante/projects/-home-yvonne/memory/project-omarchy-niri.md` | 项目记忆 |
 
 ### 3.2 修改
@@ -76,9 +77,14 @@ hyprctl 调用面有界、可直接映射。
 | `~/.local/share/omarchy/shell/plugins/bar/Bar.qml` | 去掉 import；`Hyprland.focusedMonitor`→`Niri.focusedMonitor` |
 | `~/.local/share/omarchy/shell/plugins/menu/Menu.qml` | 加 `import Quickshell.Wayland._BackgroundEffect`；根 `PanelWindow` 挂 `BackgroundEffect.blurRegion: Region { item: card; radius: root.cornerRadius }`（只磨砂菜单卡片，不全屏）|
 | `~/.local/share/omarchy/shell/Ui/KeyboardPanel.qml` | 加 `import Quickshell.Wayland._BackgroundEffect`；根 `PanelWindow` 挂 `BackgroundEffect.blurRegion: Region { item: card; radius: Style.cornerRadius }`（覆盖所有 bar 弹窗面板，见 §8.8）|
+| `~/.local/share/omarchy/shell/plugins/osd/Osd.qml` | 磨砂 OSD 卡片（同 §8.8 手法） |
+| `~/.local/share/omarchy/shell/services/AppLibrary.qml` | 加 `command -v uwsm-app` 回退（niri 无 uwsm-app） |
 | `~/.local/share/omarchy/shell/plugins/background/Background.qml` | `readlinkProc` 回调强制即时切换背景（见 §8.1b）|
 | `~/.local/share/omarchy/bin/omarchy-launch-tui` | 加 uid 终端回退（ghostty），因 niri 无 `uwsm-app`/`xdg-terminal-exec` |
-| `~/.local/share/omarchy/bin/omarchy-theme-set` | `set_theme_background` 传实际背景文件而非过渡快照 |
+| `~/.local/share/omarchy/bin/omarchy-launch-editor` | 同上，编辑器路径回退 |
+| `~/.local/share/omarchy/bin/omarchy-launch-floating-terminal-with-presentation` | 同上，浮动终端回退 |
+| `~/.local/share/omarchy/bin/omarchy-system-{logout,reboot,shutdown}` | 转调 `~/bin/omarchy-niri-system`（niri quit / logind D-Bus） |
+| `~/.local/share/omarchy/bin/omarchy-theme-set` | 背景走持久文件而非过渡快照（niri 黑桌面竞态，见 §8.9） |
 | `~/.local/share/omarchy/bin/omarchy-refresh-hyprland` | **niri 感知**：`XDG_CURRENT_DESKTOP=niri` 时整脚本变 no-op（不再重建 `~/.config/hypr`）|
 | `~/.local/share/omarchy/default/omarchy/omarchy-menu.jsonc` | **菜单指向 niri 真配置**（见 §8.6）|
 | `~/.config/niri/config.kdl` | 见 §5；`focus-ring` 颜色现**由主题驱动**（见 §5.6）|
@@ -217,6 +223,8 @@ niri 上这个颜色由 `config.kdl` 的 `focus-ring` 块决定。`omarchy-niri-
   toplevels.values[]`（`toplevels.values.length` 由 windows 按 workspace_id 计数得出）。
 - `root.focusedWorkspace` = 当前聚焦 workspace。
 - `root.focusedMonitor` = `{ "name": 聚焦 workspace 的 output }`。
+- `root.overviewOpen`（bool）：另跑 `niri msg -j overview-state`，取 `is_open`。供 overview
+  模糊壁纸插件（`shell/plugins/blurwallpaper/`）判断何时该显示。
 - 写成 `property Process x: Process { id: x; ... }` 形式（匹配 Omarchy Style.qml 惯例），
   并给 StdioCollector 加 `waitForEnd: true`，否则编译报
   "Cannot assign to non-existent default property"。
@@ -423,16 +431,26 @@ Omarchy 有两层配置，只有层1在 niri 上真正生效：
 
 - `omarchy update` = `git pull --ff-only`（`omarchy-update-dev`，在 `post-update` 钩子**之前**）+ 迁移。
 - **仓库外不碰**：`config.kdl` / `shell.json` / `~/bin/hyprctl` 都不在 omarchy 仓库内，`git pull` 动不到。
-- **仓库内会撞**：我们改了仓库内 14 个文件（launch-tui、refresh-hyprland、theme-set、menu.jsonc、qmldir、
-  Background.qml、Bar.qml、Workspaces.qml、Menu.qml、KeyboardPanel.qml、AppLibrary.qml，以及
-  2026-08-25 加的 3 个 `omarchy-system-{logout,reboot,shutdown}`）+ 新增 `Niri.qml`。上游改到其中任何一个，
+- **仓库内会撞**：我们改了仓库内 16 个文件（launch-tui、launch-editor、launch-floating-terminal-with-presentation、
+  refresh-hyprland、theme-set、menu.jsonc、qmldir、Background.qml、Bar.qml、Workspaces.qml、Menu.qml、
+  KeyboardPanel.qml、Osd.qml、AppLibrary.qml，以及 2026-08-25 加的 3 个 `omarchy-system-{logout,reboot,shutdown}`）
+  + 新增 `shell/Commons/Niri.qml` 与 `shell/plugins/blurwallpaper/`。上游改到其中任何一个，
   `git pull --ff-only` 会因本地未提交改动而**失败中止**整个更新——这是需要手动合并的情况。
 - **自动重放**：`post-update.d/10-niri-repatch` 在每次更新后跑 `omarchy-niri-repatch`：
   1. 把 `~/.config/omarchy/niri-port/Niri.qml` 拷回 `shell/Commons/`。
-  2. `git apply` `niri.patch`；已应用则 `--reverse --check` 判 no-op（幂等）。
-  3. 冲突则**不做任何改动**、退出码 2，提示手动合并（找 Ante）。
+  2. 把 `~/.config/omarchy/niri-port/plugins/*` 拷回 `shell/plugins/`（新增文件不在 `git diff` 里，
+     所以必须单独拷；目前只有 `blurwallpaper/`）。
+  3. `git apply` `niri.patch`；已应用则 `--reverse --check` 判 no-op（幂等）。
+  4. 冲突则**不做任何改动**、退出码 2，提示手动合并（找 Ante）。
 - 说明：覆盖层脚本只处理"上游没改到我们文件"的更新（此时 FF 成功、重放是 no-op）；
   "上游改到同一函数"才需要我重新翻译合并——这是任何移植都绕不开的兜底。
+
+**覆盖层一致性自检**（改完 patch 后必做，否则幂等判断会失真）：
+```bash
+cd ~/.local/share/omarchy
+git apply --reverse --check ~/.config/omarchy/niri-port/niri.patch && echo "patch 与工作区一致"
+```
+`--reverse --check` 通过 = patch 精确等于当前工作区改动；只有这种情况幂等/重放逻辑才成立。
 
 ### 8.8 视觉磨砂（frosted Quickshell / 状态栏面板毛玻璃）
 
@@ -440,7 +458,7 @@ niri 26.04 的 `background-effect` + Quickshell 的 `ext_background_effect` 形�
 的卡片呈毛玻璃。设计原则：**绝不让 niri 侧对整面 layer-shell 做全屏模糊**（那会把整个屏幕霜化），
 而是每个面板用 `BackgroundEffect.blurRegion` 只磨砂自己的卡片区域。
 
-**仓库内改动（已进 `niri-port/niri.patch`，现共 14 个文件 / 23 个 hunk）**：
+**仓库内改动（已进 `niri-port/niri.patch`，2026-09-18 合并上游后共 17 个文件 / 30 个 hunk）**：
 - `shell/plugins/menu/Menu.qml`：加 `import Quickshell.Wayland._BackgroundEffect`，根 `PanelWindow`
   挂 `BackgroundEffect.blurRegion: Region { item: card; radius: root.cornerRadius }`。
 - `shell/Ui/KeyboardPanel.qml`：同上，根 `PanelWindow` 挂
@@ -473,6 +491,58 @@ quickshell：`pkill -x quickshell && niri msg action spawn -- quickshell -n -p $
 
 
 
+### 8.9 上游合并实录（2026-09-18，`43bfe9b` → `d174d4a`）
+
+首次把上游 342 个提交并进在线安装，并把迁移历史一次性归零。**做法**：先 FF，再重放移植，最后按类
+处置迁移——**不跑整包 `omarchy update`**（那会换 bootloader、退役 systemd-networkd、动
+`/etc/sudoers.d`，违反 §1 约束）。
+
+**代码合并**
+- `git fetch --depth=400 origin quattro`（`--depth=50` 会挂，用 400+ 长超时）；`origin/quattro` `9d02bb0..d174d4a`。
+- 基线是上游直系祖先 → `git merge --ff-only` 成功，无需真合并。
+- 只有 **2 个文件真冲突**：`bin/omarchy-theme-set`、`default/omarchy/omarchy-menu.jsonc`；
+  Bar/Osd/Menu/Background/KeyboardPanel/Workspaces/AppLibrary/qmldir/launch-floating-terminal **全部自动合并**。
+- `omarchy-theme-set` 取上游新的三分支快照结构，但把移植的真正理由换位置保留：上游的
+  `BACKGROUND_TRANSITION_SNAPSHOTS` 只对**视频**壁纸关快照，修不了 niri 的"快照被删而 QML 仍异步加载
+  → 黑桌面"竞态。移植改为各分支回退到持久文件（`${OLD_BACKGROUND_SNAPSHOT:-$old_background}`），
+  并在 `choose_staged_theme_background` 调用处加 `XDG_CURRENT_DESKTOP != niri` 守卫。
+- 新增未跟踪文件（`Niri.qml`、`blurwallpaper/`）与上游新增路径**不冲突**，合并后原样存活。
+
+**迁移：121 个，一次性归零**
+- 因为在线安装是手工部署的，`~/.local/state/omarchy/migrations/` **原本是空的**——`omarchy-migrate`
+  会把 121 条历史全部重放。做法：先把 121 条**全部打上已应用标记**，再只摘下批准的那批执行。
+- **实际跑 33 条**（32 条纯配置类 + `1789310715` 装 Cloudflare CLI `cf`），30 条一次成功。
+- **刻意跳过**（保留已应用标记，不重放）：
+  - 44 条要 root / 改系统底层的：`1789325478` 装 `linux-omarchy` 并让它做 Limine 首启动项（会顶掉
+    systemd-boot）、`1786482992`/`1784917531`/`1786605598`/`1784476564` 重建 initramfs、
+    `1782002156` 退役 systemd-networkd 换 NetworkManager、`1788124236` 关 sshd 密码认证、
+    `1788025225` 删 `/etc/sudoers.d` 与 `/etc/systemd/system` 下的退役文件、
+    `1787589206`/`1784672586`/`1787399318`/`1786952219` 要求 Omarchy 自家签名仓库（本机没配）。
+  - 12 条会装额外 CLI 的（Basecamp 系、各编码 agent）——用户明确"只要 cloudflare，其他不用"。
+  - `1786549201` 交互式询问默认 agent，非交互会挂。
+  - `1785608166` 修 `omarchy-sleep-lock.service` 单元——本机从来没有该单元（那是 Omarchy 的 systemd
+    集成，niri 侧没用到），永远不可能成功，标记跳过。
+- **手工执行方式**：不跑整包 `omarchy-migrate`（一条失败会中止整批）。逐条
+  `bash -euo pipefail migrations/N.sh`，成功才 `touch` 标记，失败单独汇报。
+- **特权通道**：`pkexec` 免密可用；`sudo -n` 不行（要密码）。`omarchy-pkg-add` 走 `sudo pacman`，
+  非交互必失败，所以迁移里装包的一律走不通。
+
+**新增依赖（pkexec 装的系统包）**：`vi`（+`ex-vi-compat`）、`qt6-multimedia` + `qt6-multimedia-ffmpeg`
+（视频壁纸）、`mise`（取 Arch `extra`——Omarchy 用的是自家仓库的 `mise-bin`，本机没配该仓库）。
+
+**迁移带来的配置变化**
+- `~/.config/omarchy/shell.json` 的 bar 布局被上游默认更新：center 变成
+  `indicators, clock, keyboard-layout, weather, system-update`（指示器挪到时钟左边、新增
+  keyboard-layout），right 新增 `agents`。用户第三方部件（`local.opencode-go`、`charlieras262.omablur`、
+  `ryuhzk.ime`、`io.github.alexinslc.calendar-agenda`）保留。**不满意可从
+  `~/.config/omarchy/niri-port/backups/20260918-pre-merge/home-config/` 还原。**
+- 两条"重生成 mise wrapper"迁移（`1784909971`、`1787573629`）把 `~/.local/bin` 里**原本就存在**的
+  约 20 个 wrapper 重写成新模板。**没有新装任何 CLI**——那批 wrapper 是 Omarchy `install/user/mise.sh`
+  的默认集（codex/claude/crush/agy/gh/omp/hermes…），此前因为没装 mise 一直是死壳；现在装了 mise，
+  它们会在**第一次被调用时**才去下载（惰性，不会自动装）。
+
+---
+
 ## 9. 验证清单
 
 - [x] `niri validate` 通过。
@@ -497,7 +567,10 @@ quickshell：`pkill -x quickshell && niri msg action spawn -- quickshell -n -p $
 - [ ] 运行实测：注销、关机、重启（会结束会话/重启，交给用户）。
 - [ ] **overview 壁纸与桌面统一**。
 - [x] **菜单 override label+icon 修复（2026-08-27）**：`extensions/omarchy-menu.jsonc` 的 3 个 setup 项补全 label+icon，合并后显示 "Monitors"/"Keybindings"/"Input" 且图标正常（不再显示 raw id `setup.monitors` 之类）；根因是 `normalizeItem` 的 `label: value.label || id` 把 action-only override 的 label 退化成 id 并覆盖默认项。
-- [x] **视觉磨砂（frosted Quickshell）**：`Menu.qml` + `KeyboardPanel.qml` 挂 `BackgroundEffect.blurRegion`（只磨砂卡片，不全屏）；`effects.kdl` 给 `omarchy-keyboard-panel` 设 `xray false`（实时窗口毛玻璃）；`[popups]` alpha 0.8→0.65。面板开/关屏幕底部清晰度 on/off≈0.995 → 无全屏霜化。niri.patch 现 13 hunk，覆盖层重放幂等。
+- [x] **视觉磨砂（frosted Quickshell）**：`Menu.qml` + `KeyboardPanel.qml` 挂 `BackgroundEffect.blurRegion`（只磨砂卡片，不全屏）；`effects.kdl` 给 `omarchy-keyboard-panel` 设 `xray false`（实时窗口毛玻璃）；`[popups]` alpha 0.8→0.65。面板开/关屏幕底部清晰度 on/off≈0.995 → 无全屏霜化。覆盖层重放幂等。
+- [x] **上游合并（2026-09-18）**：FF 到 `d174d4a`，2 个冲突按"上游优先 + 最小 niri 补丁"解决；覆盖层重建为 17 文件 / 30 hunk，`--reverse --check` 通过、repatch 幂等；shell 在新代码上重启无报错，bar/背景图层正常（详见 §8.9）。
+- [x] **迁移归零**：121 条全部标记，实跑 33 条（30 成功）；跳过项与理由见 §8.9；`omarchy-migrate --pending` 现为空。
+- [x] **`cf`（Cloudflare CLI）可用**：装 `mise` 后 `cf --version` → `cf · v0.10.0`。
 
 ---
 
@@ -507,6 +580,12 @@ quickshell：`pkill -x quickshell && niri msg action spawn -- quickshell -n -p $
 - niri 26.04 (8ed0da4) 位于 `/usr/bin/niri`。
 - 显示管理器：greetd / dms-greeter。包管理器 paru。
 - 电源后端：**TLP**（`tlp` + `tlp-pd` 1.10.2，D-Bus `net.hadess.PowerProfiles`），**无** power-profiles-daemon（`powerprofilesctl` 缺失）。
-- `sudo` 需密码（非交互不可用）。
+- 引导：**systemd-boot + Secure Boot，无 Limine**；内核是 stock `linux`（不是上游推的 `linux-omarchy`）。
+- 仓库：`core` / `extra` / `multilib` / `archlinuxcn`——**未配置 Omarchy 自家仓库**（所以 `mise-bin`、
+  签名强制等迁移在此不适用）。
+- 快照：**snapper** 已启用（root 配置），pacman 事务前后自动打快照。
+- **特权通道**：`pkexec` 免密可用；`sudo -n` 失败（要密码），`omarchy-pkg-add` 因此非交互不可用。
+- `mise` 来自 Arch `extra`（2026.9.9 装），上游用的是自家仓库的 `mise-bin`。
+- `XDG_CURRENT_DESKTOP=niri`（移植的 niri 守卫分支据此生效）。
 - 读取 `HYPRLAND_INSTANCE_SIGNATURE is unset` 警告仅影响便捷性，QuickShell 在 layer-shell
   下照常渲染。

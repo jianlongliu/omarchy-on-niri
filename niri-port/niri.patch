@@ -16,12 +16,12 @@ index 8a69dab..2b66583 100755
    ;;
  esac
 diff --git a/bin/omarchy-launch-floating-terminal-with-presentation b/bin/omarchy-launch-floating-terminal-with-presentation
-index c9cb255..0b18ed7 100755
+index 4497ff0..c4670d5 100755
 --- a/bin/omarchy-launch-floating-terminal-with-presentation
 +++ b/bin/omarchy-launch-floating-terminal-with-presentation
-@@ -10,4 +10,16 @@ source omarchy-restart-gum
- cmd="$*"
- presentation_script="omarchy-show-logo; $cmd; if (( \$? != 130 )); then omarchy-show-done; fi"
+@@ -11,4 +11,16 @@ cmd="$*"
+ # 130 is the user bailing with Ctrl-C; anything else gets the Done/Failed prompt.
+ presentation_script="omarchy-show-logo; $cmd; code=\$?; if (( code != 130 )); then omarchy-show-done \$code; fi"
  
 -exec setsid uwsm-app -- xdg-terminal-exec --app-id=org.omarchy.terminal --title=Omarchy -e bash -c "$presentation_script"
 +# Hyprland/uwsm session: uwsm-app + xdg-terminal-exec. niri has neither, so
@@ -127,43 +127,56 @@ index 0143760..38a78a6 100755
  # scope cannot terminate it before it runs.
  systemd-run --user --collect --quiet --on-active="2s" --timer-property=AccuracySec=100ms systemctl poweroff --no-wall || exit 1
 diff --git a/bin/omarchy-theme-set b/bin/omarchy-theme-set
-index b0c1cda..98bf58b 100755
+index 782b4ba..1a95bde 100755
 --- a/bin/omarchy-theme-set
 +++ b/bin/omarchy-theme-set
-@@ -114,23 +114,14 @@ set_theme_background() {
+@@ -135,7 +135,7 @@ set_theme_background_link() {
+ }
+ 
+ set_theme_background() {
+-  local new_background new_background_snapshot
++  local new_background new_background_snapshot old_background
+ 
+   if [[ -z $CHOSEN_THEME_BACKGROUND || ! -f $CHOSEN_THEME_BACKGROUND ]]; then
+     if ! choose_theme_background; then
+@@ -151,6 +151,13 @@ set_theme_background() {
+     new_background_snapshot=$(snapshot_background_path "$new_background" "next")
    fi
  
-   new_background="$CHOSEN_THEME_BACKGROUND"
--  new_background_snapshot=$(snapshot_background_path "$new_background" "next")
--
--  if [[ -f $OLD_BACKGROUND_SNAPSHOT && -f $new_background_snapshot ]]; then
--    shell_ipc background themeTransition "$OLD_BACKGROUND_SNAPSHOT" "$new_background_snapshot" "$new_background" "$colors_payload" "$shell_payload" || \
--      shell_ipc shell applyTheme "$colors_payload" "$shell_payload" || true
--    (sleep 3; rm -f "$OLD_BACKGROUND_SNAPSHOT" "$new_background_snapshot") &
--  elif [[ -f $new_background_snapshot ]]; then
--    shell_ipc background themeTransition "" "$new_background_snapshot" "$new_background" "$colors_payload" "$shell_payload" || \
--      shell_ipc shell applyTheme "$colors_payload" "$shell_payload" || true
--    (sleep 3; rm -f "$new_background_snapshot") &
--  else
--    shell_ipc background themeTransition "$OLD_BACKGROUND_SNAPSHOT" "$new_background" "$new_background" "$colors_payload" "$shell_payload" || \
--      shell_ipc shell applyTheme "$colors_payload" "$shell_payload" || true
--    if [[ -f $OLD_BACKGROUND_SNAPSHOT ]]; then
--      (sleep 3; rm -f "$OLD_BACKGROUND_SNAPSHOT") &
--    fi
--  fi
++  # niri port: the snapshots above are unlinked a few seconds after the switch,
++  # while the shell loads the path asynchronously — an Image can be left parked
++  # on a path that no longer exists, which shows a black desktop. On niri
++  # OLD_BACKGROUND_SNAPSHOT stays empty (guarded below), so fall back to the
++  # durable file the current background link still points at.
 +  old_background=$(readlink -f "$CURRENT_BACKGROUND_LINK" 2>/dev/null || true)
 +
-+  # Pass the real background files, not transition snapshots. The shell loads
-+  # the paths asynchronously; a snapshot is normally unlinked within a few
-+  # seconds, which can leave the shell's Image parked on a path that no longer
-+  # exists (black desktop). The theme background files themselves persist.
-+  shell_ipc background themeTransition "$old_background" "$new_background" "$new_background" "$colors_payload" "$shell_payload" || \
-+    shell_ipc shell applyTheme "$colors_payload" "$shell_payload" || true
- 
-   ln -nsf "$new_background" "$CURRENT_BACKGROUND_LINK"
- }
+   if [[ -f $OLD_BACKGROUND_SNAPSHOT && -f $new_background_snapshot ]]; then
+     shell_ipc background themeTransition "$OLD_BACKGROUND_SNAPSHOT" "$new_background_snapshot" "$new_background" "$colors_payload" "$shell_payload" || \
+       shell_ipc shell applyTheme "$colors_payload" "$shell_payload" || true
+@@ -160,7 +167,7 @@ set_theme_background() {
+       shell_ipc shell applyTheme "$colors_payload" "$shell_payload" || true
+     (sleep 3; rm -f "$new_background_snapshot") &
+   else
+-    shell_ipc background themeTransition "$OLD_BACKGROUND_SNAPSHOT" "$new_background" "$new_background" "$colors_payload" "$shell_payload" || \
++    shell_ipc background themeTransition "${OLD_BACKGROUND_SNAPSHOT:-$old_background}" "$new_background" "$new_background" "$colors_payload" "$shell_payload" || \
+       shell_ipc shell applyTheme "$colors_payload" "$shell_payload" || true
+     if [[ -f $OLD_BACKGROUND_SNAPSHOT ]]; then
+       (sleep 3; rm -f "$OLD_BACKGROUND_SNAPSHOT") &
+@@ -325,7 +332,11 @@ if [[ $THEME_HEADLESS != "1" && $OMARCHY_THEME_SKIP_BACKGROUND != "1" ]]; then
+   # Resolve the staged choice while the old theme still exists. Video changes
+   # switch directly to the durable path in QML, so neither side needs a copy.
+   if choose_staged_theme_background; then
+-    if background_transition_uses_snapshots "$CHOSEN_THEME_BACKGROUND"; then
++    # niri port: snapshot files are unlinked a few seconds after the switch and
++    # the shell reads the path asynchronously, so it can be left showing a path
++    # that no longer exists (black desktop). Skip them entirely on niri and pass
++    # the durable background files instead (see set_theme_background).
++    if [[ ${XDG_CURRENT_DESKTOP:-} != niri ]] && background_transition_uses_snapshots "$CHOSEN_THEME_BACKGROUND"; then
+       OLD_BACKGROUND_SNAPSHOT=$(snapshot_current_background)
+     else
+       BACKGROUND_TRANSITION_SNAPSHOTS=false
 diff --git a/default/omarchy/omarchy-menu.jsonc b/default/omarchy/omarchy-menu.jsonc
-index 3a24759..abe71d7 100644
+index 7583d8d..398e0ba 100644
 --- a/default/omarchy/omarchy-menu.jsonc
 +++ b/default/omarchy/omarchy-menu.jsonc
 @@ -108,7 +108,7 @@
@@ -188,10 +201,10 @@ index 3a24759..abe71d7 100644
    "setup.network": {"icon":"󰛳","label":"Network","aliases":["network"]},
    "setup.network.dns": {"icon":"󰇖","label":"DNS","aliases":["dns"]},
    "setup.network.dns.dhcp": {"icon":"󰩟","label":"DHCP","checked":"[[ \"$(omarchy-dns)\" == \"DHCP\" ]]","action":"omarchy-dns DHCP"},
-@@ -179,8 +179,8 @@
-   "setup.security.fido2": {"icon":"","label":"Fido2","action":"omarchy-launch-floating-terminal-with-presentation omarchy-setup-security-fido2"},
+@@ -184,8 +184,8 @@
    "setup.security.sshd": {"icon":"󰣀","label":"SSHD","action":"omarchy-launch-floating-terminal-with-presentation omarchy-setup-security-sshd"},
    "setup.security.passwordless-sudo": {"icon":"󰟵","label":"Passwordless Sudo","action":"omarchy-launch-floating-terminal-with-presentation omarchy-sudo-passwordless"},
+   "setup.security.sudoless-docker": {"icon":"󰡨","label":"Sudoless Docker","when":"omarchy-sudo-docker --configured","action":"omarchy-launch-floating-terminal-with-presentation omarchy-setup-security-sudoless-docker"},
 -  "setup.config.hyprland": {"icon":"","label":"Hyprland","action":"omarchy-launch-config-editor \"$HOME/.config/hypr/hyprland.lua\""},
 -  "setup.config.hyprsunset": {"icon":"","label":"Hyprsunset","action":"omarchy-launch-config-editor ~/.config/hypr/hyprsunset.conf && omarchy-restart-hyprsunset"},
 +  "setup.config.hyprland": {"icon":"","label":"Niri","action":"omarchy-launch-config-editor \"$HOME/.config/niri/config.kdl\""},
@@ -199,7 +212,7 @@ index 3a24759..abe71d7 100644
    "setup.config.xcompose": {"icon":"󰞅","label":"XCompose","action":"omarchy-launch-config-editor ~/.XCompose && omarchy-restart-xcompose"},
    "setup.direct-boot": {"icon":"","label":"Direct Boot","action":"omarchy-launch-floating-terminal-with-presentation omarchy-setup-direct-boot"},
    "setup.reset": {"icon":"󰑓","label":"Reset Computer","when":"[[ $(findmnt -no FSTYPE /) == btrfs ]]","action":"omarchy-launch-floating-terminal-with-presentation omarchy-system-factory-reset"},
-@@ -350,10 +350,10 @@
+@@ -364,10 +364,10 @@
    "update.channel.rc": {"icon":"🟡","label":"RC","checked":"[[ \"$(omarchy-channel-current)\" == \"rc\" ]]","action":"omarchy-launch-floating-terminal-with-presentation 'omarchy-channel-set rc'"},
    "update.channel.edge": {"icon":"🟠","label":"Edge","checked":"[[ \"$(omarchy-channel-current)\" == \"edge\" ]]","action":"omarchy-launch-floating-terminal-with-presentation 'omarchy-channel-set edge'"},
    "update.channel.dev": {"icon":"🔴","label":"Dev","checked":"[[ \"$(omarchy-channel-current)\" == \"dev\" ]]","action":"omarchy-launch-floating-terminal-with-presentation 'omarchy-channel-set dev'"},
@@ -251,10 +264,10 @@ index b2fb218..c64a57e 100644
    WlrLayershell.layer: WlrLayer.Overlay
    // Keyboard focus follows `open` (NOT `visible`). The window remains
 diff --git a/shell/plugins/background/Background.qml b/shell/plugins/background/Background.qml
-index 21e1b0a..a32f138 100644
+index dea93a4..0a06db4 100644
 --- a/shell/plugins/background/Background.qml
 +++ b/shell/plugins/background/Background.qml
-@@ -124,7 +124,15 @@ Item {
+@@ -152,7 +152,15 @@ Item {
      id: readlinkProc
      command: ["readlink", "-f", root.currentBackgroundLink]
      stdout: StdioCollector {
@@ -272,7 +285,7 @@ index 21e1b0a..a32f138 100644
    }
  
 diff --git a/shell/plugins/bar/Bar.qml b/shell/plugins/bar/Bar.qml
-index 5dcd205..7c99e62 100644
+index be9fece..87d561b 100644
 --- a/shell/plugins/bar/Bar.qml
 +++ b/shell/plugins/bar/Bar.qml
 @@ -1,5 +1,4 @@
@@ -281,7 +294,7 @@ index 5dcd205..7c99e62 100644
  import Quickshell.Io
  import Quickshell.Wayland
  import QtQuick
-@@ -488,7 +487,7 @@ Item {
+@@ -714,7 +713,7 @@ Item {
    // belongs. Empty until Hyprland reports one, which leaves panel routing on
    // its per-monitor fallback rather than guessing at an output.
    function focusedScreenName() {
@@ -329,7 +342,7 @@ index ec0482a..985d1d9 100644
          bar: root.bar
          text: focused ? "\uDB85\uDCFB" : (modelData === 10 ? "0" : String(modelData))
 diff --git a/shell/plugins/menu/Menu.qml b/shell/plugins/menu/Menu.qml
-index eeaf2e2..563c530 100644
+index aa879c1..9634f89 100644
 --- a/shell/plugins/menu/Menu.qml
 +++ b/shell/plugins/menu/Menu.qml
 @@ -1,6 +1,7 @@
@@ -352,6 +365,42 @@ index eeaf2e2..563c530 100644
      // The card opens centered exactly as always. The first search keystroke
      // or submenu move freezes the top line where it currently sits — from
      // then on the card grows and shrinks downward instead of re-centering
+diff --git a/shell/plugins/osd/Osd.qml b/shell/plugins/osd/Osd.qml
+index 581bfa3..0228823 100644
+--- a/shell/plugins/osd/Osd.qml
++++ b/shell/plugins/osd/Osd.qml
+@@ -126,7 +126,18 @@ Item {
+   PanelWindow {
+     id: panel
+     visible: root.opened
+-    anchors { top: true; bottom: true; left: true; right: true }
++    // Card-sized surface instead of a full-screen transparent layer: a
++    // full-screen surface would let the compositor-side background blur frost
++    // the entire display (and Quickshell's blurRegion region tracking is
++    // unreliable on niri). With the surface itself sized to the card, the
++    // layer-rule blur (effects.kdl) only ever frosts the card area.
++    anchors { left: true; right: true; bottom: true }
++    margins {
++      left: Math.max(0, Math.round((Quickshell.screens[0].width - card.width) / 2))
++      right: Math.max(0, Math.round((Quickshell.screens[0].width - card.width) / 2))
++      bottom: Style.space(67)
++    }
++    implicitHeight: card.height
+     color: "transparent"
+     WlrLayershell.namespace: "omarchy-osd"
+     WlrLayershell.layer: WlrLayer.Overlay
+@@ -140,10 +151,7 @@ Item {
+       id: card
+       width: card.borderLeft + root.pad + root.contentWidth + root.pad + card.borderRight
+       height: card.borderTop + root.pad + Style.font.displayLarge + root.pad + card.borderBottom
+-      anchors.horizontalCenter: parent.horizontalCenter
+-      anchors.bottom: parent.bottom
+-      anchors.bottomMargin: Style.space(67)
+-      color: Util.alpha(Color.background, 0.97)
++      color: Color.menu.background
+       borderSpec: Border.surfaceSpec("popups", "border", Color.popups.border, Math.max(1, Style.space(2)))
+       radius: Style.cornerRadius
+       opacity: root.opened ? 1 : 0
 diff --git a/shell/services/AppLibrary.qml b/shell/services/AppLibrary.qml
 index 738529d..460565c 100644
 --- a/shell/services/AppLibrary.qml

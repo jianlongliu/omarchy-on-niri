@@ -262,14 +262,41 @@ def _kdl_action_description(attrs, action):
     return name if name else a
 
 
+def _niri_config_lines(path, seen=None):
+    """Read a niri KDL file and recursively expand `include "x.kdl"` directives
+    (paths relative to the including file's directory) into a flat line list,
+    so bindings stay visible after the config is split into modules."""
+    if seen is None:
+        seen = set()
+    real = os.path.realpath(path)
+    if real in seen:
+        return []
+    seen.add(real)
+    try:
+        with open(path) as handle:
+            raw_lines = handle.readlines()
+    except OSError:
+        return []
+    base = os.path.dirname(path)
+    lines = []
+    for raw in raw_lines:
+        stripped = raw.split("//", 1)[0].strip()
+        inc = re.match(r'include\s+"([^"]+)"$', stripped)
+        if inc:
+            target = os.path.normpath(os.path.join(base, inc.group(1)))
+            lines.extend(_niri_config_lines(target, seen))
+            continue
+        lines.append(raw)
+    return lines
+
+
 def _config_bindings():
     """Parse keybindings out of the niri config (the compositor source of truth
-    after the A+C split) and return (modmask, key, description, command) rows."""
+    after the A+C split), following include'd module files, and return
+    (modmask, key, description, command) rows."""
     cfg = os.path.expanduser("~/.config/niri/config.kdl")
-    try:
-        with open(cfg) as handle:
-            lines = handle.readlines()
-    except OSError:
+    lines = _niri_config_lines(cfg)
+    if not lines:
         return []
 
     rows = []
