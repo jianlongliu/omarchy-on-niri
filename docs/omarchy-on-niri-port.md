@@ -1261,6 +1261,11 @@ A/B 实测：摘掉后 bar 只有逻辑 x 706..742（宽 36）这一块像素变
 备份 `~/.config/omarchy/niri-port/backups/shell.json.bak-20260919-043957-pre-keyboard-layout`，想加回来就把
 `{"id":"omarchy.keyboard-layout"}` 填回 center 数组。
 
+**徽章把 rime 显示成「拼」（2026-09-19）**：fcitx 给 rime 的 label 是 `ㄓ`（肉眼看像"羊"），于是给插件加了一层本地映射——
+`Model.js` 顶部 `var badgeOverrides = { rime: "拼" }`，`badgeText()` 开头按 IM id 查表（id 就是 fcitx D-Bus 里的 `rime`）。
+补丁存档 `~/.config/omarchy/niri-port/plugin-patches/ronald.input-sources.patch`（基线 = 插件 git HEAD，`patch -p1 --dry-run` 验证可从 HEAD
+干净重放；`omarchy plugin update` 覆盖工作树后要重打）。插件只有一份副本，就在 `~/.config/omarchy/plugins/ronald.input-sources/`。
+
 **验证**：IPC `open` 后 OCR 到 `Rime` / `Show Emoji & Symbols` / `Show Input Source Name` /
 `Open Keyboard Settings…`；`omarchy-shell -q ronald.input-sources next` 在 `rime ⇄ keyboard-us` 间来回切
 （`fcitx5-remote -n` 核对）；壳层日志无 QML 报错。可用 IPC：`toggle` / `open` / `close` / `next` / `prev`。
@@ -1319,7 +1324,8 @@ fcitx5 自身由 `/etc/xdg/autostart/org.fcitx.Fcitx5.desktop` 在登录时拉�
 - [x] **输入源徽章（2026-09-19）**：`ronald.input-sources` 挂在 bar 右侧；给 fcitx5 组加上 `keyboard-us` 后
   徽章出现，`omarchy-shell -q ronald.input-sources next` 能在 `rime ⇄ keyboard-us` 间切换（菜单 OCR 确认）；
   组默认源被 keyboard 条目钉死 → 用 `ShareInputState=All` 解决"新输入框变英文"；自带 `omarchy.keyboard-layout`
-  （时钟右边的 `EN`）同日从 `layout.center` 摘掉，A/B 只差逻辑 x 706..742 那一块（见 §8.17）。
+  （时钟右边的 `EN`）同日从 `layout.center` 摘掉，A/B 只差逻辑 x 706..742 那一块（见 §8.17）；徽章本地映射
+  rime → `拼`（`badgeOverrides`，补丁 `plugin-patches/ronald.input-sources.patch`）。
 
 ---
 
