@@ -16,8 +16,8 @@ import shutil
 import subprocess
 import sys
 
-THEME_LUA = "/home/yvonne/.local/state/omarchy/current/theme/hyprland.lua"
-NIRI_CFG = "/home/yvonne/.config/niri/config.kdl"
+THEME_LUA = os.path.expanduser("~/.local/state/omarchy/current/theme/hyprland.lua")
+NIRI_CFG = os.path.expanduser("~/.config/niri/config.kdl")
 
 
 def normalize(color: str):
