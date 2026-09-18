@@ -5,14 +5,24 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Niri-backed replacement for the pieces of Quickshell's `Hyprland` module
-// that Omarchy's bar actually reads (Hyprland.workspaces, .focusedWorkspace,
-// .focusedMonitor). On niri there is no Hyprland IPC, so this singleton
-// polls `niri msg -j workspaces/windows` and exposes an equivalent model.
+// Niri-backed replacement for the pieces of Quickshell's `Hyprland` module that
+// Omarchy's bar actually reads (Hyprland.workspaces, .focusedWorkspace,
+// .focusedMonitor), plus the overview flag BlurWallpaper.qml gates its layer on.
 //
-// The shell never needed more than this: Workspaces.qml reads
-//   .workspaces.values[].id / .toplevels.values.length  and .focusedWorkspace.id
-// Bar.qml reads .focusedMonitor.name
+// State comes from niri's IPC event stream (`niri msg -j event-stream`) rather
+// than the 500 ms polling this used to do. The stream replays the full workspace
+// and window lists on connect and then pushes every change, so:
+//   * the overview's blurred wallpaper appears with the overview instead of up to
+//     half a second later (that delay was the poll interval),
+//   * the bar's workspace pills react immediately,
+//   * the shell stops spawning ~6 `niri msg` processes per second while idle.
+//
+// Events carrying partial data (WorkspaceActivated, WindowOpenedOrChanged, ...)
+// only trigger a fresh one-shot query of the relevant list, debounced so a burst
+// of events costs one spawn instead of one per event.
+//
+// Workspaces.qml reads .workspaces.values[].id / .toplevels.values.length and
+// .focusedWorkspace.id; Bar.qml reads .focusedMonitor.name.
 QtObject {
     id: root
 
@@ -22,22 +32,12 @@ QtObject {
     property bool overviewOpen: false
 
     property string _focusedOutput: ""
-    property int _pollMs: 500
     property var _winCountById: ({})
 
+    // Re-read both lists from scratch. Used on startup and by the event handlers.
     function refresh() {
-        wsProcess.running = true
-        winProcess.running = true
-        ovProcess.running = true
-    }
-
-    function applyOverview(text) {
-        try {
-            var data = JSON.parse(text)
-            root.overviewOpen = !!data.is_open
-        } catch (e) {
-            // ignore malformed/empty output
-        }
+        if (!wsProcess.running) wsProcess.running = true
+        if (!winProcess.running) winProcess.running = true
     }
 
     function countArray(n) {
@@ -109,6 +109,28 @@ QtObject {
         root.workspaces = { values: out }
     }
 
+    // One line of the event stream (a JSON object with a single key).
+    function handleEvent(line) {
+        var msg = null
+        try {
+            msg = JSON.parse(line)
+        } catch (e) {
+            return
+        }
+        if (!msg) return
+
+        if (msg.OverviewOpenedOrClosed) {
+            root.overviewOpen = !!msg.OverviewOpenedOrClosed.is_open
+            return
+        }
+        if (msg.WorkspacesChanged || msg.WorkspaceActivated || msg.WorkspaceUrgencyChanged
+                || msg.WorkspacesReordered)
+            wsDebounce.restart()
+        if (msg.WindowsChanged || msg.WindowOpenedOrChanged || msg.WindowClosed
+                || msg.WorkspaceActivated)
+            winDebounce.restart()
+    }
+
     property Process wsProcess: Process {
         id: wsProcess
         command: ["niri", "msg", "-j", "workspaces"]
@@ -131,22 +153,33 @@ QtObject {
         stderr: StdioCollector {}
     }
 
-    property Process ovProcess: Process {
-        id: ovProcess
-        command: ["niri", "msg", "-j", "overview-state"]
-        running: false
-        stdout: StdioCollector {
-            waitForEnd: true
-            onStreamFinished: root.applyOverview(text)
-        }
-        stderr: StdioCollector {}
+    // Coalesce event bursts (a workspace switch emits several events) into one query.
+    property Timer wsDebounce: Timer {
+        interval: 40
+        onTriggered: if (!wsProcess.running) wsProcess.running = true
     }
 
-    property Timer pollTimer: Timer {
-        interval: root._pollMs
+    property Timer winDebounce: Timer {
+        interval: 40
+        onTriggered: if (!winProcess.running) winProcess.running = true
+    }
+
+    property Process eventStream: Process {
+        id: eventStream
+        command: ["niri", "msg", "-j", "event-stream"]
         running: true
-        repeat: true
-        onTriggered: root.refresh()
+        stdout: SplitParser {
+            onRead: line => root.handleEvent(line)
+        }
+        stderr: StdioCollector {}
+        // niri gone (restart, crash): reconnect after a beat. The stream replays
+        // the full state on connect, so no extra resync is needed.
+        onExited: streamRetry.restart()
+    }
+
+    property Timer streamRetry: Timer {
+        interval: 1000
+        onTriggered: if (!eventStream.running) eventStream.running = true
     }
 
     Component.onCompleted: root.refresh()

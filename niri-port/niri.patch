@@ -176,7 +176,7 @@ index 782b4ba..1a95bde 100755
      else
        BACKGROUND_TRANSITION_SNAPSHOTS=false
 diff --git a/default/omarchy/omarchy-menu.jsonc b/default/omarchy/omarchy-menu.jsonc
-index 7583d8d..398e0ba 100644
+index 2ee2457..719c065 100644
 --- a/default/omarchy/omarchy-menu.jsonc
 +++ b/default/omarchy/omarchy-menu.jsonc
 @@ -108,7 +108,7 @@
@@ -342,7 +342,7 @@ index ec0482a..985d1d9 100644
          bar: root.bar
          text: focused ? "\uDB85\uDCFB" : (modelData === 10 ? "0" : String(modelData))
 diff --git a/shell/plugins/menu/Menu.qml b/shell/plugins/menu/Menu.qml
-index aa879c1..9634f89 100644
+index aa879c1..95fc735 100644
 --- a/shell/plugins/menu/Menu.qml
 +++ b/shell/plugins/menu/Menu.qml
 @@ -1,6 +1,7 @@
@@ -353,7 +353,53 @@ index aa879c1..9634f89 100644
  import QtQuick
  import qs.Commons
  import qs.Ui
-@@ -1072,6 +1073,11 @@ Item {
+@@ -251,6 +252,14 @@ Item {
+     root.items = mergedMenu.items
+     root.itemOrder = mergedMenu.itemOrder
+     root.rowsLoaded = true
++    // niri port: self-heal a bad read of the jsonc sources (see menuSourceRetry).
++    // Both sources empty just means the FileViews have not loaded yet.
++    var menuSourcesPending = root.defaultMenuItems.length === 0 && root.userMenuItems.length === 0
++    if (root.menuHasRootChildren() || menuSourcesPending) root.menuSourceRetries = 0
++    else if (root.menuSourceRetries < 5) {
++      root.menuSourceRetries += 1
++      menuSourceRetry.restart()
++    }
+     root.evaluateGuards()
+     if (root.opened) {
+       root.rebuildDisplay()
+@@ -981,6 +990,30 @@ Item {
+     onFileChanged: reload()
+   }
+ 
++  // niri port: the jsonc sources can be read while an upstream `git pull` is
++  // rewriting them (or a rename drops the watcher). A bad read parses to zero
++  // items, and the merged model then keeps only the user overrides -- whose
++  // parents are gone -- so the menu renders "Nothing here yet" and stays that
++  // way until the shell restarts. Re-read once when the model ends up with no
++  // root children; healthy loads never touch this path.
++  property int menuSourceRetries: 0
++
++  function menuHasRootChildren() {
++    var items = root.items || ({})
++    for (var id in items) if (items[id] && items[id].parent === "root") return true
++    return false
++  }
++
++  Timer {
++    id: menuSourceRetry
++    interval: 1200
++    onTriggered: {
++      console.log("omarchy menu: item model looked empty, re-reading the jsonc sources")
++      defaultMenuFile.reload()
++      userMenuFile.reload()
++    }
++  }
++
+   // ---------------------------------------------------------------- guards
+   //
+   // `when:` (visibility) and `checked:` (✓ marker) are bash expressions the
+@@ -1072,6 +1105,11 @@ Item {
      WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
      exclusionMode: ExclusionMode.Ignore
  

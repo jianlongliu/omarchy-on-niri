@@ -12,8 +12,13 @@ import qs.Ui
 // that backdrop is a flat dark color; this layer opts into the backdrop via
 // the `place-within-backdrop` layer-rule in ~/.config/niri/effects.kdl, so it
 // paints the strongly blurred wallpaper behind the window thumbnails instead.
-// While the overview is closed the layer is invisible (visible: Niri.overviewOpen),
-// so the normal desktop keeps the crisp wallpaper from Background.qml untouched.
+//
+// While the overview is closed the surface is unmapped, so the normal desktop
+// keeps the crisp wallpaper from Background.qml untouched -- and it can never be
+// tinted by this layer. Keeping it mapped instead was measured (2026-09-19) to
+// save only ~40 ms of opening latency while costing niri ~2% of a core, so the
+// surface still comes and goes with the overview; what is cached is the decode
+// (`cache: true` below), which is the expensive part.
 //
 // The wallpaper link is re-resolved whenever the overview opens, so a theme
 // switch since the previous overview is picked up.
@@ -82,7 +87,11 @@ Item {
         source: root.backgroundPath ? Util.fileUrl(root.backgroundPath) : ""
         fillMode: Image.PreserveAspectCrop
         asynchronous: true
-        cache: false
+        // This layer is hidden and shown on every overview toggle. With
+        // `cache: false` each open paid for a fresh decode + upload of a
+        // full-screen wallpaper, which showed up as the blurred backdrop
+        // arriving late; the decode now stays in the shared pixmap cache.
+        cache: true
         smooth: true
         mipmap: true
 
