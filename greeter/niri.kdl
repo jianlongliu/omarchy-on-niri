@@ -1,0 +1,68 @@
+// Greeter compositor config. Copied to /etc/greetd/omarchy-greeter/niri.kdl by
+// install.sh; niri runs it as the `greeter` user on the greeter VT.
+//
+// GREETER_* values are the greeter's whole configuration surface: login user,
+// session command, wallpaper, avatar. They are read by shell.qml through
+// Quickshell.env().
+hotkey-overlay {
+    skip-at-startup
+}
+
+environment {
+    XDG_SESSION_TYPE "wayland"
+    // The greeter's HOME: sync.sh puts the theme's colors.toml / shell.toml in
+    // $HOME/.local/state/omarchy/current/theme so the login screen matches the
+    // desktop palette.
+    HOME "/var/lib/greeter"
+    GREETER_USER "jianlongliu"
+    GREETER_SESSION "niri-session"
+    GREETER_WALLPAPER "/var/lib/greeter/wallpaper"
+    GREETER_AVATAR "/var/lib/AccountsService/icons/jianlongliu"
+    GREETER_CORNER_RADIUS "10"
+}
+
+gestures {
+    hot-corners {
+        off
+    }
+}
+
+layout {
+    background-color "#000000"
+}
+
+input {
+    keyboard {
+        xkb
+        numlock
+    }
+    touchpad {
+        tap
+        dwtp
+        natural-scroll
+    }
+    mouse
+    trackpoint {
+        accel-speed 0.5
+    }
+}
+
+cursor {
+    xcursor-theme "Bibata-Modern-Amber"
+    xcursor-size 30
+    hide-when-typing
+}
+
+output "eDP-1" {
+    // 2560x1600@60, the panel's native mode. Never a `mode` line: Omarchy's
+    // monitor panel sends WxH@Hz which niri rejects.
+    modeline 268.5 2560 2608 2640 2720 1600 1603 1609 1646 "+hsync" "-vsync"
+    scale 1.5
+    position x=0 y=0
+    variable-refresh-rate
+}
+
+// Quickshell is the whole session here: when it exits (login handed to
+// greetd), take niri with it so greetd sees the greeter process tree end and
+// starts the user's session.
+spawn-sh-at-startup "sh -c 'quickshell -p /etc/greetd/omarchy-greeter; niri msg action quit --skip-confirmation'"
