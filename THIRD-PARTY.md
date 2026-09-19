@@ -1,0 +1,42 @@
+# Third-party code
+
+This repository is a port of [Omarchy](https://github.com/basecamp/omarchy) for
+niri. Omarchy's MIT license and copyright (David Heinemeier Hansson) are in
+[LICENSE](LICENSE) and cover everything not listed below.
+
+## omarchy-lock-explorer — MIT, Copyright (c) 2026 SirJul1337
+
+`greeter/designs/`, `greeter/Commons/` and `greeter/Ui/` are vendored from the
+`io.github.sirjul1337.lock-explorer` plugin, which the login screen reuses (the
+Split design). Its license, verbatim:
+
+```
+MIT License
+
+Copyright (c) 2026 SirJul1337
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+That plugin's own `Service.qml` is based on Omarchy's built-in `omarchy.lock`
+plugin, which is covered by [LICENSE](LICENSE).
+
+The greeter's own code (`shell.qml`, `Greetd.qml`, `UserPicker.qml`, `Users.qml`,
+`SelfTest.qml`, `StateTest.qml`, `bridge/`, `tests/`, `install.sh`, `sync.sh`,
+`niri.kdl`) was written for this port and is covered by [LICENSE](LICENSE).
