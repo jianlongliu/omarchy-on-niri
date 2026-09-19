@@ -1422,6 +1422,7 @@ pkexec ~/.local/share/omarchy/bin/omarchy-apply-lock     # 或 sudo omarchy-appl
 ### 11.0 背景与目标
 
 - 两个账户同属一人：`jianlongliu`（uid 1000）是**日用主账户**，`yvonne`（uid 1001）是**专门给本移植做实验**的账户。本节是把移植整体搬进主账户的 runbook。
+- **新 session 从哪读**：文档正本随仓库走 —— `git clone https://github.com/jianlongliu/omarchy-on-niri`（公开仓，主账户无需凭据），正文在 `docs/omarchy-on-niri-port.md`，§11 就是本节。`/home/yvonne/Documents/omarchy-on-niri.md` 是 0600，**主账户读不到**（§11.2）；`/var/tmp` 里的摘录重启就没了，不要当唯一来源。
 - 主账户现状：**原生 DMS**（打包的 `dms-shell 1.6.2` + `dms-shell-niri 1.6.2` + `dankcalendar-bin` + `greetd-dms-greeter-bin`，登录界面是 dms-greeter）。
 - 目标形态：主账户跑本移植（Omarchy 壳层 + niri），**卸掉 DMS**，niri 配置以**原版默认**为基座（不是从 DMS 那套改）。
 
@@ -1861,6 +1862,8 @@ Omarchy 的锁层从 `hyprctl -j monitors` 读两个字段，shim 之前都在�
 **修法**：① 桥不再把密码放进 `create_session`（秘密只作为"对提示的回答"传递）；② `queuedPassword` 真正落地 —— 凡是在"没有待答提示"时发出密码（直接登录、或人脸扫到一半改输密码后重连），都先入队，等 `auth_message(secret)` 一到就用它回答；`auth_ok`/`auth_fail`/切账户时清空（不会自动重试错密码）。
 
 **测试为什么没抓到**：mock 的 `create_session` **认**那个 `password` 字段（真实 greetd 不认）—— 宽容的夹具让"密码压根没发出去"在测试里看起来完全正常。现在 mock 与 greetd 同样忽略它，并新增用例 `typed-before-prompt`（`--howdy-fail` + 立刻提交密码），**先红后绿**：修之前它卡到整例超时（`exit=124`），修完全套 8 例 `FAILURES: 0`。
+
+**真机复测（2026-09-19，用户）**：修完并装到 `/etc/greetd/split-greeter` 后注销重登，**一次输密码直接进** —— 通过。
 
 **教训**：夹具必须和真东西一样严格。"测试绿 + 真机不工作"这种组合，八成是夹具比现实宽松（§11.13 是同一个病的另一个症状：当时自测直接调 `submitPassword()`，跳过了真正的接线）。
 
