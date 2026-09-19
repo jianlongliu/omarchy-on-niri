@@ -1501,6 +1501,7 @@ sudo pacman -Rns dms-shell dms-shell-niri dankcalendar-bin
 | `~/bin` | — | 垫片与包装脚本（仓库 `port-bin/` 是同一批；`__pycache__/*.pyc` 是缓存，删掉即可） |
 | `~/.config/systemd/user/materal-recolor.{path,service}` | 8K | 主题取色监听（§8.10）；用 `%h` 是便携的，但 `default.target.wants/` 里的绝对软链要重新 `enable` 生成 |
 | fcitx5 配置 + `~/.config/gtk-3.0/settings.ini` | — | 双源 + `ShareInputState=All`（§8.17）与 GTK 字号对齐 |
+| `~/.config/omarchy/lock-{videos,designs}` | 小 | 锁屏插件（`io.github.sirjul1337.lock-explorer`，§11.10）的**每账户状态**：`lock-videos/` 是指向插件目录的软链（随插件目录一起搬即有效），`lock-designs/` 放自建设计（本机还没有）；所选样式存在 `shell.json` 的插件条目里（本机 `{"design":"split"}`）。插件本体在 `plugins/` 下，随 `~/.config/omarchy` 一起走 |
 
 搬完的**验收数字**（与实验账户逐一对齐）：
 
@@ -1531,3 +1532,14 @@ omarchy-migrate --pending          # 应为空
 - 系统层：`sudo snapper -c root undo <N>`；家目录：`sudo snapper -c home undo <N>`
 - 只回壳层：重装 `dms-shell dms-shell-niri` 后 `systemctl --user enable --now dms.service`
 - 移植侧：`~/.config/omarchy/niri-port/` 内有备份，覆盖层可 `git apply --reverse`
+
+### 11.10 锁屏插件 `io.github.sirjul1337.lock-explorer`（能力边界与搬运）
+
+上游：`github.com/SirJul1337/omarchy-lock-explorer`（MIT，74 commits，v1.7.7 / 2026-09-16，161★）；本机克隆**正好在上游 HEAD**（`d2f586b`），即无待更新。
+
+- **是什么**：给 Omarchy 的**锁屏设计库 + 选择器 + 设计器**（manifest `clonedFrom: omarchy.lock`，装上即顶替 stock 锁屏，卸载/停用即回 stock）。24 套内置设计（Classic 就是 stock），密码框带显示按钮，部分设计显示头像；`Designer.qml` + `Editor.qml` 可自建设计，自定义放 `~/.config/omarchy/lock-designs/`，视频素材放 `lock-videos/`。
+- **认证能力**（与 DMS 对等，且**各自独立 PAM 服务**，本机目前只有 `omarchy-lock-password` 存在）：指纹（`omarchy-lock-fingerprint`，有指纹器就自动监听）、facelock（`omarchy-lock-face` + `pam_facelock.so`）、安全钥匙（`omarchy-lock-fido2` + `pam_u2f.so`，由 `extras/setup-fido2.sh` 写入，**唯一需要 root 的一步**）。刻意分开的原因写在它的 README 里：把 `pam_u2f.so` 塞进密码服务会把每次打错的密码都变成钥匙的 PIN 尝试，八次就把钥匙锁死。
+- **顺带功能**：DPMS 空白策略（默认锁后 5s 关屏，可选 Never；还有 `keepDisplaysOnWithHdmi` 这种 HDMI 唤醒绕行开关）、解锁动画（fade/zoom/rise + 时长）、多显示器 `setInputMonitor`（其它屏只显示时钟）、12/24 小时制、`extras/install.sh` 加启动器/菜单入口，以及 **Plymouth 开机画面**（仓库 `plymouth/`，本机 `/etc/systemd/system/omarchy-lock-explorer-boot.{path,service}` **不存在** → 开机画面没启用）。
+- **它**不能**当 display manager（登录界面）。** 三条：①`ext-session-lock-v1` 要求"先有会话再拿锁"，DM 反过来要在会话之前运行并负责**启动**会话；②它是 Quickshell 插件（`kinds: service/overlay`），由**用户会话内**的壳层加载，登录前不存在；greeter 由 greetd 以 `greeter` 用户拉起（dms-greeter 还自带一个 `DMS_RUN_GREETER=1` 的 niri 实例）；③PAM 服务不同（锁用 `omarchy-lock-*`，greeter 用 `/etc/pam.d/greetd`）。它离 DM 最近的地方只是 **Plymouth 开机画面**——那是开机，不是登录。
+- **想摆脱 dms-greeter** 的正路：上游 Omarchy 自带的 **SDDM** 主题（`default/sddm/{hyprland.lua,omarchy/metadata.desktop}`；本机当前登录链走 greetd），或 greetd 的 `tuigreet` / `regreet` / `gtkgreet`（extra）。
+- **迁移**：插件本体在 `plugins/` 下（9.4M，随 `~/.config/omarchy` 一起走）；每账户状态 = `shell.json` 的插件条目（本机 `design: "split"`）+ `lock-videos/`（软链）+ `lock-designs/`；`omarchy-lock-fido2` / `omarchy-lock-face` 若要启用需在新账户（同一台机只需一次，`/etc` 全机共享）重跑对应脚本。
