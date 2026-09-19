@@ -1837,3 +1837,10 @@ Omarchy 的锁层从 `hyprctl -j monitors` 读两个字段，shim 之前都在�
 
 **遗留（未动用户配置）**：`binds.kdl:21` 仍是 niri 默认的 `Super+Alt+L { spawn "swaylock"; }`，而 swaylock **根本没装** —— 那个键是死的。想用的话改成 `spawn-sh "omarchy-system-lock"`，或直接删掉这行。
 
+### §11.21 打包决策：只给 `split-greeter` 做 PKGBUILD，且等迁移之后（2026-09-19）
+
+- **要**：`split-greeter` = `/etc/greetd/split-greeter` + `split-greeter{, -sync}` 二进制 + `greeter` 用户/目录 + pkexec 助手 → 正是 pacman 的对象（卸载干净、依赖声明、升级有版本）。落地要点：二进制装 **`/usr/bin` 而不是 `/usr/local`**（`/usr/local` 不归包）；`depends=(quickshell greetd)`、`optdepends=(howdy)`；`build()` 里跑 `vendor.py`；`install.sh` 里建用户/建目录那部分搬进 `.install`；**仍然不碰** `/etc/greetd/config.toml`。
+- **不要**：`split-lock`（它在 `~/.config/omarchy/plugins/`，用户级；它自己的包管理器就是 `omarchy plugin`）；port 本身（patch + 每用户配置层，家目录文件不归 pacman —— 迁移方式本来就是整目录 cp）。
+- **顺序**：等迁到主账户、`install.sh` 那条路径稳定之后再做，否则要同时维护两条装法。
+- 动机案例：卸 DMS 时 `-Rs` 差点把 quickshell 一起删 —— "文件归属不清"正是 pacman 要解决的问题。
+
