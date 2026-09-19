@@ -1356,7 +1356,11 @@ pkexec ~/.local/share/omarchy/bin/omarchy-apply-lock     # 或 sudo omarchy-appl
   `/etc/pam.d/omarchy-lock-password` 不存在，`lock()` 直接返回 `missing-pam`（stock 与第三方插件同款门禁）；
   `pkexec omarchy-apply-lock` 补上后 `lock status` 的 `passwordPam` = `true`；顺带删掉被上游 `grep -qi finger`
   误判生成的 `omarchy-lock-fingerprint`，并排除 dms-greeter（它只写 `/etc/pam.d/greetd`）（见 §8.18）。
-- [ ] Omarchy 锁屏（`Mod+Ctrl+L`）在 niri 上**真人**实测：锁上 → 输密码解锁（PAM 文件已就位，未按过键）。
+- [x] Omarchy 锁屏（`Mod+Ctrl+L`）在 niri 上**真人**实测（2026-09-19）：按下即锁、输密码即解锁；且此时锁屏已经换成自研 `yvonne.split-lock`（§11.18–§11.20），日志 `lock-requested → screen-stabilizing → secure=true → unlocked`。
+- [ ] **锁屏与登录界面的账户切换统一用头像**（2026-09-19 用户提出）：
+  - 登录界面 `split-greeter`：账户选择器以**头像为主体**（一行头像、选中高亮），用户名降为次要信息；头像沿用 `/var/lib/AccountsService/icons/<user>`，缺省首字母圆牌。
+  - 锁屏 `split-lock`：现在是单账户（只解当前会话）。要支持"切到别的账户"，除了头像选择器，还得把会话交回 greetd —— 锁的 PAM 服务 `/etc/pam.d/omarchy-lock-password` 只认当前登录用户，跨账户必然要重走一次登录会话。
+  - 两处共用一个头像组件；配色/壁纸跟着选中账户走的那套逻辑（greeter 已实现）复用。
 - [ ] 真实跑一次 `omarchy update`，确认上游变更时覆盖层自动重放或明确报冲突。**2026-09-19 部分验证**：手动走了等价的 `git merge --ff-only` 路径（§8.13，上游只改到我们 patch 内文件的"其他区域"），重放幂等成立；官方脚本本身仍没跑过（它要 sudo + snapper 快照 + 包升级）。
 - [x] **logout/reboot/shutdown** 统一标准化：`~/bin/omarchy-niri-system` 单一入口（logout→niri quit、reboot/shutdown→logind D-Bus `Manager.Reboot/PowerOff`；`loginctl` 无该 verb 是本 bug，已改；`pkcheck` 免密 exit 0 验证）。
 - [x] **电源 profile**：`~/bin/omarchy-powerprofiles-list` 返回 3 个 profile、active 标记正确；set 经 TLP D-Bus 生效（异步应用，恢复为 power-saver）。
@@ -1525,7 +1529,7 @@ omarchy-migrate --pending          # 应为空
 ~/bin/hyprctl -j monitors | jq -r '.[0].scale'
 ```
 
-外加人工确认：bar 三件套（胶囊工作区 / Arch logo / 浮栏）、输入源徽章 `rime ⇄ keyboard-us`、媒体键 OSD、亮度条（`video` 组生效）、`omarchy theme bg next` 能触发 materal 取色、**真人按一次 `Mod+Ctrl+L` 锁屏并解锁**（§9 里尚未打勾的那条）。
+外加人工确认：bar 三件套（胶囊工作区 / Arch logo / 浮栏）、输入源徽章 `rime ⇄ keyboard-us`、媒体键 OSD、亮度条（`video` 组生效）、`omarchy theme bg next` 能触发 materal 取色、**真人按一次 `Mod+Ctrl+L` 锁屏并解锁**（✅ 2026-09-19 已完成，见 §11.20）。
 
 ### 11.9 回滚
 
