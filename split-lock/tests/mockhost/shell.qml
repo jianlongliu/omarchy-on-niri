@@ -1,10 +1,10 @@
 // Mock host for the Split lock view: it reproduces exactly what Omarchy's own
-// lock service does (Service.qml:306-323) — property bindings plus all four
-// handlers the service connects (passwordTextEdited / submitPassword /
-// clearFailureRequested / wakeRequested) — and then asserts the wires. Run it
-// through tests/state.sh, which assembles a temp tree with symlinks for
-// qs.Commons and qs.Ui (in production the shell provides those modules;
-// standalone they must be resolvable by name).
+// lock service does (Service.qml:306-323) — property bindings plus every
+// handler the service connects (passwordTextEdited / submitPassword /
+// clearFailureRequested / wakeRequested / faceRequested) — and then asserts the
+// wires. Run it through tests/state.sh, which assembles a temp tree with
+// symlinks for qs.Commons and qs.Ui (in production the shell provides those
+// modules; standalone they must be resolvable by name).
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
@@ -28,6 +28,12 @@ ShellRoot {
   property bool woke: false
   property int checks: 0
   property int failures: 0
+  // PORT (split-lock): the two things this port adds to the host.
+  property bool faceConfigured: false
+  property string avatarPath: ""
+  property int avatarVersion: 0
+  property string hintOverride: ""
+  property int faceRequests: 0
 
   function check(name, got, want) {
     root.checks++
@@ -37,6 +43,19 @@ ShellRoot {
       root.failures++
       console.warn("lockhost: FAIL " + name + " got '" + got + "' want '" + want + "'")
     }
+  }
+
+  // The design's hint line has an objectName (Split.qml) so the wording can be
+  // asserted without a screenshot.
+  function findChild(item, name) {
+    var kids = item ? item.children : null
+    for (var i = 0; kids && i < kids.length; i++) {
+      var kid = kids[i]
+      if (kid.objectName === name) return kid
+      var deeper = root.findChild(kid, name)
+      if (deeper) return deeper
+    }
+    return null
   }
 
   // A plain Rectangle, not the Service's PanelWindow: instantiating a layer-shell
@@ -63,12 +82,18 @@ ShellRoot {
       displaysBlank: false
       powerSaverActive: false
       passwordText: root.enteredPassword
+      // PORT (split-lock): the bindings the service added alongside the above.
+      faceConfigured: root.faceConfigured
+      avatarPath: root.avatarPath
+      avatarVersion: root.avatarVersion
+      hintOverride: root.hintOverride
 
       // The service's handlers, verbatim (Service.qml:321-324).
       onPasswordTextEdited: function(password) { root.enteredPassword = password }
       onSubmitPassword: function(password) { root.submitted = password }
       onClearFailureRequested: root.failureMessage = ""
       onWakeRequested: root.woke = true
+      onFaceRequested: root.faceRequests++
     }
   }
 
@@ -113,6 +138,30 @@ ShellRoot {
       // 8. Waking goes back out too (the service unblanks the outputs on it).
       lockView.wakeRequested()
       root.check("wake reaches host", root.woke, true)
+
+      // 9-14. PORT (split-lock): the face and avatar wiring, which is what this
+      // port adds to the service. Same rule as §11.13/§11.14: drive what the
+      // *design* emits, never the host's own helper.
+      root.faceConfigured = true
+      root.check("face flag reaches view", lockView.faceConfigured, true)
+
+      root.avatarPath = "/tmp/mock-avatar.png"
+      root.check("avatar resolves to a file url", lockView.avatarUrl, "file:///tmp/mock-avatar.png?v=0")
+      root.avatarVersion = 3
+      root.check("avatar version busts the cache", lockView.avatarUrl, "file:///tmp/mock-avatar.png?v=3")
+
+      // Enter on an empty field is the design's own "scan me" gesture
+      // (LockInput.onAccepted -> faceRequested), not a host call.
+      root.failedAttempts = 0
+      root.enteredPassword = ""
+      lockView.inputItem.accepted()
+      root.check("empty Enter asks for a face scan", root.faceRequests, 1)
+
+      var hint = root.findChild(lockView, "lockHint")
+      root.check("hint offers face unlock", hint ? hint.text.indexOf("Press Enter for face unlock") >= 0 : "<no lockHint>", true)
+
+      root.hintOverride = "Look at the camera…"
+      root.check("host hint wins while scanning", hint ? hint.text : "<no lockHint>", "Look at the camera…")
 
       console.warn("lockhost: RESULT checks=" + root.checks + " failures=" + root.failures)
       Qt.exit(root.failures === 0 ? 0 : 1)

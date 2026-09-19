@@ -70,12 +70,29 @@ DesignBase {
       spacing: 22
 
       Avatar {
+        id: avatarBadge
         lock: lock
         width: 84
         fontSize: Math.round(Style.font.baseSize * 3)
         borderWidth: 3
-        borderColor: lock.withAlpha(Color.lock.text, 0.25)
+        // greeter patch: the avatar is the account switcher now. The ring
+        // brightens on hover so it reads as a control, not a picture.
+        borderColor: lock.avatarClickable && avatarHover.hovered
+          ? lock.withAlpha(Color.lock.borderActive, 0.9)
+          : lock.withAlpha(Color.lock.text, 0.25)
         shadow: false
+
+        HoverHandler {
+          id: avatarHover
+          enabled: lock.avatarClickable
+        }
+
+        MouseArea {
+          anchors.fill: parent
+          enabled: lock.avatarClickable
+          cursorShape: Qt.PointingHandCursor
+          onClicked: lock.avatarClicked()
+        }
       }
 
       Column {
@@ -107,9 +124,14 @@ DesignBase {
 
       Text {
         opacity: lock.snapshotMode ? 0 : 1
+        // greeter patch: the face hint is a whole sentence ("...or just type
+        // your password") and the panel is only ~323px wide inside its margins,
+        // so without this its tail is clipped by the panel.
+        objectName: "lockHint"
+        width: lock.fieldWidth
+        wrapMode: Text.WordWrap
         text: lock.failedAttempts > 0
           ? lock.failedAttempts + " failed " + (lock.failedAttempts === 1 ? "attempt" : "attempts")
-          // greeter patch: this is a login screen, not the lock screen.
           // greeter patch: login, not unlock; and the host can take the line
           // over (face scan running, PAM talking).
           : (lock.hintOverride.length > 0 ? lock.hintOverride

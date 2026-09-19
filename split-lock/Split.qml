@@ -106,14 +106,25 @@ DesignBase {
       }
 
       Text {
+        objectName: "lockHint"
         opacity: lock.snapshotMode ? 0 : 1
+        // The face line is a whole sentence and the panel is only ~323px wide
+        // inside its margins, so without this its tail ("...your password") is
+        // cut off by the panel's clip.
+        width: lock.fieldWidth
+        wrapMode: Text.WordWrap
         text: lock.failedAttempts > 0
           ? lock.failedAttempts + " failed " + (lock.failedAttempts === 1 ? "attempt" : "attempts")
-          // greeter patch: this is a login screen, not the lock screen.
-          // greeter patch: login, not unlock; and the host can take the line
-          // over (face scan running, PAM talking).
+          // The host takes the line over while a scan runs ("Look at the
+          // camera…") and for a moment after a miss, so its text wins.
+          // Wording is the lock screen's: this is not the greeter. (The line
+          // inherited the greeter's "log in" here; see the port docs.)
           : (lock.hintOverride.length > 0 ? lock.hintOverride
-            : (lock.fingerprintConfigured ? "󰆠  Touch the sensor or press Enter" : "Press Enter to log in"))
+            : (lock.faceConfigured
+              ? (lock.fingerprintConfigured
+                ? "󰱻  Press Enter for face unlock, or touch the sensor"
+                : "󰱻  Press Enter for face unlock, or type your password")
+              : (lock.fingerprintConfigured ? "󰆠  Touch the sensor or press Enter" : "Press Enter to unlock")))
         color: lock.failedAttempts > 0 ? Color.lock.textError : lock.withAlpha(Color.lock.text, 0.55)
         font.family: Style.font.family
         font.pixelSize: Style.font.bodySmall

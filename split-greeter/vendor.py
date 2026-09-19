@@ -46,7 +46,72 @@ HINT_PATCH = '''          // greeter patch: login, not unlock; and the host can 
           : (lock.hintOverride.length > 0 ? lock.hintOverride
             : (lock.fingerprintConfigured ? "\U000f01a0  Touch the sensor or press Enter" : "Press Enter to log in"))'''
 
+# The face hint is a whole sentence ("...or just type your password") and the
+# panel is only ~323px wide inside its margins, so the line has to wrap -- the
+# panel clips, and the tail was simply cut off.
+HINT_WRAP_OLD = '''      Text {
+        opacity: lock.snapshotMode ? 0 : 1
+        text: lock.failedAttempts > 0'''
+
+HINT_WRAP_NEW = '''      Text {
+        opacity: lock.snapshotMode ? 0 : 1
+        // greeter patch: the face hint is a whole sentence ("...or just type
+        // your password") and the panel is only ~323px wide inside its margins,
+        // so without this its tail is clipped by the panel.
+        objectName: "lockHint"
+        width: lock.fieldWidth
+        wrapMode: Text.WordWrap
+        text: lock.failedAttempts > 0'''
+
+# The design's own avatar becomes the account switcher; the host opts in with
+# avatarClickable = true (shell.qml does), so a design instance that is only
+# scenery -- the lock screen -- keeps a plain picture.
+AVATAR_OLD = '''      Avatar {
+        lock: lock
+        width: 84
+        fontSize: Math.round(Style.font.baseSize * 3)
+        borderWidth: 3
+        borderColor: lock.withAlpha(Color.lock.text, 0.25)
+        shadow: false
+      }'''
+
+AVATAR_NEW = '''      Avatar {
+        id: avatarBadge
+        lock: lock
+        width: 84
+        fontSize: Math.round(Style.font.baseSize * 3)
+        borderWidth: 3
+        // greeter patch: the avatar is the account switcher now. The ring
+        // brightens on hover so it reads as a control, not a picture.
+        borderColor: lock.avatarClickable && avatarHover.hovered
+          ? lock.withAlpha(Color.lock.borderActive, 0.9)
+          : lock.withAlpha(Color.lock.text, 0.25)
+        shadow: false
+
+        HoverHandler {
+          id: avatarHover
+          enabled: lock.avatarClickable
+        }
+
+        MouseArea {
+          anchors.fill: parent
+          enabled: lock.avatarClickable
+          cursorShape: Qt.PointingHandCursor
+          onClicked: lock.avatarClicked()
+        }
+      }'''
+
 PATCHES = [
+    ("designs/PasswordField.qml", [
+        (
+            '''    anchors.leftMargin: field.borderLeft + field.sidePadding + Math.max(field.fingerprintReserve, field.glyphReserve)''',
+            '''    // greeter patch: the left inset only has to clear the lock glyph. Upstream
+    // used max() of both reserves, which borrowed the right-hand icons' width
+    // (eye + face) for the left side and pushed the text ~65px right of the
+    // box's own padding.
+    anchors.leftMargin: field.borderLeft + field.sidePadding + field.glyphReserve''',
+        ),
+    ]),
     ("designs/DesignBase.qml", [
         (
             '  readonly property string userName: Quickshell.env("USER") || Quickshell.env("LOGNAME") || "user"',
@@ -66,6 +131,20 @@ PATCHES = [
 
   property Item inputItem: null''',
         ),
+        (
+            '''  // greeter patch: host-supplied replacement for the design's own hint line
+  // (e.g. "look at the camera" while a face scan runs).
+  property string hintOverride: ""''',
+            '''  // greeter patch: host hook that turns the panel's avatar into a control. The
+  // account picker hangs off it now; the corner chip that used to do the job
+  // was easy to miss, and the avatar is already the thing that says who you are.
+  property bool avatarClickable: false
+  signal avatarClicked()
+
+  // greeter patch: host-supplied replacement for the design's own hint line
+  // (e.g. "look at the camera" while a face scan runs).
+  property string hintOverride: ""''',
+        ),
     ]),
     ("designs/Split.qml", [
         (
@@ -76,6 +155,8 @@ PATCHES = [
             '          : (lock.fingerprintConfigured ? "\U000f01a0  Touch the sensor or press Enter" : "Press Enter to log in")',
             HINT_PATCH,
         ),
+        (HINT_WRAP_OLD, HINT_WRAP_NEW),
+        (AVATAR_OLD, AVATAR_NEW),
     ]),
     ("Commons/Color.qml", [
         (

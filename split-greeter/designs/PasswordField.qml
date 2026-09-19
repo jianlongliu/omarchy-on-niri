@@ -93,7 +93,11 @@ BorderSurface {
     anchors.fill: parent
     anchors.topMargin: field.borderTop
     anchors.bottomMargin: field.borderBottom
-    anchors.leftMargin: field.borderLeft + field.sidePadding + Math.max(field.fingerprintReserve, field.glyphReserve)
+    // greeter patch: the left inset only has to clear the lock glyph. Upstream
+    // used max() of both reserves, which borrowed the right-hand icons' width
+    // (eye + face) for the left side and pushed the text ~65px right of the
+    // box's own padding.
+    anchors.leftMargin: field.borderLeft + field.sidePadding + field.glyphReserve
     anchors.rightMargin: field.borderRight + field.sidePadding + Math.max(field.fingerprintReserve, field.glyphReserve)
     verticalAlignment: TextInput.AlignVCenter
     horizontalAlignment: field.textAlignment

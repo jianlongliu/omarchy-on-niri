@@ -1822,7 +1822,7 @@ greetd 重拉 greeter 时，新实例的脸扫**命中**了 → greetd 立刻又
 
 stock 的锁 Service 用**文件名**实例化 `LockView { ... }`（`reference/Service.qml` 约 304-323 行），而 Split / `DesignBase` 的属性和信号与 stock 视图**同名同形**（`submitPassword` / `clearFailureRequested`）——所以把自己的包装命名为 `LockView.qml` 本身就是适配，不需要重构，也不需要第二个视图。
 
-**离线契约测试**：`cd split-lock && ./tests/state.sh` —— 8 项、三轮稳定、全程 offscreen（不碰活会话、不锁屏）。它拼一个一次性 qs 工程（`Commons`/`Ui` 软链 + 平铺的 `.qml`），跑一个照抄 Service 绑定的 mock host，双向断言：视图能实例化、host→view 推送、view→host 的 `passwordTextEdited` / `submitPassword` / 失败回传 / 清除，以及 `clearFailureRequested` 能出去。qs 日志留在 `/tmp/split-lock-state.log`。
+**离线契约测试**：`cd split-lock && ./tests/state.sh` —— 现 15 项（原 8 项 + §11.23 的人脸/头像 7 项），三轮稳定、全程 offscreen（不碰活会话、不锁屏）。它拼一个一次性 qs 工程（`Commons`/`Ui` 软链 + 平铺的 `.qml`），跑一个照抄 Service 绑定的 mock host，双向断言：视图能实例化、host→view 推送、view→host 的 `passwordTextEdited` / `submitPassword` / 失败回传 / 清除，`clearFailureRequested` 能出去，以及人脸/头像那几条。qs 日志留在 `/tmp/split-lock-state.log`。
 
 **两个踩过的坑（都已写进代码注释）**：
 
@@ -1846,7 +1846,7 @@ Omarchy 的锁层从 `hyprctl -j monitors` 读两个字段，shim 之前都在�
 
 ### §11.18 自研锁屏装成插件：`yvonne.split-lock`（2026-09-19）
 
-**形态**：不魔改 omarchy 的任何文件，而是把锁做成 `~/.config/omarchy/plugins/yvonne.split-lock/`，manifest 里声明 `"omarchy": {"clonedFrom": "omarchy.lock"}`（与第三方 explorer 插件同款机制）。锁是 `service` 类插件，shell **按文件名**从插件自己的目录实例化 `LockView { }` —— 所以插件目录里放 `Service.qml`（**上游锁服务的逐字节副本**，md5 `a2f85612…`，`install.sh` 会检测上游漂移）+ 我们的 `LockView.qml` + 平铺的 Split 设计文件，**这就是全部改动**。stock 插件目录本来也只有三个文件（`manifest.json`/`Service.qml`/`LockView.qml`），换掉 `LockView` 就等于换锁。
+**形态**：不魔改 omarchy 的任何文件，而是把锁做成 `~/.config/omarchy/plugins/yvonne.split-lock/`，manifest 里声明 `"omarchy": {"clonedFrom": "omarchy.lock"}`（与第三方 explorer 插件同款机制）。锁是 `service` 类插件，shell **按文件名**从插件自己的目录实例化 `LockView { }` —— 所以插件目录里放 `Service.qml`（上游锁服务 + 我们的人脸/头像增量，每个块都标 `PORT (split-lock)`；§11.23 起**不再是逐字节副本**）+ 我们的 `LockView.qml` + 平铺的 Split 设计文件，**这就是全部改动**。stock 插件目录本来也只有三个文件（`manifest.json`/`Service.qml`/`LockView.qml`），换掉 `LockView` 就等于换锁。`install.sh` 现在拿**两个** md5 把关：`UPSTREAM_SERVICE_MD5`（上游漂移检测，上游一改就提醒把我们的增量重新落一遍）与 `EXPECTED_SERVICE_MD5`（我们自己那份，防手滑改坏）。
 
 **装法**（`split-lock/install.sh`）：
 
@@ -1859,7 +1859,7 @@ Omarchy 的锁层从 `hyprctl -j monitors` 读两个字段，shim 之前都在�
 
 **退路（已核实存在）**：锁的 IPC 只有 `lock` / `isLocked` / `status` / `preview` / `hidePreview` —— **没有 `unlock`**；`omarchy-restart-shell` 在锁定时会**拒绝重启**（这是刻意设计）。真正的退路是 ext-session-lock 的协议本意：**杀掉锁客户端就等于放锁** —— 切 VT（Ctrl+Alt+F2..F6）登录，`systemctl --user restart omarchy-shell`。
 
-**证据边界**：离线契约测试（8 项具名断言）证明的是**属性/信号接线**；`Service.qml` 在真实会话里跑起来（PAM、锁面、真实按键）要等**用户自己锁一次**才算证实。PAM 前提 `/etc/pam.d/omarchy-lock-password` 已在（否则 `lock()` 直接返回 `missing-pam`）。
+**证据边界**：离线契约测试（15 项具名断言）证明的是**属性/信号接线**；`Service.qml` 在真实会话里跑起来（PAM、锁面、真实按键）要等**用户自己锁一次**才算证实。PAM 前提 `/etc/pam.d/omarchy-lock-password` 已在（否则 `lock()` 直接返回 `missing-pam`）。
 
 ### §11.19 换锁**必须重启 shell**（keepLoaded 的 handler 竞争，2026-09-19）
 
@@ -1908,4 +1908,61 @@ Omarchy 的锁层从 `hyprctl -j monitors` 读两个字段，shim 之前都在�
 **真机复测（2026-09-19，用户）**：修完并装到 `/etc/greetd/split-greeter` 后注销重登，**一次输密码直接进** —— 通过。
 
 **教训**：夹具必须和真东西一样严格。"测试绿 + 真机不工作"这种组合，八成是夹具比现实宽松（§11.13 是同一个病的另一个症状：当时自测直接调 `submitPassword()`，跳过了真正的接线）。
+
+### §11.23 锁屏补上人脸（howdy）与头像（2026-09-20，用户指定）
+
+**用户原话**：「锁屏加上 howdy 和用户头像」。两条缺口在早期勘察里就写明了：`/etc/pam.d/omarchy-lock-password` 里没有 howdy 行；插件 `DesignBase.qml` 的 `faceConfigured` 写死 `false`、`avatarUrl` 没人喂（不读 accountsservice）。
+
+**人脸 = 回车触发，不是自动扫脸。** 本机实测单次 howdy **5~7 秒**：每次都要重新加载 38MB 的 SFace ONNX 模型（命中约 5s；未命中约 7s，`timeout=3` 之后 `compare.py` exit 11）。连续重试 = 相机 + 一个 python 进程常开，而且"人从镜头前走过就解锁"—— 用户 2026-09-19 已在 greeter 上定过同一条规则（§11.14），这里照办。
+
+**人脸走独立 PAM 服务，不塞进密码栈。** `/etc/pam.d/omarchy-lock-face` = `ir-light`(optional) → `pam_python.so /lib/security/howdy/pam.py`(required) → `account include system-local-login`，模块顺序照抄 `/etc/pam.d/greetd`（`ir-light` 点亮 IR 灯，防"image too dark"）。理由：howdy 在相机被占/没模型时**没有客户端超时**，塞进 `omarchy-lock-password` 就可能连"打密码"这条唯一后路一起拖住（§11.12 正是这个病）。独立服务失败只损失人脸路径。
+
+- 生成器：`split-lock/face-pam.sh`（`sudo ./face-pam.sh`；`--remove` 回滚；`--dry-run` 预览）。**不碰** `omarchy-apply-lock`（上游脚本，`omarchy update` 会覆盖）——它只重写 password/fingerprint 两个文件，不会动我们这个。
+- `install.sh` 只**报告**它在不在：不在就 `faceConfigured` 探针为 false、人脸入口自己藏起来，锁照常能用（装了 howdy 但没 enroll 的机器也一样）。
+- 探针（Service.qml 里一句 `bash -c`）：PAM 文件 + `/lib/security/howdy/pam.py` + **本账户的模型** `/lib/security/howdy/models/$USER.dat` 三样齐才 `faceConfigured=true`。⚠ howdy 的模型与 `config.ini` 都在 **`/usr/lib/security/howdy/`**（`compare.py` 用 `dirname(__file__)` 定位）；`/etc/howdy/config.ini` 是一份陈旧副本，别去改那个。
+- 交互：空输入框回车 → 扫描（设计里 `LockInput.onAccepted` 本来就有这条分支，**宿主从前没接**）→ 提示行变 "Look at the camera…"；命中即解锁；未命中 → 提示行 4 秒 "Face not recognized"，**不自动重试**；**一开始打字就 abort 扫脸**（打字 = 密码路径，不跟相机抢同一次解锁）。扫脸期间密码框照常可用。
+- 头像：探测链 `~/.config/omarchy/lock-avatar.{png,jpg,jpeg,webp}` → `~/.face` → `~/.face.icon` → `/var/lib/AccountsService/icons/$USER`（最后一条就是本机的账户图片，与 greeter 同源），喂给设计里**本来就存在**的 `Avatar` 组件 —— `Split.qml` 一直画着它，只是从前没人喂 `avatarPath`，所以永远显示首字母圆牌。
+- 文案：提示行改成锁屏的说法（那句 "Press Enter to log in" 是从 greeter 带过来的）。有脸 → `󰱻  Press Enter for face unlock, or type your password`；脸+指纹都有 → 提指纹；都没有 → `Press Enter to unlock`。
+
+**验证（全部不锁会话，2026-09-20 实测通过）**
+
+- **PAM 栈（最强证据）**：`pamtester omarchy-lock-face $USER authenticate` → `successfully authenticated`，howdy 回 `Identified face as jianlongliu`。这条绕开 UI 与锁面，直接证明 `ir-light` → `pam_python`/howdy → 成功这条链是通的。
+  ⚠ `pamtester` **不在官方仓库**（`pacman -S extra/pamtester` → target not found），在 **AUR**：`paru -G pamtester` → `makepkg -f` → `pkexec pacman -U pamtester-0.1.2-4-x86_64.pkg.tar.zst`（本机已装）。
+- `cd split-lock && ./tests/state.sh` → 15 项全过（新增：人脸开关到视图、头像 URL 与版本击穿、**空回车走设计自己的分支**发出 `faceRequested`、提示行文案、`hintOverride` 覆盖）。
+- `omarchy-shell lock preview` + `grim` 截图：右侧面板从上到下 头像（165px 实高）→ 问候 → 用户名 → 密码框 → 提示行全部画出；头像区与 `/var/lib/AccountsService/icons/jianlongliu`（缩到 168×168）**平均像素差 5.6/255**、stddev 66.0 vs 68.9 —— 就是那张账户图片，不是首字母圆牌。
+  （面板内容是 `anchors.verticalCenter` 居中，头像在 `y≈512` 而不是顶部；找头像别按顶部算。）
+- `omarchy-shell lock status` 多报 `face: true` / `faceAuthenticating` / `avatar: /var/lib/AccountsService/icons/jianlongliu`。
+- 真机锁屏按一次回车：**用户自己做**（§11.20 的规矩，不主动锁他的屏）。
+
+**改动落点**：`split-lock/{Service,LockView,Split}.qml`（仓库 → `./install.sh` 装进 `~/.config/omarchy/plugins/yvonne.split-lock/`）、`split-lock/face-pam.sh`、`tests/mockhost/shell.qml` + `tests/state.sh`。`Service.qml` 里所有增量都标了 `PORT (split-lock)`，`install.sh` 用两个 md5 把关（见 §11.18）。**回滚**：`sudo split-lock/face-pam.sh --remove`（人脸入口下次起壳层消失）或整目录删掉。改动前的三个文件备份在 `/var/tmp/lock-pre-face-20260920/`。
+
+**证据边界**：离屏契约测试证明接线；`pamtester` 证明**这条 PAM 栈真能刷脸成功**；`lock status` + 截图证明探针与渲染。**唯一还差的是"在真锁屏上按回车"那一下**——那要用户自己锁（顺带一提：`shell.json` 的 `idle.lock = 300` 会让屏幕 5 分钟自己锁上）。
+
+### §11.24 提示行换行 + 头像改成账户入口（2026-09-20，用户指定）
+
+**用户原话**：「锁屏和登录页的字太长了, 你换个行. 顺便头像切换用户」，随后追问「锁屏不支持多账户吗?」，并在选项里选「去掉 chip」。
+
+**1. 提示行不是难看，是被裁掉了。** 旧的 `lock-preview.png` 量出来：提示行像素一直延伸到 **x=2558**，而右侧面板内右边界只有 **x=2448**，约 110px 的 "…type your password" 被面板 clip 吃掉了。面板内宽 ~646 物理像素（=323 逻辑），提示却是整句 —— 缩短文案只是止血，正解是 `wrapMode: Text.WordWrap` + `width: lock.fieldWidth`，锁与 greeter 两处同改。新截图（`/var/tmp/lock-wrap.png`、`/var/tmp/greeter-shot.png`）都是两行，最右分别到 x=2390 / 2420，**均在 2448 以内**，不再裁切。
+
+**2. 头像 = 账户入口，顶栏 chip 删掉。**（用户选「去掉 chip」）`Avatar` 加 `avatarClickable` 属性 + `avatarClicked()` 信号，`shell.qml` 的 `onAvatarClicked` 切 `picker`。⚠ **点头像只是打开账户选择器，不会把人登出** —— 真正提交要等选中账户后走密码/人脸。顶栏那个 chip 是纯装饰，删掉后没有替代品。
+
+**3. 锁屏为什么不能"切换用户"**（答用户那句追问）：锁**不是登录管理器**。greetd 是**每次登录才 spawn 一个 greeter 进程**，登录完它就退了 —— 锁屏的时候根本没有活着的 greeter 可以切过去，账户切换需要 PAM/会话那一整套。锁上能做的只有"结束当前会话"，那等于替你登出，不是切换。多账户切换只有登录页有。
+
+**4. 测试教训（值得记住的两条）**
+
+- **`activeFocus=true` 是 QML 内部焦点，不等于合成器把键盘给了它。** `enter-triggers-face` 用例偶发失败（全套里失败、单跑通过）就是这原因：wtype 把回车打给了没有键盘焦点的窗口，按键凭空消失。修法：先打一个**探针字符**直到 greeter 报 `password field received input`（证明送达），再 Backspace 清空（空框上 Backspace 是 no-op，且**必须**清空 —— 非空框回车会走密码提交而不是扫脸），最后回车。**断言要证明送达，不能假设送达。**
+- **diag 定时器约每秒重复打印同一行，所以"最后一行"最多是 1 秒前的旧样本。** 两个坑都由此而来：`grep -c 'pickerOpen=true'` 数的是**采样次数**不是打开次数（一次运行数出 12）→ 改成 `grep -o … | uniq | grep -c` 折叠成"打开次数 == 1"；`textLen` 清空那条要**轮询等一个新样本**（直接读 `tail -1` 会因采样时机偶发假失败，实测 `/tmp/greeter-smoke-enter-face.log` 里最后一行确实是 `textLen=0`）。
+- **跑 `smoke.sh` 期间别执行会抢焦点的命令**（`pkexec` 会弹 polkit 认证框）。有一次连跑 10 项失败，就是我在用例进行中并行执行了 `pkexec ./install.sh`，wtype 的键全打给了认证框。测试要独占键盘，跑之前先把手头会弹窗的事停下。
+
+**5. 密码框左边那块空隙（用户 2026-09-20 追加：「密码输入间隙是不是太靠右了?」「故意这么设计的?」）**
+
+先查清楚再答：**对齐是上游自己写的** —— `Split.qml:104` 的 `textAlignment: TextInput.AlignLeft` 第三方原件里就有（我们没改），文字本来就是左对齐，不是居中。看着"太靠右"的真凶是共享组件 `PasswordField.qml` 算输入区内边距时 **左右两边都套了同一个 `Math.max(fingerprintReserve, glyphReserve)`**：左边本来只需要锁图标那点宽度，却被右侧"眼睛 + 人脸"两个图标的宽度顶开。截图量出来文字左边缘离框左边 ~87 逻辑像素 = 内边距 20 + 右侧图标区 ~65，数字正好对上 —— 就是"把右边的宽度借给左边"的偷懒写法，而 `PasswordField.qml` 与上游**逐字节相同**，所以这条是上游原样，不是我们弄坏的。
+
+改法（用户选「收紧左边」）：`anchors.leftMargin` 用 `field.glyphReserve`，右侧维持原样。实测**占位文字左移 78 物理像素**（1974 → 1896），与锁图标之间的空隙从 110px 收到 32px，右侧眼睛/人脸图标**位置分毫未动**（2325..2406 前后一致）。锁定那份标 `PORT (split-lock)`，greeter 那份靠 `vendor.py` 新增的 `designs/PasswordField.qml` 补丁复现（复测：上游原件 + designs 补丁 → 四份设计文件与仓库逐字节一致）。
+
+**改动落点**：`split-lock/Split.qml`（提示行换行）+ `split-lock/PasswordField.qml`（左边内边距；`./install.sh` 装进插件目录，`service` 类插件 `keepLoaded`，**必须 `omarchy-restart-shell` 才生效**）、`split-greeter/designs/{Split,DesignBase,PasswordField}.qml` + `shell.qml` + `SelfTest.qml` + `vendor.py` + `tests/smoke.sh`。greeter 侧已用 `pkexec ./install.sh` 部署到 `/etc/greetd/split-greeter`（该脚本**不碰** `config.toml`，所以不存在把自己锁在外面的风险），部署后比对**与仓库逐字节一致**。
+
+**验证**：`split-lock/tests/state.sh` 15/15；`split-greeter/tests/smoke.sh` 34 项全过（不被打扰连跑两次稳定），再用 `GREETER=/etc/greetd/split-greeter ./tests/smoke.sh` 对**装好的那份**跑过两轮（换行后、内边距后各一轮）同样全过；锁的两张截图（换行后两行、最右 x=2390）与 greeter 截图（两行、最右 x=2420，均 < 面板内右边界 2448）目视 + 像素量测确认；内边距前后对比截图 `/var/tmp/lock-inset.png`（文字段 1974..2119 → 1896..2041，右侧图标段不变）；greeter 右上原 chip 位置整片平坦（mean 87 / stddev 1）。`vendor.py` 的 designs 补丁**可复现性复测**：拿 `/tmp/le/...` 的原始第三方文件只跑 designs 补丁 → `Split.qml`/`DesignBase.qml`/`PasswordField.qml`/`Avatar.qml` 与仓库**逐字节一致**，且二次运行幂等。
+
+**待用户亲自确认**：锁屏真按一次回车（§11.20 的规矩，不主动锁他的屏）、greeter 上点一次头像（点击无法注入：本机没有 ydotool/dotool，wtype 只会打字）。
 

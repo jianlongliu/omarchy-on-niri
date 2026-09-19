@@ -10,6 +10,8 @@ import qs.Commons
 //   GREETER_SELFTEST_PASSWORD=pw        submit that password
 //   GREETER_SELFTEST_OPEN_PICKER=1      only open the account picker
 //   GREETER_SELFTEST_PICK=<user>        open the picker and choose that account
+//   GREETER_SELFTEST_CLICK_AVATAR=1     emit the design's avatarClicked() and
+//                                       stop -- the account switcher's host half
 //   GREETER_SELFTEST_PASSWORD_DELAY_MS  wait this long before submitting, so a
 //                                       test can let the face-scan watchdog fire
 Item {
@@ -21,6 +23,7 @@ Item {
   property int delay: 1200
   property string password: Quickshell.env("GREETER_SELFTEST_PASSWORD") || ""
   property bool openPickerOnly: Quickshell.env("GREETER_SELFTEST_OPEN_PICKER") === "1"
+  property bool clickAvatarOnly: Quickshell.env("GREETER_SELFTEST_CLICK_AVATAR") === "1"
   property string pick: Quickshell.env("GREETER_SELFTEST_PICK") || ""
   property int passwordDelay: Number(Quickshell.env("GREETER_SELFTEST_PASSWORD_DELAY_MS")) || 0
 
@@ -57,6 +60,15 @@ Item {
     interval: self.delay
     running: true
     onTriggered: {
+      if (self.clickAvatarOnly) {
+        // What the design's own MouseArea emits when the account picture is
+        // clicked. A pointer click cannot be injected in this session (no
+        // ydotool), so this covers the host half -- onAvatarClicked -> picker --
+        // which is the half that can go missing silently.
+        console.warn("selftest: clicking the avatar")
+        if (self.target) self.target.avatarClicked()
+        return
+      }
       if (self.pick.length > 0) {
         console.warn("selftest: switching to", self.pick)
         self.picker.picked(self.pick)

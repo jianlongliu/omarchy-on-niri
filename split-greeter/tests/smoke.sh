@@ -42,6 +42,16 @@ check() { # label, got, want
   fi
 }
 
+wait_for_log() { # file, pattern, half-seconds to wait
+  i=0
+  while [ "$i" -lt "$3" ]; do
+    grep -q "$2" "$1" 2>/dev/null && return 0
+    sleep 0.5
+    i=$((i + 1))
+  done
+  return 1
+}
+
 run_case() { # name, mock user, mock flags, selftest env, want started, expect timeout
   name=$1; user=$2; flags=$3; selftest=$4; want_started=$5; use_timeout=${6:-no}
   dir=$(mktemp -d)
@@ -161,13 +171,45 @@ run_enter_face_case() {
   trap 'kill "$mock" 2>/dev/null || true' EXIT
   while [ ! -S "$dir/mock.sock" ]; do sleep 0.1; done
   env HOME="$dir/home" GREETD_SOCK="$dir/mock.sock" GREETER_BRIDGE="$BRIDGE" GREETER_USER=jianlongliu \
-    GREETER_ACCOUNTS_DIR="$ACCOUNTS" GREETER_CORNER_RADIUS=10 GREETER_FACE=1 \
+    GREETER_ACCOUNTS_DIR="$ACCOUNTS" GREETER_CORNER_RADIUS=10 GREETER_FACE=1 GREETER_DEBUG_FOCUS=1 \
     timeout 40 qs -n -p "$GREETER" >"$dir/run.log" 2>&1 &
   greeter=$!
-  sleep 5
+  # wtype types into whatever the compositor has focused, and `activeFocus=true`
+  # in the diag line is QML-internal focus, not the keyboard: a window that has
+  # not been given focus yet swallows the keys and the case would fail over a
+  # race. So prove delivery first -- type a probe character until the greeter
+  # reports input, then clear it again (Backspace on an empty field is a no-op,
+  # and Enter on a non-empty field would submit a password instead of scanning).
+  if wait_for_log "$dir/run.log" 'activeFocus=true' 30; then sleep 1; fi
+  delivered=0
+  tries=0
+  while [ "$tries" -lt 8 ]; do
+    wtype x
+    sleep 1
+    if [ "$(grep -c 'password field received input' "$dir/run.log")" -gt 0 ]; then delivered=1; break; fi
+    tries=$((tries + 1))
+  done
+  if [ "$delivered" = 1 ]; then
+    wtype -k BackSpace
+    # The diag timer samples about once a second, so the newest line can be a
+    # second stale: wait for a fresh sample instead of reading the last one once
+    # (that made this check pass or fail on timing alone).
+    i=0
+    while [ "$i" -lt 12 ]; do
+      [ "$(grep -o 'textLen=[0-9]*' "$dir/run.log" | tail -1)" = "textLen=0" ] && break
+      sleep 0.5
+      i=$((i + 1))
+    done
+  fi
+  check "the field took keys at all (probe character)" "$delivered" 1
+  check "the field is empty again before Enter" \
+    "$(grep -o 'textLen=[0-9]*' "$dir/run.log" | tail -1)" "textLen=0"
   check "nothing scans unasked" "$(grep -c 'starting a passwordless' "$dir/run.log")" 0
   wtype -k Return
-  sleep 4
+  wait_for_log "$dir/run.log" 'starting a passwordless' 20 || true
+  # Give the handoff time to land before pulling the greeter out from under it:
+  # the scan line is logged before greetd answers.
+  wait_for_log "$dir/start.log" 'start_session' 20 || true
   kill "$greeter" 2>/dev/null || true
   kill "$(cat "$dir/mock.pid")" 2>/dev/null || true
   note "-- enter-triggers-face" ""
@@ -179,6 +221,50 @@ run_enter_face_case() {
 }
 
 run_enter_face_case
+
+# The account picture is the switcher now (the corner chip is gone, 2026-09-20).
+# A pointer click cannot be injected here -- no ydotool, and wtype is keyboard
+# only -- so this drives the design's avatarClicked() signal, which is the host
+# half (shell.qml's onAvatarClicked -> picker) and the half that can go missing
+# without anyone noticing. The picker's own state is read back out of the debug
+# timer's pickerOpen= line, so "the signal fired" is not taken as "it opened".
+run_avatar_click_case() {
+  dir=$(mktemp -d)
+  mkdir -p "$dir/home"
+  python3 "$MOCK" --socket "$dir/mock.sock" --user jianlongliu --password hunter2 \
+    --log "$dir/start.log" --pidfile "$dir/mock.pid" --howdy >"$dir/mock.out" 2>&1 &
+  mock=$!
+  trap 'kill "$mock" 2>/dev/null || true' EXIT
+  while [ ! -S "$dir/mock.sock" ]; do sleep 0.1; done
+  set +e
+    env HOME="$dir/home" GREETD_SOCK="$dir/mock.sock" GREETER_BRIDGE="$BRIDGE" GREETER_USER=jianlongliu \
+      GREETER_ACCOUNTS_DIR="$ACCOUNTS" GREETER_CORNER_RADIUS=10 GREETER_FACE=1 \
+      GREETER_DEBUG_FOCUS=1 GREETER_SELFTEST_CLICK_AVATAR=1 \
+      timeout 14 qs -n -p "$GREETER" >"$dir/run.log" 2>&1
+  set -e
+  kill "$(cat "$dir/mock.pid")" 2>/dev/null || true
+  started=0
+  [ -f "$dir/start.log" ] && started=$(grep -c start_session "$dir/start.log")
+  note "-- avatar-opens-picker" ""
+  check "the avatar click reached the host" "$(grep -c 'the avatar was clicked' "$dir/run.log" || true)" 1
+  # The diag timer repeats its line, so counting pickerOpen=true counts samples,
+  # not openings. Collapse runs of equal values first and count the openings.
+  check "the account picker opened" \
+    "$(grep -o 'pickerOpen=[a-z]*' "$dir/run.log" | uniq | grep -c 'pickerOpen=true' || true)" 1
+  check "the picker took the keyboard" \
+    "$(grep -o 'pickerFocus=[a-z]*' "$dir/run.log" | uniq | grep -c 'pickerFocus=true' || true)" 1
+  check "no session handed to greetd" "$started" 0
+  if grep -q ' ERROR' "$dir/run.log"; then
+    check "no QML errors" "$(grep -m1 ' ERROR' "$dir/run.log")" ""
+  else
+    note "no QML errors" ok
+  fi
+  cp "$dir/run.log" "/tmp/greeter-smoke-avatar.log" 2>/dev/null || true
+  rm -rf "$dir"
+}
+
+run_avatar_click_case
+
 run_key_case "typed-password" password
 run_key_case "typed-switch"    switch
 

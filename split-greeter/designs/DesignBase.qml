@@ -91,6 +91,12 @@ Item {
   // disappears entirely. That capture becomes the splash for reboot/shutdown
   // and for stretches of boot with no prompt up, where a box is dead chrome.
   property bool snapshotBare: false
+  // greeter patch: host hook that turns the panel's avatar into a control. The
+  // account picker hangs off it now; the corner chip that used to do the job
+  // was easy to miss, and the avatar is already the thing that says who you are.
+  property bool avatarClickable: false
+  signal avatarClicked()
+
   // greeter patch: host-supplied replacement for the design's own hint line
   // (e.g. "look at the camera" while a face scan runs).
   property string hintOverride: ""

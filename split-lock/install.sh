@@ -3,9 +3,14 @@
 #
 # The lock is a "service" plugin, and the shell instantiates `LockView { }` by
 # **filename** out of the plugin's own directory. So the swap is: ship
-# omarchy's lock service verbatim (Service.qml) plus our LockView.qml and the
-# Split design files flat next to it. Nothing in omarchy's tree is touched, and
-# no third-party lock plugin is needed.
+# omarchy's lock service plus our LockView.qml and the Split design files flat
+# next to it. Nothing in omarchy's tree is touched, and no third-party lock
+# plugin is needed. Service.qml is that same service with our own face/avatar
+# blocks in it (marked `PORT (split-lock)`), not a verbatim copy.
+#
+# Face unlock needs one root-side file as well -- /etc/pam.d/omarchy-lock-face,
+# written by face-pam.sh. Without it the plugin still installs and simply keeps
+# the face affordance hidden.
 #
 #   ./install.sh              install, then disable the third-party lock plugin
 #   ./install.sh --stage      install but leave it disabled, so the lock in use
@@ -16,6 +21,7 @@
 #   rm -rf ~/.config/omarchy/plugins/yvonne.split-lock
 #   omarchy plugin enable io.github.sirjul1337.lock-explorer
 #   omarchy-restart-shell
+# and, only if you want face auth gone too: sudo ./face-pam.sh --remove
 #
 # If the session ever locks with nothing on screen, the way out is a text
 # console: switch VT, log in, `systemctl --user restart omarchy-shell`. Killing
@@ -30,11 +36,16 @@ DEST="$HOME/.config/omarchy/plugins/$PLUGIN_ID"
 OMARCHY=${OMARCHY_PATH:-"$HOME/.local/share/omarchy"}
 SOURCE_SERVICE="$OMARCHY/shell/plugins/lock/Service.qml"
 LOCK_PAM=/etc/pam.d/omarchy-lock-password
+FACE_PAM=/etc/pam.d/omarchy-lock-face
 
-# Service.qml is a verbatim copy of upstream's lock service, the one file that
-# has to live in the same directory as LockView.qml. If upstream changes it,
-# ours is stale and this hash says so.
-EXPECTED_SERVICE_MD5=a2f85612e11c7e2c39cdab0a43e8d9a0
+# Service.qml is upstream's lock service plus this port's own delta: the face
+# probe/PAM flow and the avatar probe (every block is marked `PORT (split-lock)`).
+# UPSTREAM_SERVICE_MD5 is the drift detector -- if upstream's file no longer
+# hashes to it, our delta was written against an older service and wants a
+# re-read of both. EXPECTED_SERVICE_MD5 is our own file, so an accidental edit
+# to the installed copy gets caught too.
+UPSTREAM_SERVICE_MD5=a2f85612e11c7e2c39cdab0a43e8d9a0
+EXPECTED_SERVICE_MD5=fbf03b5a5d1ea4c23447d50de62ff0f9
 
 dry=0
 stage=0
@@ -67,17 +78,35 @@ else
   say "           Run: pkexec $OMARCHY/bin/omarchy-apply-lock"
 fi
 
+if [[ -f $FACE_PAM ]]; then
+  say "  face pam service present: $FACE_PAM"
+else
+  say "  NOTE: no $FACE_PAM, so the lock just hides its face affordance."
+  say "        Run: sudo $HERE/face-pam.sh"
+fi
+
 if [[ -f $SOURCE_SERVICE ]]; then
   actual=$(md5sum "$SOURCE_SERVICE" | cut -d' ' -f1)
-  if [[ $actual == "$EXPECTED_SERVICE_MD5" ]]; then
-    say "  Service.qml copy is current (matches upstream $EXPECTED_SERVICE_MD5)"
+  if [[ $actual == "$UPSTREAM_SERVICE_MD5" ]]; then
+    say "  our delta is against current upstream ($UPSTREAM_SERVICE_MD5)"
   else
-    say "  WARNING: upstream Service.qml changed (ours $EXPECTED_SERVICE_MD5,"
-    say "           upstream $actual). Re-copy it and re-run the contract test:"
-    say "           cp '$SOURCE_SERVICE' '$HERE/Service.qml' && (cd '$HERE' && ./tests/state.sh)"
+    say "  WARNING: upstream Service.qml changed (delta built against"
+    say "           $UPSTREAM_SERVICE_MD5, upstream $actual). Re-read our"
+    say "           PORT (split-lock) blocks onto the new file:"
+    say "           diff '$SOURCE_SERVICE' '$HERE/Service.qml'"
   fi
 else
   say "  WARNING: no upstream lock service at $SOURCE_SERVICE, is omarchy installed?"
+fi
+
+ours=$(md5sum "$HERE/Service.qml" | cut -d' ' -f1)
+if [[ $ours == "$EXPECTED_SERVICE_MD5" ]]; then
+  say "  our Service.qml is the reviewed one ($EXPECTED_SERVICE_MD5)"
+else
+  say "  WARNING: our Service.qml is not the reviewed one (expected"
+  say "           $EXPECTED_SERVICE_MD5, got $ours). Re-run the contract test"
+  say "           and update the hash once the change is reviewed:"
+  say "           (cd '$HERE' && ./tests/state.sh)"
 fi
 
 say "== install -> $DEST"
@@ -115,8 +144,10 @@ say "loaded once (keepLoaded): the lock that is live now stays live, so enabling
 say "this one silently loses the handler race. Restart the shell to finish:"
 say "  omarchy-restart-shell"
 say
-say "Then test it yourself: lock the session, unlock with your password, and"
-say "press Enter on an empty field for face unlock. Rollback is in the header."
+say "Then test it yourself: lock the session and unlock with your password,"
+say "with the fingerprint line, and with Enter on an empty field (face)."
+say "The avatar comes from the account picture; lock preview shows both without"
+say "locking anything: omarchy-shell lock preview"
 say
 say "If it ever locks with a black screen, that is recoverable: switch VT"
 say "(Ctrl+Alt+F2..F6), log in, and run: systemctl --user restart omarchy-shell"

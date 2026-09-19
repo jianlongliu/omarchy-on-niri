@@ -22,6 +22,20 @@ Item {
   property bool fingerprintAuthenticating: false
   property bool passwordPamConfigured: false
   property bool fingerprintConfigured: false
+  // PORT (split-lock): face unlock on the lock screen, off the same design
+  // affordances upstream already carries (faceConfigured / faceRequested) but
+  // as its own PAM service, so a slow scan can never sit in front of the
+  // password path. Enter-triggered only -- see README, "Face unlock".
+  property bool faceConfigured: false
+  property bool faceAuthenticating: false
+  // Goes to the design's hintOverride: the scan line while scanning, a short
+  // notice after a miss, empty the rest of the time.
+  property string faceHint: ""
+  // PORT (split-lock): the lock screen's avatar, auto-detected the way the
+  // third-party lock did it (~/.config/omarchy/lock-avatar.*, ~/.face,
+  // ~/.face.icon, /var/lib/AccountsService/icons/$USER).
+  property string avatarPath: ""
+  property int avatarVersion: 0
   property bool previewVisible: false
   property string enteredPassword: ""
   property string pendingPassword: ""
@@ -117,6 +131,16 @@ Item {
     if (!fingerprintCheckProc.running) fingerprintCheckProc.running = true
   }
 
+  // PORT (split-lock)
+  function refreshFaceStatus() {
+    if (!faceCheckProc.running) faceCheckProc.running = true
+  }
+
+  // PORT (split-lock)
+  function refreshAvatar() {
+    if (!avatarDetectProc.running) avatarDetectProc.running = true
+  }
+
   function logEvent(event) {
     lastEvent = event
     lastEventAt = new Date().toISOString()
@@ -133,7 +157,13 @@ Item {
     fingerprintRetryTimer.stop()
     if (passwordPam.active) passwordPam.abort()
     if (fingerprintPam.active) fingerprintPam.abort()
+    // PORT (split-lock)
+    abortFaceScan()
   }
+
+  // PORT (split-lock): typing is the password path, so the first keystroke
+  // drops the camera scan instead of racing it to the same unlock.
+  onEnteredPasswordChanged: if (enteredPassword.length > 0 && facePam.active) abortFaceScan()
 
   function beginLock() {
     if (!passwordPamConfigured) {
@@ -213,8 +243,14 @@ Item {
 
   function submitPassword(value) {
     var password = String(value || "")
-    if (!lockRequested || authenticatingPassword || password.length === 0) return
-
+    if (!lockRequested || authenticatingPassword || password.length === 0) {
+      // PORT (split-lock): an empty submit is the design's "scan me" gesture
+      // (LockInput.onAccepted sends faceRequested, but a design without that
+      // branch still reaches here).
+      if (password.length === 0 && faceConfigured) root.startFace()
+      return
+    }
+    if (facePam.active) root.abortFaceScan()
     runWake()
     pendingPassword = password
     failureMessage = ""
@@ -262,6 +298,45 @@ Item {
       finishUnlock()
     } else if (fingerprintConfigured) {
       fingerprintRetryTimer.restart()
+    }
+  }
+
+  // PORT (split-lock): face is Enter-triggered, never a retry loop -- one scan
+  // costs 5-7s of camera and a 38MB model load, and a scan that runs by itself
+  // also unlocks for whoever walks past. Same rule the greeter settled on.
+  function startFace() {
+    if (!lockRequested || !sessionLock.secure || !faceConfigured) return
+    if (facePam.active || faceAuthenticating || authenticatingPassword) return
+
+    faceHintTimer.stop()
+    faceHint = "Look at the camera…"
+    faceAuthenticating = true
+
+    if (!facePam.start()) {
+      faceAuthenticating = false
+      faceHint = ""
+    }
+  }
+
+  // Typing is the password path, so it takes the camera out of the way rather
+  // than racing it to the same unlock.
+  function abortFaceScan() {
+    if (facePam.active) facePam.abort()
+    faceAuthenticating = false
+    faceHintTimer.stop()
+    faceHint = ""
+  }
+
+  function handleFaceFinished(result) {
+    faceAuthenticating = false
+
+    if (!lockRequested) return
+    if (result === PamResult.Success) {
+      faceHint = ""
+      finishUnlock()
+    } else {
+      faceHint = "Face not recognized — type your password"
+      faceHintTimer.restart()
     }
   }
 
@@ -317,10 +392,16 @@ Item {
         displaysBlank: root.screenBlank(lockSurface.screen ? lockSurface.screen.name : "")
         powerSaverActive: root.powerSaverActive
         passwordText: root.enteredPassword
+        // PORT (split-lock)
+        faceConfigured: root.faceConfigured
+        avatarPath: root.avatarPath
+        avatarVersion: root.avatarVersion
+        hintOverride: root.faceHint
         onPasswordTextEdited: function(password) { root.enteredPassword = password }
         onSubmitPassword: function(password) { root.submitPassword(password) }
         onClearFailureRequested: root.failureMessage = ""
         onWakeRequested: root.runWake()
+        onFaceRequested: root.startFace()
       }
 
     }
@@ -341,6 +422,11 @@ Item {
       backgroundPath: root.backgroundPath
       backgroundVersion: root.backgroundVersion
       fingerprintConfigured: root.fingerprintConfigured
+      // PORT (split-lock): the preview is where the avatar and the face
+      // affordance get looked at without locking the session.
+      faceConfigured: root.faceConfigured
+      avatarPath: root.avatarPath
+      avatarVersion: root.avatarVersion
       authenticatingPassword: false
       failureMessage: ""
       failedAttempts: 0
@@ -401,6 +487,34 @@ Item {
     onTriggered: root.startFingerprint()
   }
 
+  // PORT (split-lock): howdy behind its own PAM service. Deliberately separate
+  // from omarchy-lock-password -- a scan that hangs (howdy has no client-side
+  // deadline of its own once the camera is busy) then costs the face path only,
+  // never the password the user is typing.
+  PamContext {
+    id: facePam
+    config: "omarchy-lock-face"
+    user: root.userName
+
+    onCompleted: function(result) {
+      root.handleFaceFinished(result)
+    }
+
+    onError: function(error) {
+      root.faceAuthenticating = false
+      root.faceHint = "Face auth unavailable — type your password"
+      faceHintTimer.restart()
+    }
+  }
+
+  // The scan line and the post-miss notice are transient; nothing here retries.
+  Timer {
+    id: faceHintTimer
+    interval: 4000
+    repeat: false
+    onTriggered: root.faceHint = ""
+  }
+
   Process {
     id: readlinkProc
     command: ["readlink", "-f", root.currentBackgroundLink]
@@ -424,6 +538,38 @@ Item {
       root.fingerprintConfigured = String(fingerprintCheckStdout.text || "").trim() === "yes"
       if (root.lockRequested && root.fingerprintConfigured) root.startFingerprint()
       else if (!root.fingerprintConfigured && fingerprintPam.active) fingerprintPam.abort()
+    }
+  }
+
+  // PORT (split-lock): howdy, not facelock -- so the probe asks for the three
+  // things a scan actually needs: the PAM service, the module, and a model for
+  // *this* user (howdy keeps models as <user>.dat next to its own code).
+  Process {
+    id: faceCheckProc
+    command: ["bash", "-c", "if [[ -f /etc/pam.d/omarchy-lock-face ]] && [[ -f /lib/security/howdy/pam.py ]] && [[ -f /lib/security/howdy/models/$USER.dat ]]; then echo yes; else echo no; fi"]
+    stdout: StdioCollector { id: faceCheckStdout; waitForEnd: true }
+    onExited: {
+      root.faceConfigured = String(faceCheckStdout.text || "").trim() === "yes"
+      if (!root.faceConfigured && facePam.active) root.abortFaceScan()
+    }
+  }
+
+  // PORT (split-lock): where the avatar comes from, in the order the
+  // third-party lock used. The first two are the user's own override files,
+  // the AccountsService icon is the desktop user picture.
+  Process {
+    id: avatarDetectProc
+    command: ["bash", "-c", "for f in \"$HOME/.config/omarchy/lock-avatar.png\" \"$HOME/.config/omarchy/lock-avatar.jpg\" \"$HOME/.config/omarchy/lock-avatar.jpeg\" \"$HOME/.config/omarchy/lock-avatar.webp\" \"$HOME/.face\" \"$HOME/.face.icon\" \"/var/lib/AccountsService/icons/$USER\"; do [[ -f $f ]] && { echo \"$f\"; exit 0; }; done"]
+    stdout: StdioCollector {
+      id: avatarDetectOut
+      waitForEnd: true
+      onStreamFinished: {
+        var found = String(avatarDetectOut.text || "").trim().split("\n")[0] || ""
+        if (found !== root.avatarPath) {
+          root.avatarPath = found
+          root.avatarVersion += 1
+        }
+      }
     }
   }
 
@@ -574,6 +720,8 @@ Item {
   Component.onCompleted: {
     refreshBackground()
     refreshFingerprintStatus()
+    refreshFaceStatus()
+    refreshAvatar()
     checkStrandedLock()
   }
 
@@ -600,6 +748,9 @@ Item {
         realScreens: root.realScreenCount(),
         passwordPam: root.passwordPamConfigured,
         fingerprint: root.fingerprintConfigured,
+        face: root.faceConfigured,
+        faceAuthenticating: root.faceAuthenticating,
+        avatar: root.avatarPath,
         authenticating: root.authenticating,
         lastEvent: root.lastEvent,
         lastEventAt: root.lastEventAt
@@ -609,6 +760,10 @@ Item {
     function preview(): string {
       root.refreshBackground()
       root.refreshFingerprintStatus()
+      // PORT (split-lock): the preview is how the avatar and the face
+      // affordance get eyeballed without locking the session.
+      root.refreshFaceStatus()
+      root.refreshAvatar()
       root.previewVisible = true
       return "ok"
     }

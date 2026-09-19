@@ -43,6 +43,10 @@ Split {
   // Only the password PAM flow exists on this machine (no omarchy-lock-face,
   // no pam_facelock.so, no fido2), so the design's own face/fido2 affordances
   // stay off — offering keys that cannot work is worse than not offering them.
-  faceConfigured: false
+  //
+  // Face is no longer hardcoded off (2026-09-20): the host probes howdy behind
+  // /etc/pam.d/omarchy-lock-face and drives faceConfigured / faceRequested
+  // through here, the way it already drives fingerprint. fido2 stays off — the
+  // machine keeps fprint on sudo and polkit only.
   fido2Configured: false
 }

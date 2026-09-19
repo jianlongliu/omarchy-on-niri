@@ -133,6 +133,11 @@ ShellRoot {
       // (Split/DesignBase default it to false). install.sh writes GREETER_FACE=1
       // into niri.kdl when howdy is present.
       faceConfigured: (Quickshell.env("GREETER_FACE") || "") === "1"
+      // The avatar is the account switcher (the design grew a hook for it, see
+      // vendor.py): with two accounts on this machine, the round picture at the
+      // top of the panel is a bigger and more obvious target than the corner
+      // chip it replaced. Tab still opens the picker from the keyboard.
+      avatarClickable: true
       hintOverride: greetd.hint.length > 0
                     ? greetd.hint
                     : "Press Enter for face unlock, or just type your password"
@@ -170,6 +175,11 @@ ShellRoot {
       // Enter on an empty field: the lock screen re-tries camera/fingerprint
       // with it, the greeter re-arms the face scan.
       onFaceRequested: greetd.begin()
+      // Click the account's picture to switch accounts.
+      onAvatarClicked: {
+        console.warn("greeter: the avatar was clicked")
+        picker.open ? picker.open = false : picker.show()
+      }
     }
 
     // The Split design is a lock screen: no account control, and the chip in the
@@ -206,45 +216,11 @@ ShellRoot {
 
     Component.onCompleted: applyAccountLook()
 
-    // The design is a lock screen and offers no way to change account, so the
-    // greeter adds one: a small always-visible control in the panel's top right.
-    Item {
-      id: switchButton
-
-      x: window.width - design.margin - width
-      y: design.margin
-      width: Math.round(Style.font.bodySmall * 12)
-      height: Math.round(Style.font.bodySmall * 2.4)
-
-      Rectangle {
-        anchors.fill: parent
-        radius: Style.cornerRadius
-        color: hover.hovered
-          ? design.withAlpha(Color.lock.text, 0.12)
-          : design.withAlpha(Color.lock.text, 0.04)
-        border.width: 1
-        border.color: design.withAlpha(Color.lock.border, 0.3)
-      }
-
-      Text {
-        anchors.centerIn: parent
-        text: "󰀄  " + greetd.username
-        color: design.withAlpha(Color.lock.text, 0.8)
-        font.family: Style.font.family
-        font.pixelSize: Style.font.bodySmall
-        font.letterSpacing: 1
-      }
-
-      HoverHandler { id: hover }
-
-      MouseArea {
-        anchors.fill: parent
-        onClicked: {
-          console.warn("greeter: the account chip was clicked")
-          picker.open ? picker.open = false : picker.show()
-        }
-      }
-    }
+    // The Split design is a lock screen and used to have no account control at
+    // all, so the greeter grew a chip in the panel's top right. That chip is
+    // gone now (2026-09-20): the design's own avatar is the switcher, and the
+    // duplicated control only made the panel busier. Both paths — the avatar and
+    // Tab — go through the same UserPicker.
 
     // Focus diagnostics: GREETER_DEBUG_FOCUS=1 logs the input field's state and
     // who holds item focus inside the window, once a second. Needed because a
@@ -269,10 +245,17 @@ ShellRoot {
       }
     }
 
-    // Test hook: only loads when GREETER_SELFTEST_PASSWORD is set, so a greeter
-    // change can be validated without logging out of a session.
+    // Test hook: only loads when one of the selftest hooks is set, so a greeter
+    // change can be validated without logging out of a session. The avatar hook
+    // carries no password, so it needs its own line here -- without it
+    // GREETER_SELFTEST_CLICK_AVATAR silently did nothing (the loader stayed off
+    // and the smoke case read "the avatar was clicked" as absent).
+    readonly property bool selftestActive:
+      (Quickshell.env("GREETER_SELFTEST_PASSWORD") || "").length > 0
+      || (Quickshell.env("GREETER_SELFTEST_CLICK_AVATAR") || "") === "1"
+
     Loader {
-      active: (Quickshell.env("GREETER_SELFTEST_PASSWORD") || "").length > 0
+      active: window.selftestActive
       source: "SelfTest.qml"
       onLoaded: {
         item.target = design
