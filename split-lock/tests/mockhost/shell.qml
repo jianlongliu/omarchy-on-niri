@@ -83,8 +83,8 @@ ShellRoot {
       root.check("view instantiated", lockView !== null, true)
 
       // 2. Host -> view: the service owns enteredPassword and pushes it in.
-      root.enteredPassword = "seven77"
-      root.check("host push reaches view", lockView.passwordText, "seven77")
+      root.enteredPassword = "not-a-real-password"
+      root.check("host push reaches view", lockView.passwordText, "not-a-real-password")
 
       // 3. View -> host: the design only emits, the host stores.
       lockView.passwordTextEdited("typed-by-design")
