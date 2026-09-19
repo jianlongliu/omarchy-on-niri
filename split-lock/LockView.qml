@@ -2,12 +2,19 @@
 // Split design.
 //
 // Omarchy's lock Service instantiates `LockView { ... }` *by filename*, so this
-// file is the drop-in: naming it LockView.qml is what makes the swap work.
-// `import "designs"` + `Split {}` makes the root of this file the design itself,
-// so every property the Service already sets (failureMessage, failedAttempts,
-// inputEnabled, passwordText, backgroundPath, ...) binds straight through:
-// Split declares the same names via DesignBase, which was written against this
-// very contract, signals included (submitPassword / clearFailureRequested).
+// file is the drop-in: naming it LockView.qml is what makes the swap work, and
+// `Split {}` makes the root of this file the design itself. Every property the
+// Service already sets (failureMessage, failedAttempts, inputEnabled,
+// passwordText, backgroundPath, ...) binds straight through: Split declares the
+// same names via DesignBase, which was written against this very contract,
+// signals included (submitPassword / clearFailureRequested).
+//
+// The design files (Split, DesignBase, LockInput, PasswordField, Avatar,
+// Wallpaper) sit next to this one deliberately: same-directory types resolve
+// implicitly, so there is no directory import here to go wrong. With an
+// `import "designs"` instead, Split failed to resolve roughly half the time —
+// but only when the view was reached as an imported *type*, never as the root
+// file of a config. Same directory removes that whole class of failure.
 //
 // Deliberately NOT wired here: onPasswordTextEdited. The Service already handles
 // it (`root.enteredPassword = password`) and binds passwordText: root.enteredPassword
@@ -17,15 +24,19 @@
 // handled the signal at all.
 import QtQuick
 import Quickshell
-import "designs"
 
 Split {
   id: view
 
-  // The Service passes these two (Service.qml:318-319) and DesignBase has no
-  // such properties: without declaring them Quickshell fails to create the view
-  // with "Cannot assign to non-existent property". Accepted and ignored for now;
-  // the stock view uses them to blank/park the screen when the session is idle.
+  // The Service defines these two (Service.qml:34-48) and passes them to the view
+  // alongside backgroundVersion (Service.qml:310). DesignBase has no such
+  // properties, and without declaring them Quickshell refuses to create the view
+  // ("Cannot assign to non-existent property"). Nothing to route them to, and
+  // nothing lost: the stock view uses them for exactly one thing, pausing
+  // wallpaper playback (reference/LockView.qml:94), and this design's Wallpaper is
+  // a static Image (Wallpaper.qml:22) — there is no animation to pause. What does
+  // matter, loadBackground and backgroundVersion feeding the cache-busting fileUrl,
+  // is already honoured there (Wallpaper.qml:25).
   property bool displaysBlank: false
   property bool powerSaverActive: false
 
