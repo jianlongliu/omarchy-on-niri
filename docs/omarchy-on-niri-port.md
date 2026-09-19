@@ -1765,7 +1765,7 @@ greetd 重拉 greeter 时，新实例的脸扫**命中**了 → greetd 立刻又
 **7. 回滚**：`snapper` undo（第 0 步）+ 配置文件级回退见 §11.9；greetd 有 `config.toml.omarchy-greeter-backup` 备份。
 
 **8. 还没做的事**（免得你翻不到以为漏了）
-- 自研锁屏 `split-lock/`：桥 `LockView.qml` 已跑通（§11.16，8 项契约测试三轮稳定），**尚未换装**；换装前先补 niri shim 并留退路。
+- 自研锁屏 `split-lock/`：**已换装并实测通过**（§11.18–§11.20；`Super+Ctrl+L` 真锁→解锁）。niri shim 的 `dpmsStatus`/`solitaryBlockedBy` 已补（§11.17），explorer 插件已退役。
 - niri 的 `hyprctl` shim 缺 `dpmsStatus` / `solitaryBlockedBy` → stock 锁屏的"锁住自救"会永远误判成已解锁，做锁屏前补。
 - 浮栏弹窗避让（toast/托盘面板压栏 8px）。
 
@@ -1824,4 +1824,16 @@ Omarchy 的锁层从 `hyprctl -j monitors` 读两个字段，shim 之前都在�
 因此换锁流程必须包含 `omarchy-restart-shell`（`install.sh` 结尾已按"必做一步"写）。
 
 顺手得到的一条无痛验证法：`omarchy-shell lock preview` 会把 `LockView` 以 `inputEnabled: false` 挂成 Overlay 显示（点一下就关）——**不用锁屏**就能确认视图建得起来、渲染对不对。2026-09-19 截图确认：壁纸、时钟、头像圆牌、密码框、`Press Enter to log in` 都在。
+
+### §11.20 真机实测通过 + 退役 explorer（2026-09-19）
+
+用户实按 `Super+Ctrl+L`（`Mod+Ctrl+L` → `omarchy-system-lock` → `omarchy-shell lock lock`）：**没问题**。Service 的 `logEvent` 把事件打到 qs 日志，这次完整流程是：
+
+```
+09:10:38 lock-requested → lock-pending: screen-stabilizing → 09:10:39 secure=true → 09:10:43 unlocked
+```
+
+真锁 → 真 PAM 密码 → 解锁，4 秒。随后 `io.github.sirjul1337.lock-explorer` **已移除**（先 `tar czf /var/tmp/lock-explorer-backup-20260919.tar.gz` 留底；设计代码与署名在本仓库 `split-lock/` + `THIRD-PARTY.md`，原插件随时可 `omarchy plugin add` 装回）。现在系统中唯一的锁提供者是 `yvonne.split-lock`。
+
+**遗留（未动用户配置）**：`binds.kdl:21` 仍是 niri 默认的 `Super+Alt+L { spawn "swaylock"; }`，而 swaylock **根本没装** —— 那个键是死的。想用的话改成 `spawn-sh "omarchy-system-lock"`，或直接删掉这行。
 
