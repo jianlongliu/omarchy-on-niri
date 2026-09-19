@@ -51,6 +51,11 @@ check "no missing-property errors" "$(grep -c 'non-existent property' "$dir/run.
 check "all contract checks ran" "$(grep -o 'checks=[0-9]*' "$dir/run.log" | tail -1)" "checks=8"
 check "zero failures inside" "$(grep -o 'failures=[0-9]*' "$dir/run.log" | tail -1)" "failures=0"
 
+# Always show what the mock actually asserted. "0 ERROR lines" on its own is also
+# what a mock that never ran prints, so the count of checks is the real marker.
+esc=$(printf '\033')
+grep -a 'lockhost: ' "$dir/run.log" | sed "s/${esc}\[[0-9;]*m//g" | sed 's/.*lockhost: /  /'
+
 if [ "$failures" -gt 0 ]; then
   echo
   echo "--- log tail"

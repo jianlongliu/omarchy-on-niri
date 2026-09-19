@@ -1785,3 +1785,32 @@ stock 的锁 Service 用**文件名**实例化 `LockView { ... }`（`reference/S
 **`displaysBlank` / `powerSaverActive` 为什么可以不管**：Service 会传这两个（`Service.qml:34-48` 定义，与 `backgroundVersion` 一起在 310 附近传入视图），而 `DesignBase` 没有对应属性，不声明 Quickshell 会直接拒绝创建视图。stock 视图只为**一件事**用它们——暂停壁纸播放（`reference/LockView.qml:94`）；本设计的 `Wallpaper` 是静态 `Image`（`Wallpaper.qml:22`），**没有动画可暂停**。真正有用的是 `loadBackground` / `backgroundVersion`（缓存击穿的 `fileUrl`），设计里已经尊重（`Wallpaper.qml:25`）。
 
 **还没做（换装前必须）**：① niri 的 `hyprctl` shim 补 `dpmsStatus` / `solitaryBlockedBy`，否则 stock 锁屏的"锁住自救"会永远误判成已解锁；② 先留好退路再让插件上位；③ 锁屏/解锁/打错密码由**用户自己**按一次，不主动锁他的屏。
+
+### §11.17 niri 上补 `dpmsStatus` / `solitaryBlockedBy`（2026-09-19）
+
+Omarchy 的锁层从 `hyprctl -j monitors` 读两个字段，shim 之前都在瞎答：
+
+- `dpmsStatus` **硬编码 `False`** → stock 锁的 `screenBlank()` 永远说"已黑屏" → 锁屏界面的壁纸播放被永久暂停。niri 的 IPC **不暴露**电源状态（已核对：`niri msg outputs` 的字段里没有），所以改成**在关屏发生的地方记账**：`omarchy-brightness-display` 的开/关都走 `hl.dsp.dpms` 派发，都会经过 shim。niri 自己的 `Mod+Shift+P` 绕开我们，但 niri 在**任何输入**时都会把显示器点亮（binds 注释原文），而唤醒路径发生在输入之后，所以"陈旧的 on"活不过造成它的那次输入。未知状态报 **on** —— 这是不会跳过必要 enable 的方向。
+- `solitaryBlockedBy` **缺失** → `omarchy-hyprland-session-locked`（锁服务在轮询它、`omarchy-restart-shell` 在拿它把关）永远报"未锁"。Hyprland 用 `LOCK` 表示存在 ext-session-lock；niri 没有这个概念，但**维护 logind 的 `LockedHint`**（niri 二进制里就有），于是从那里翻译：锁定 → `["LOCK"]`，未锁 → `[]`，问不到 → `["WORKSPACE"]`（正是那个脚本自己对"无法判断"的写法，退出码 2）。
+
+回归测试 `port-bin/tests/test-hyprctl-shim.sh`：**假 niri + 假 loginctl**，完全不碰真实会话/显示器/logind，12 项，含消费者脚本的 0/1/2 退出码。
+
+证据边界：未锁分支已在活会话上验证（`dpmsStatus: true`、`solitaryBlockedBy: []`、退出码 1）；**锁定分支（`LockedHint=yes`）要等用户自己锁一次才算证实**。
+
+### §11.18 自研锁屏装成插件：`yvonne.split-lock`（2026-09-19）
+
+**形态**：不魔改 omarchy 的任何文件，而是把锁做成 `~/.config/omarchy/plugins/yvonne.split-lock/`，manifest 里声明 `"omarchy": {"clonedFrom": "omarchy.lock"}`（与第三方 explorer 插件同款机制）。锁是 `service` 类插件，shell **按文件名**从插件自己的目录实例化 `LockView { }` —— 所以插件目录里放 `Service.qml`（**上游锁服务的逐字节副本**，md5 `a2f85612…`，`install.sh` 会检测上游漂移）+ 我们的 `LockView.qml` + 平铺的 Split 设计文件，**这就是全部改动**。stock 插件目录本来也只有三个文件（`manifest.json`/`Service.qml`/`LockView.qml`），换掉 `LockView` 就等于换锁。
+
+**装法**（`split-lock/install.sh`）：
+
+- `./install.sh --stage`：装好但**禁用** —— 当前锁屏不变，explorer 继续在用；
+- 启用：`omarchy plugin disable io.github.sirjul1337.lock-explorer` + `omarchy plugin enable yvonne.split-lock`；
+- 回滚 = 删掉那一个目录（`rm -rf ~/.config/omarchy/plugins/yvonne.split-lock`）再把 explorer 启回来；
+- `omarchy plugin validate` 通过（它是**静默成功型**，只有 rc≠0 才说话）。
+
+**互斥**：锁是单例 —— `PluginRegistry.activeCloneFor()` 挑的是**第一个** entry 找得到的克隆，两个克隆并存等于掷骰子，所以必须"先禁 explorer 再启 split-lock"。
+
+**退路（已核实存在）**：锁的 IPC 只有 `lock` / `isLocked` / `status` / `preview` / `hidePreview` —— **没有 `unlock`**；`omarchy-restart-shell` 在锁定时会**拒绝重启**（这是刻意设计）。真正的退路是 ext-session-lock 的协议本意：**杀掉锁客户端就等于放锁** —— 切 VT（Ctrl+Alt+F2..F6）登录，`systemctl --user restart omarchy-shell`。
+
+**证据边界**：离线契约测试（8 项具名断言）证明的是**属性/信号接线**；`Service.qml` 在真实会话里跑起来（PAM、锁面、真实按键）要等**用户自己锁一次**才算证实。PAM 前提 `/etc/pam.d/omarchy-lock-password` 已在（否则 `lock()` 直接返回 `missing-pam`）。
+
