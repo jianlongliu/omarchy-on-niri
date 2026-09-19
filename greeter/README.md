@@ -22,8 +22,16 @@ greetd ──► /usr/local/bin/omarchy-greeter ──► niri（本目录的 ni
 2. 人脸命中 → PAM 成功 → greeter 立刻 `start_session`，**一次按键都不需要**。
 3. 人脸没命中 → PAM **自己**会轮到 `pam_unix` 并抛出 secret 提示；greeter 收到
    `auth_message(secret)` 才把密码框交给用户，用 `post_auth_message_response` 送回。
-   在收到提示前就输入的密码会被**排队**，等提示一到自动交付（不会开第二个会话）。
 4. 空字段按回车 = 重新武装人脸扫描（对应锁屏里"回车重试指纹/摄像头"的语义）。
+
+**一次尝试是有期限的（`GREETER_ATTEMPT_TIMEOUT_MS`，默认 12s）。** PAM 有可能**永远不回答**
+（howdy 卡在摄像头上、info 循环），而 greetd 一条连接上同时只能有一个会话：卡住的那条会把后面
+所有请求堵在门口 —— 在真机上就表现成"输密码毫无反应，也不报错"（这就是 2026-09-19 那次锁在门外的
+根因）。所以两种情况下 greeter 都会**把 helper 进程整个换掉**：断开连接 → greetd 自己取消那个
+会话 → 新连接上直接发带密码的 `create_session`。
+
+* 你在扫脸期间开始输密码 → **立刻**走上面这条路（约 1 秒内），不必等超时；
+* 你在扫脸期间什么都不做 → 超时后同样换掉，界面停在密码框等你（不会自动重扫，避免死循环）。
 
 没有 howdy 的机器上，第 1 步会立刻收到 secret 提示，密码框就是常规登录框。
 
@@ -33,10 +41,32 @@ greetd ──► /usr/local/bin/omarchy-greeter ──► niri（本目录的 ni
 `sync` 的那个账户的 `shell.toml`，不随账户切换。
 
 账户列表来自 `/etc/passwd` 里 uid≥1000 的账户 + `/var/lib/AccountsService/icons/<user>`
-头像（没有头像就显示首字母）。右上角常驻的账户按钮打开选择器（↑↓ 选择、Enter 确认、
-Esc 取消，也可鼠标点）。切换账户会 `epoch += 1`：**旧账户的人脸扫描即使随后命中也会被
+头像（没有头像就显示首字母）。**Tab** 或右上角常驻的账户按钮打开选择器（↑↓ 选择、Enter 确认、
+Esc 取消，也可鼠标点；切账户同样会换连接，见上）。切换账户会 `epoch += 1`：**旧账户的人脸扫描即使随后命中也会被
 丢弃并向 greetd `cancel_session`**，绝不会登成错的人。成功登录的账户写入
 `$HOME/.local/state/omarchy-greeter/last-user`，下次默认选中。
+
+## 排查
+
+greeter 的 stdout/stderr 落在 `$HOME/greeter.log` 里（`$HOME` = `/var/lib/greeter`），
+**不是** VT 控制台 —— 它一旦占住 tty1，日志就只有那块屏幕上看得见，出问题等于瞎。
+`/var/lib/greeter/greeter.log` 是 greeter 用户可写的，任何账户都能读：
+
+```sh
+tail -20 /var/lib/greeter/greeter.log
+```
+
+## 测试
+
+```sh
+python3 bridge/test-bridge.py     # 协议层（纯 python，不需要显示）
+./tests/state.sh                  # 登录状态机（StateTest.qml + mock，offscreen，不需要合成器）
+./tests/smoke.sh                  # 整屏渲染 + 真 Split 设计（需要图形会话）
+```
+
+`tests/state.sh` 是**唯一能在 TTY 里跑的**：被锁在门外、图形会话没了的时候，它照样能验证
+卡住的扫脸、换账户、错密码这些路径（`StateTest.qml` 只加载 `Greetd.qml`，不碰设计层，
+所以没有 `PanelWindow`，offscreen 平台就够）。
 
 ## 装与回滚
 
@@ -146,3 +176,20 @@ python3 vendor.py     # 插件升级或 omarchy update 之后重跑
 - 指纹/FIDO2 没有专门 UI：它们会作为 PAM 消息出现，而不是被单独渲染成一个图标。
 - `start_session` 固定 `niri-session`（`GREETER_SESSION` 可改），没有会话选择器。
 - 密码只经由 bridge 的 stdin 传递（不进 argv、不落盘）；PAM 与日志会话创建始终在 greetd 里完成。
+
+## Diagnosing a login that "does nothing"
+
+`GREETER_DEBUG_FOCUS=1` logs the password field's state once a second (`enabled`,
+`readOnly`, `visible`, `activeFocus`, size), the text **length**, and whether the
+account picker owns the keyboard. Lengths only, never the password itself.
+
+Two rules that came out of the "Enter does nothing" bug (docs §11.13):
+
+- The design owns nothing: `DesignBase` declares `passwordText` and
+  `passwordTextEdited` but never assigns `passwordText`. The **host** has to
+  (`shell.qml: onPasswordTextEdited`). Without it the field fills with dots while
+  `lock.passwordText` stays empty, and Enter falls through to "retry the face scan".
+- Tests must drive what the *design* emits, not what the host exposes. The
+  selftest now goes through `passwordTextEdited` + `inputItem.accepted()`, and
+  `tests/smoke.sh` has two `wtype` cases (`typed-password`, `typed-switch`) that
+  inject real keystrokes.

@@ -85,10 +85,65 @@ run_case() { # name, mock user, mock flags, selftest env, want started, expect t
   rm -rf "$dir"
 }
 
+# A person typing: keys are injected with wtype into the greeter's own field,
+# which is the path a real login takes. The selftest hooks drive the design's
+# signals directly, so they cannot see whether the host wired them up — which is
+# exactly how "pressing Enter does nothing" shipped: shell.qml was missing
+# onPasswordTextEdited, so the field filled with dots while lock.passwordText
+# stayed empty, and Enter fell through to "retry the face scan". Needs a
+# graphical session with wtype.
+run_key_case() { # name, mode (password | switch)
+  name=$1; mode=$2
+  if ! command -v wtype >/dev/null 2>&1; then
+    note "-- $name" "skipped (no wtype)"
+    return
+  fi
+  dir=$(mktemp -d)
+  python3 "$MOCK" --socket "$dir/mock.sock" --user jianlongliu --password hunter2 \
+    --log "$dir/start.log" --pidfile "$dir/mock.pid" --howdy-fail >"$dir/mock.out" 2>&1 &
+  while [ ! -S "$dir/mock.sock" ]; do sleep 0.1; done
+  env GREETD_SOCK="$dir/mock.sock" GREETER_BRIDGE="$BRIDGE" GREETER_USER=jianlongliu \
+    GREETER_ACCOUNTS_DIR="$ACCOUNTS" GREETER_CORNER_RADIUS=10 \
+    qs -n -p "$GREETER" >"$dir/run.log" 2>&1 &
+  greeter=$!
+  sleep 6                      # the howdy attempt times out into a password prompt
+  if [ "$mode" = switch ]; then
+    wtype -k Tab; sleep 1.2; wtype -k Down -k Down -k Down; sleep 1; wtype -k Return
+    sleep 1.5
+    wtype 'hunter2'; sleep 1; wtype -k Return
+  else
+    wtype 'hunter2'; sleep 1; wtype -k Return
+  fi
+  sleep 3
+  kill "$greeter" 2>/dev/null || true
+  kill "$(cat "$dir/mock.pid")" 2>/dev/null || true
+  started=0
+  [ -f "$dir/start.log" ] && started=$(grep -c start_session "$dir/start.log")
+  note "-- $name" ""
+  check "keys reached the password field" "$(grep -c 'password field received input' "$dir/run.log")" 1
+  if [ "$mode" = switch ]; then
+    check "picker chose the other account" "$(grep -c 'account picker chose yvonne' "$dir/run.log")" 1
+    check "submitted for the picked account" "$(grep -c 'password submitted for yvonne' "$dir/run.log")" 1
+  else
+    check "submitted for the greeter user" "$(grep -c 'password submitted for jianlongliu' "$dir/run.log")" 1
+  fi
+  check "session handed to greetd" "$started" 1
+  if grep -q ' ERROR' "$dir/run.log"; then
+    check "no QML errors" "$(grep -m1 ' ERROR' "$dir/run.log")" ""
+  else
+    note "no QML errors" ok
+  fi
+  cp "$dir/run.log" "/tmp/greeter-smoke-$name.log" 2>/dev/null || true
+  rm -rf "$dir"
+}
+
 run_case "howdy-match"      jianlongliu "--howdy"                                   ""    yes
 run_case "howdy-miss+pass"  jianlongliu "--howdy-fail --delay 2" "GREETER_SELFTEST_PASSWORD=hunter2" yes
 run_case "wrong-password"   jianlongliu ""                          "GREETER_SELFTEST_PASSWORD=wrong"    no yes
 run_case "switch-account"   yvonne      "--howdy"                   "GREETER_SELFTEST_PASSWORD=x GREETER_SELFTEST_PICK=yvonne" yes
+
+run_key_case "typed-password" password
+run_key_case "typed-switch"    switch
 
 rm -rf "$ACCOUNTS"
 

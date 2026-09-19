@@ -10,6 +10,8 @@ import qs.Commons
 //   GREETER_SELFTEST_PASSWORD=pw        submit that password
 //   GREETER_SELFTEST_OPEN_PICKER=1      only open the account picker
 //   GREETER_SELFTEST_PICK=<user>        open the picker and choose that account
+//   GREETER_SELFTEST_PASSWORD_DELAY_MS  wait this long before submitting, so a
+//                                       test can let the face-scan watchdog fire
 Item {
   id: self
 
@@ -20,6 +22,22 @@ Item {
   property string password: Quickshell.env("GREETER_SELFTEST_PASSWORD") || ""
   property bool openPickerOnly: Quickshell.env("GREETER_SELFTEST_OPEN_PICKER") === "1"
   property string pick: Quickshell.env("GREETER_SELFTEST_PICK") || ""
+  property int passwordDelay: Number(Quickshell.env("GREETER_SELFTEST_PASSWORD_DELAY_MS")) || 0
+
+  function submit() {
+    if (!self.target) {
+      console.warn("selftest: no target design")
+      return
+    }
+    console.warn("selftest: typing the password for", self.target.userName)
+    // Go through the design the way a person does: the field reports edited
+    // text, and the field is what submits (LockInput.onAccepted reads
+    // lock.passwordText). Calling target.submitPassword() directly skipped the
+    // host wiring that passwordTextEdited needs, so a login that could never
+    // work passed every test.
+    self.target.passwordTextEdited(self.password)
+    if (self.target.inputItem) self.target.inputItem.accepted()
+  }
 
   // The palette has to follow the picked account, not the greeter user's HOME.
   // The only way a test can see that is to print what Color resolved.
@@ -28,6 +46,11 @@ Item {
     interval: 400
     onTriggered: console.warn("selftest: palette is", Color.background, Color.lock.text,
                               "from", Color.currentThemePath)
+  }
+
+  Timer {
+    id: lateSubmit
+    onTriggered: self.submit()
   }
 
   Timer {
@@ -45,12 +68,12 @@ Item {
         self.picker.show()
         return
       }
-      if (!self.target) {
-        console.warn("selftest: no target design")
+      if (self.passwordDelay > 0) {
+        lateSubmit.interval = self.passwordDelay
+        lateSubmit.start()
         return
       }
-      console.warn("selftest: submitting password for", self.target.userName)
-      self.target.submitPassword(self.password)
+      self.submit()
     }
   }
 }

@@ -12,6 +12,7 @@ import json
 import os
 import socket
 import struct
+import threading
 import time
 
 MAX_PAYLOAD = 1 << 20
@@ -45,6 +46,14 @@ def serve_connection(conn, args, log):
         if kind == "create_session":
             if args.delay:
                 time.sleep(args.delay)
+            if args.hang_face and "password" not in request:
+                # A wedged howdy: PAM announces itself and then never answers, so
+                # greetd holds the conversation open forever.
+                log.append("create_session:hang_face")
+                reply(conn, {"type": "auth_message", "auth_message_type": "info",
+                             "auth_message": "Looking for your face"})
+                time.sleep(args.hang_face)
+                return
             user_ok = request.get("username") == args.user
             if (args.howdy or args.howdy_fail) and "password" not in request:
                 log.append("create_session:howdy")
@@ -109,6 +118,10 @@ def main():
                         help="passwordless create_session: info message, then success on the next response")
     parser.add_argument("--howdy-fail", action="store_true",
                         help="passwordless create_session: info message, then a secret prompt (face missed)")
+    parser.add_argument("--hang-face", type=float, default=0.0,
+                        help="passwordless create_session: info message, then no reply at all "
+                             "(a face scan that never resolves; the greeter must free the "
+                             "connection on its own)")
     args = parser.parse_args()
 
     if os.path.exists(args.socket):
@@ -122,9 +135,9 @@ def main():
     print("ready", flush=True)
     while True:
         conn, _ = server.accept()
-        with conn:
-            log = []
-            serve_connection(conn, args, log)
+        # One thread per connection: the greeter may drop a stalled connection
+        # and open a new one without waiting for the old one to be answered.
+        threading.Thread(target=serve_connection, args=(conn, args, []), daemon=True).start()
 
 
 if __name__ == "__main__":

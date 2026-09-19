@@ -107,13 +107,15 @@ FocusScope {
           border.width: index === picker.cursor ? 1 : 0
           border.color: picker.host ? picker.host.withAlpha(Color.lock.borderActive, 0.6) : Color.lock.borderActive
 
-          HoverHandler {
-            id: hover
-            onHoveredChanged: if (hovered) picker.cursor = row.index
-          }
-
+          // Follow the pointer only on real motion. A stationary mouse that
+          // happens to sit over a row gets a hover-enter the moment the panel
+          // appears, which silently undid every arrow-key press: the account
+          // that got chosen was the one under the cursor, not the highlighted
+          // one. onPositionChanged fires for movement only.
           MouseArea {
             anchors.fill: parent
+            hoverEnabled: true
+            onPositionChanged: picker.cursor = row.index
             onClicked: picker.choose(row.index)
           }
 

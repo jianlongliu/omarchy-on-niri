@@ -1582,7 +1582,7 @@ greetd ─► /usr/local/bin/omarchy-greeter ─► niri -c /etc/greetd/omarchy-
 3. 先开着 TTY（Ctrl+Alt+F2）→ 把 `[default_session]` 改成 `command = "/usr/local/bin/omarchy-greeter"`、`user = "greeter"` → 登出实测 → 起不来就在 TTY 改回原值（dms-greeter 留的备份在 `/etc/greetd/config.toml.backup-*`）。
 4. **实测能进之后**，才谈 `sudo pacman -D --asexplicit quickshell` 与卸 `greetd-dms-greeter-bin`（§11.1：不先 asexplict，`-Rns` 会顺手带走 quickshell，本 greeter 和 Omarchy shell 一起瘫）。
 
-**2026-09-19 装机状态（`pkexec` 已执行）**：`/etc/greetd/omarchy-greeter`（root:root，文件世界可读）+ `/usr/local/bin/omarchy-greeter{,-sync}` 已就位；`omarchy-greeter-sync` 已跑过一遍（`yvonne` = `tonal-spot` 主题 + 当前壁纸；`jianlongliu` 因为**还没迁移**、`~/.local/state/omarchy/current` 根本不存在 → 该账户目前软链到共享缺省）。**`/etc/greetd/config.toml` 未动**——把 greetd 切到本 greeter 仍是用户自己在 TTY 里做的一步。装机校验实测：greeter 身份下 `/etc/greetd/omarchy-greeter` 下**所有文件可读**、桥可执行、状态目录可写；`niri validate -c /etc/greetd/omarchy-greeter/niri.kdl` 通过；壁纸 sha256 与源文件一致。
+**2026-09-19 装机状态（`pkexec` 已执行）**：`/etc/greetd/omarchy-greeter`（root:root，文件世界可读）+ `/usr/local/bin/omarchy-greeter{,-sync}` 已就位；`omarchy-greeter-sync` 已跑过一遍（`yvonne` = `tonal-spot` 主题 + 当前壁纸；`jianlongliu` 因为**还没迁移**、`~/.local/state/omarchy/current` 根本不存在 → 该账户目前软链到共享缺省）。**`/etc/greetd/config.toml` 的改动是用户自己做的**：15:09 他把 `[default_session].command` 切成 `/usr/local/bin/omarchy-greeter`（备份 `/etc/greetd/config.toml.omarchy-greeter-backup`，168B = 旧的 dms 命令），15:15 登出后 tty1 起的就是本 greeter。装机校验实测：greeter 身份下 `/etc/greetd/omarchy-greeter` 下**所有文件可读**、桥可执行、状态目录可写；`niri validate -c /etc/greetd/omarchy-greeter/niri.kdl` 通过；壁纸 sha256 与源文件一致。
 
 **注意**：`greeter` 账户的 passwd home 是 **`/`**（`greeter:x:964:964:...:/:/bin/bash`），所以 `niri.kdl` 里那行 `HOME "/var/lib/greeter"` 是**关键行**，缺了它主题/状态目录全找不到。
 
@@ -1594,3 +1594,86 @@ greetd ─► /usr/local/bin/omarchy-greeter ─► niri -c /etc/greetd/omarchy-
 - 单跑一次（要截界面时）：`--delay` 调大，再用 `GREETER_SELFTEST_OPEN_PICKER=1` / `GREETER_SELFTEST_PICK=<user>` 驱动；`SelfTest.qml` 只在 `GREETER_SELFTEST_PASSWORD` 非空时经 `Loader` 加载，生产路径不经过它。
 
 **边界**：单输出（只配 `eDP-1`）；指纹 / FIDO2 没有专门 UI，作为 PAM 消息出现；`start_session` 固定 `niri-session`（`GREETER_SESSION` 可改），没有会话选择器；字体/间距不随账户切换；**不动 Plymouth / 启动链**（§11.10 的结论）。vendored 的 `designs/ Commons/ Ui/` 由 `greeter/vendor.py` 按组件闭包重拷并重放 4 处补丁（`Color.qml` 的 `themeOverride`、`DesignBase.qml` 的 `loginUser`/`hintOverride`、`Split.qml` 的提示行、`Style.qml` 的 `cornerRadius`），插件或 Omarchy 升级后重跑一次即可。
+
+### 11.12 登录界面：一条卡住的 PAM 对话 = 密码"没反应"（2026-09-19 真机实测与修法）
+
+> **修正（2026-09-19 15:5x）**：本节说的"卡住的 PAM 对话"**真实存在**，超时换 helper 的修法保留；但它不是
+> "输密码 + 回车毫无反应"的**主因**——主因是宿主少接了一条设计信号，见 **§11.13**。诊断教训：字段
+> `activeFocus/enabled/readOnly` 全正常，也不能说明回车能提交。
+
+**现象**：切到自研 greeter 后**登不进去**——输密码毫无反应、连错误都不报；同机 TTY2 用文本登录能进
+`yvonne`（1001，有密码），**`jianlongliu` 的文本登录却失败**（那个账户实际靠 howdy 进）。
+
+**根因**：greeter 一启动就对**默认账户 jianlongliu** 发起不带密码的 `create_session` → PAM 进
+`howdy`（sufficient）→ 人脸没命中/相机没就绪时 howdy **永远不返回**；而 **greetd 一条连接上同时只允许
+一个会话** → 之后所有请求（包括"切到 yvonne 再输密码"）全排在门外 → 界面既不动也不报错。epoch 守卫只
+丢弃过期**事件**，救不了这条被占住的连接。**这不是密码错，所以没有任何失败可显示。**
+
+**修法（`greeter/`，已装机）**：给"一次尝试"设期限 `GREETER_ATTEMPT_TIMEOUT_MS`（默认 12s），到点**整条换掉
+helper 进程**——断开连接让 greetd 自己取消那个会话——新连接上直接发**带密码的** `create_session`（PAM 里
+howdy 仍会先跑，命中就依旧免密码）。两条触发路径：① 扫脸期间一开始输密码 → **立刻**走（实测 ~1s）；
+② 什么都不做 → 超时后换掉，界面停在密码框（**不自动重扫**，避免死循环）。切账户同理，不再在同一条连接上
+`cancel` 后重试。
+
+**顺带修的两处可观测性**：① `niri.kdl` 里 quickshell 的 stdout/stderr 落 `$HOME/greeter.log`
+（= `/var/lib/greeter/greeter.log`，greeter 用户可写、所有账户可读）——之前输出只进 VT 控制台，人一被关在
+门外就没法诊断；② **Tab** 打开账户选择器（原来只有右上角小按钮）。
+
+**新增不需要合成器的回归测试**：`greeter/tests/state.sh` + `greeter/StateTest.qml`（只加载 `Greetd.qml`，
+没有 `PanelWindow`，所以 `QT_QPA_PLATFORM=offscreen` 就够）——**6 场景全过**：人脸命中 / 错密码不产生会话 /
+**卡住+输密码** / **卡住+看门狗** / 卡住时切账户 / 卡住且无人操作（只恢复、不登录）。每个卡住场景都额外断言
+"那次尝试真的被丢掉"（日志出现 `restarting the login helper`）。这是**被锁在门外、图形会话都没了时唯一能跑的
+验证**，价值在今天就体现了。`bridge/mock-greetd.py` 相应加了 `--hang-face`（发完 info 就再不回答）并改成
+**每连接一线程**（否则新连接会排在旧连接后面——真 greetd 不会这样，夹具不这么改就测不出这个 bug）。
+
+**装机现场与权限现实**：`pkexec` 只在**图形会话**里可用（polkit agent 随会话存在）；纯 TTY 里 pkexec 起不了
+文字 agent（`Error opening current controlling terminal (/dev/tty)`），`sudo -n` 也没有时间戳 → **别指望在
+TTY 里自动拿到 root**。15:34 重新 `pkexec install.sh` + `pkexec systemctl restart greetd`（与 checkout
+逐文件一致，只有测试文件不装），被占住的旧 greeter 随之消失；新版本已在写 `greeter.log`（仅 Split 设计的两条
+`hyprctl` 警告：niri 上取不到圆角/gaps，回退 `GREETER_CORNER_RADIUS`，无害）。
+
+**教训**：greeter 里**任何"等 PAM 回答"的路径都必须有期限，且期限到了要换连接**，而不是在同一条连接上重试；
+同时 greeter 必须留一份**离线可读的日志**。
+
+### 11.13 密码"按回车没反应"的真正原因：宿主少接了一条设计信号（2026-09-19 二次实测）
+
+**Split 设计的所有权契约**：`DesignBase` 只声明 `property string passwordText` 和
+`signal passwordTextEdited(string)`，**从不自己给 `passwordText` 赋值**——所有权在宿主（原插件里是
+`LockView` 那样的宿主自己维护并回灌）。`LockInput.onTextChanged` 只发 `passwordTextEdited(text)`，
+`LockInput.onAccepted`（回车）读 `lock.passwordText` 决定提交什么。我的 `shell.qml` 当时**没接这条信号**：
+
+- 密码框照常显示圆点（那是 TextInput 自己的文本），但 `design.passwordText` **始终为空串**；
+- 回车 → `submitted.length === 0` → 不提交，落到 `else if (lock.faceConfigured) lock.faceRequested()`
+  → 表面像"又去扫脸了"，用户看到的就是**按回车毫无反应**；
+- 每个账户的框都是空的，所以**换账户也不行**。
+
+**修法（一行）**：`onPasswordTextEdited: text => design.passwordText = text`（另加
+`onClearFailureRequested` 清错误提示、`onPasswordRequested` 回焦）。
+
+**同一轮修的第二处：账户选择器**
+- 设计自带**焦点回收看门狗**（`DesignBase.qml:213-226`：`inputItem` 一旦没有 `activeFocus` 就抢回去）
+  → Tab 打开选择器后，方向键/回车全被设计吞掉，表现就是"选择器开了也切不动账户"。修法：选择器打开期间
+  `inputEnabled: !greetd.sessionStarting && !picker.open`（设计提供了这个开关；恢复时它会自己重新聚焦密码框）。
+- 行上的 `HoverHandler` 在**弹窗出现**时给鼠标下的那一行发 hover-enter，把光标重置 → 按 ↓ 像没反应，最后
+  选中的永远是"鼠标指着的账户"。修法：改成 `MouseArea { hoverEnabled: true; onPositionChanged: ... }`，
+  **只在指针真移动时跟随**。
+
+**端到端证据（真实按键注入，不是直接调 API）**：`wtype 'hunter2'` + `wtype -k Return` →
+`password field received input` → `password submitted for jianlongliu (7 chars)` → `auth_ok` → `started`
+→ mock 收到 `start_session ["niri-session"]`；切账户：`Tab` → `↓↓↓` → `Return` →
+`the account picker chose yvonne` → `account switched to yvonne from jianlongliu` → 输密码 → `auth_ok`。
+
+**测试为什么没拦住（核心教训）**：`SelfTest.qml` 之前直接调 `design.submitPassword(pw)`（宿主公开 API）和
+`picker.picked(name)`，**恰好跳过了出问题的两段宿主接线**。已改成走**设计自己的路径**：
+`design.passwordTextEdited(pw)` + `design.inputItem.accepted()`。另加两个**真实按键**用例（`wtype`）：
+`typed-password` / `typed-switch` → `tests/smoke.sh` 现 6 用例、`tests/state.sh` 6 场景，全 `FAILURES: 0`。
+**规则：自检要驱动"设计发什么信号"，不要驱动"宿主提供什么函数"。**
+
+**诊断开关**：`GREETER_DEBUG_FOCUS=1` 每秒打印输入框状态（`enabled/readOnly/visible/activeFocus/尺寸`、文本
+**长度**、`pickerOpen/pickerFocus`）。今天正是靠它把"字段看着正常但回车无效"定位到宿主接线；只打长度不打内容，
+日志里不会出现密码。
+
+**⚠️ 现存副作用（待定）**：greeter 一启动就对默认账户自动发起 howdy 尝试。15:5x 我 `pkill -u greeter` 让
+greetd 重拉 greeter 时，新实例的脸扫**命中**了 → greetd 立刻又开了一个 **jianlongliu 的 niri 会话**（VT1）。
+若不想"人在旁边就被自动登录"，把首次人脸尝试改成**需要一次显式动作**即可（回车＝空提交＝走人脸，
+`LockInput.onAccepted` 本来就是这个设计），代价是失去"人脸优先"。

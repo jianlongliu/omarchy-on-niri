@@ -67,4 +67,9 @@ output "eDP-1" {
 // Quickshell is the whole session here: when it exits (login handed to
 // greetd), take niri with it so greetd sees the greeter process tree end and
 // starts the user's session.
-spawn-sh-at-startup "sh -c 'quickshell -p /etc/greetd/omarchy-greeter; niri msg action quit --skip-confirmation'"
+//
+// Output goes to $HOME/greeter.log rather than the VT console: once the greeter
+// owns the tty, its stdout is only visible on that screen, which makes a failed
+// login impossible to diagnose from a session. $HOME is /var/lib/greeter here,
+// owned by the greeter user, so the redirect is writable.
+spawn-sh-at-startup "log=\"$HOME/greeter.log\"; printf '\n== %s greeter start ==\n' \"$(date -Is)\" >>\"$log\"; exec >>\"$log\" 2>&1; quickshell -p /etc/greetd/omarchy-greeter; niri msg action quit --skip-confirmation"
