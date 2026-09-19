@@ -30,6 +30,81 @@ def niri(args):
         return "", 1
 
 
+def _shim_state_path(name):
+    base = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
+    return os.path.join(base, "hyprctl-shim-%s" % name)
+
+
+def _session_id():
+    """logind session id for this login: XDG_SESSION_ID, else our uid on a seat."""
+    sid = os.environ.get("XDG_SESSION_ID") or ""
+    if sid:
+        return sid
+    try:
+        out = subprocess.run(["loginctl", "list-sessions", "--no-legend"],
+                             capture_output=True, text=True, timeout=10).stdout
+    except Exception:
+        return ""
+    for line in out.splitlines():
+        f = line.split()  # id uid user seat leader type class state tty
+        if len(f) >= 4 and f[1] == str(os.getuid()) and f[3] != "-":
+            return f[0]
+    return ""
+
+
+def session_locked():
+    """True / False / None, from logind's LockedHint.
+
+    Hyprland reports an active ext-session-lock as `LOCK` among the reasons a
+    monitor cannot go solitary. niri has no solitary concept, but it does keep
+    the standard logind hint (its binary sets LockedHint), so that is what we
+    translate from. None means nobody told us.
+    """
+    sid = _session_id()
+    if not sid:
+        return None
+    try:
+        out = subprocess.run(["loginctl", "show-session", sid,
+                              "-p", "LockedHint", "--value"],
+                             capture_output=True, text=True, timeout=10)
+    except Exception:
+        return None
+    if out.returncode != 0:
+        return None
+    value = out.stdout.strip().lower()
+    if value == "yes":
+        return True
+    if value == "no":
+        return False
+    return None
+
+
+def dpms_on():
+    """Whether the outputs are lit — recorded by us, since niri exposes no DPMS state.
+
+    `niri msg outputs` carries no power field, so the only truthful source is the
+    path that blanks: omarchy-brightness-display dispatches hl.dsp.dpms through
+    this shim, so we are the one place that can see it. niri's own Mod+Shift+P
+    bind bypasses us, but niri lights the outputs again on any input (see the
+    shipped binds comment) and the wake path runs after that input, so a stale
+    "on" cannot outlive the input event that made it stale. Unknown -> on, which
+    is the state that cannot skip a needed enable.
+    """
+    try:
+        with open(_shim_state_path("dpms")) as fh:
+            return fh.read().strip() != "off"
+    except Exception:
+        return True
+
+
+def set_dpms(on):
+    try:
+        with open(_shim_state_path("dpms"), "w") as fh:
+            fh.write("on" if on else "off")
+    except Exception:
+        pass
+
+
 def niri_json(args):
     """Run `niri msg -j <args...>` and return parsed JSON or None."""
     out, rc = niri(["-j"] + args)
@@ -87,6 +162,12 @@ def cmd_monitors(json_out):
         return ([] if json_out else "")
     focused = _focused_output_name()
     ws_by_output = _active_workspace_by_output()
+    locked = session_locked()
+    # `LOCK` is how omarchy-hyprland-session-locked recognises a session lock, and
+    # `WORKSPACE` is its spelling for "cannot tell" (exit 2, which callers that
+    # branch only on success treat as unlocked). No blockers = plainly unlocked.
+    blockers = ["WORKSPACE"] if locked is None else (["LOCK"] if locked else [])
+    dpms = dpms_on()
     res = []
     for i, (name, o) in enumerate(outputs.items()):
         logical = o.get("logical") or {}
@@ -110,7 +191,8 @@ def cmd_monitors(json_out):
             "availableModes": modes,
             "activeWorkspace": {"id": ws_by_output.get(name, 0)},
             "specialWorkspace": {"id": 0},
-            "dpmsStatus": False,
+            "dpmsStatus": dpms,
+            "solitaryBlockedBy": blockers,
             "vrr": bool(o.get("vrr_enabled")),
         })
     if json_out:
@@ -414,8 +496,26 @@ def do_dispatch(payload):
     if m:
         act = re.search(r'action\s*=\s*"(\w+)"', m.group(1))
         if act and act.group(1) == "disable":
-            return niri_action(["power-off-monitors"])
-        return niri_action(["power-on-monitors"])
+            rc = niri_action(["power-off-monitors"])
+            if rc == 0:
+                set_dpms(False)
+            return rc
+        rc = niri_action(["power-on-monitors"])
+        if rc == 0:
+            set_dpms(True)
+        return rc
+
+    # plain `dispatch dpms off|on` (the older Hyprland spelling)
+    if dispatcher == "dpms":
+        if arg.strip().lower() == "off":
+            rc = niri_action(["power-off-monitors"])
+            if rc == 0:
+                set_dpms(False)
+            return rc
+        rc = niri_action(["power-on-monitors"])
+        if rc == 0:
+            set_dpms(True)
+        return rc
 
     # hl.dsp.focus({ workspace = "N" }) / hl.dsp.focus({ window = "address:A" })
     m = re.search(r"hl\.dsp\.focus\(\s*\{(.*?)\}\s*\)", payload)
