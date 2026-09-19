@@ -1564,6 +1564,11 @@ greetd ─► /usr/local/bin/split-greeter ─► niri -c /etc/greetd/split-gree
 - Quickshell 0.3.1 **没有 `Io.Socket`**（只有 `FileView`/`Process`），所以 greetd 的 unix socket 由 `Process` + `SplitParser` 驱动一个小 python 桥；`create_session`→`start_session` 必须**同一条连接**，故桥是长连接，消息是「4 字节本机序长度 + JSON」。
 - 会话在 **greeter 进程树退出之后**才由 greetd 启动：QML 先 `Qt.quit()`（0.3.1 没有 `QuickshellGlobal.quit()`），`niri.kdl` 再 `niri msg action quit --skip-confirmation`。
 
+**人脸是"回车触发"的**：设计里 `LockInput.onAccepted` 只在 `lock.faceConfigured` 为真时才在空输入上回车走人脸，
+而 Split/`DesignBase` 把这个默认成 `false`——所以 greeter 必须自己声明：`niri.kdl` 里 `GREETER_FACE "1"`（装机时
+`install.sh` 会探测 `/lib/security/howdy/pam.py`，没有就写 `"0"`，免得回车变死键）。**指纹（fido2）不参与**：
+fprint 只挂在 `/etc/pam.d/sudo` 与 `polkit-1` 上，greetd 这条栈没有它，设计里的 fido2 分支永远不激活。
+
 **人脸优先 = 直接用 PAM 的顺序，零额外认证代码**。`/etc/pam.d/greetd` 是 `ir-light`(optional) → `howdy`(sufficient) → `system-local-login`，于是：
 
 | 界面 / 用户动作 | 协议动作 | 结果 |
@@ -1589,7 +1594,8 @@ greetd ─► /usr/local/bin/split-greeter ─► niri -c /etc/greetd/split-gree
 **不登出也能验收**（都在会话里跑，用 `bridge/mock-greetd.py` 假装 greetd）：
 
 - `python3 split-greeter/bridge/test-bridge.py` —— **24 项协议断言全过**：错密码、成功、失败后重试、交互式 secret、人脸命中、人脸未命中转密码、未知用户、epoch 回显、cancel、socket 不可用（不崩）。
-- `split-greeter/tests/smoke.sh` —— 4 场景**全过**（人脸命中直通 / 人脸未命中回落密码 / 错密码**不产生**会话 / 切账户后登录），断言「greetd 是否收到 `start_session`」+「greeter 是否干净退出」+「无 QML 报错」。加 `GREETER=/etc/greetd/split-greeter` 就是**验装好的那份**（含它自己 `bridge/` 下的桥）——实测也是 4/4，并真拿到了 `start_session`。
+- `split-greeter/tests/smoke.sh` —— 7 场景**全过**（人脸命中直通 / 人脸未命中回落密码 / 错密码**不产生**会话 / 切账户后登录 /
+  **回车触发扫脸**（先断言"没按回车绝不扫脸"再按回车）/ 真按键注入的输密码 / 真按键注入的切账户），断言「greetd 是否收到 `start_session`」+「greeter 是否干净退出」+「无 QML 报错」。（前 4 个用例显式带 `GREETER_AUTOBEGIN=1` 复现旧行为，后 3 个走新的默认路径。）加 `GREETER=/etc/greetd/split-greeter` 就是**验装好的那份**（含它自己 `bridge/` 下的桥）——实测也是 4/4，并真拿到了 `start_session`。
 - 视觉证据：Split 正常渲染（左壁纸 + 时钟、右半透明面板、错误态红框、选择器头像/首字母）；**壁纸跟账户**（实测背景均值 `2.5 → 195.5`）；**配色跟账户**（切到测试账户后 `Color.background` 由 `#111318` 变 `#7f0000`，来源 `users/yvonne/theme`）。
 - 单跑一次（要截界面时）：`--delay` 调大，再用 `GREETER_SELFTEST_OPEN_PICKER=1` / `GREETER_SELFTEST_PICK=<user>` 驱动；`SelfTest.qml` 只在 `GREETER_SELFTEST_PASSWORD` 非空时经 `Loader` 加载，生产路径不经过它。
 
@@ -1675,5 +1681,27 @@ TTY 里自动拿到 root**。15:34 重新 `pkexec install.sh` + `pkexec systemct
 
 **⚠️ 现存副作用（待定）**：greeter 一启动就对默认账户自动发起 howdy 尝试。15:5x 我 `pkill -u greeter` 让
 greetd 重拉 greeter 时，新实例的脸扫**命中**了 → greetd 立刻又开了一个 **jianlongliu 的 niri 会话**（VT1）。
-若不想"人在旁边就被自动登录"，把首次人脸尝试改成**需要一次显式动作**即可（回车＝空提交＝走人脸，
-`LockInput.onAccepted` 本来就是这个设计），代价是失去"人脸优先"。
+**2026-09-19 已改：人脸改成"回车触发"，不再开机就扫（§11.14）。** 启动时**一次认证都不发起**，
+`LockInput.onAccepted` 在空输入上回车 = `faceRequested` → 开扫（这是设计原本的语义）；**直接打字就是纯密码**
+（`authenticate()` 空闲时会自己开一个带密码的会话）。代价是失去"人脸优先"——走过来的瞬间不再自动登录，
+但也因此修掉了"人从镜头前走过就被登进去"以及"自动扫脸掩盖了密码路径到底通不通"。
+需要时 `GREETER_AUTOBEGIN=1` 恢复旧行为（只有测试用得上）。
+
+### 11.14 人脸改成"回车触发"（2026-09-19，用户指定）
+
+用户原话：「回车触发面部解锁（指纹识别这台机不是很合适，我分给 sudo 用了）」。所以：
+
+- **默认不再开机扫脸**。`shell.qml` 给 `Greetd` 传 `autoBegin: (Quickshell.env("GREETER_AUTOBEGIN") || "") === "1"`——
+  缺省不发起任何认证；**空输入上回车**才扫（设计的 `LockInput.onAccepted` 本来就把空提交当"要人脸"）。
+  `Greetd.qml` 自己的 `autoBegin` 默认仍是 `true`，所以 `tests/state.sh`（直接驱动 `Greetd.qml`）不用改。
+- **踩到的坑：`faceConfigured` 不声明，回车就是死键。** 设计里回车走不走人脸看 `lock.faceConfigured`，
+  而 Split/`DesignBase` 默认 `false`，宿主不声明就永远是 `false`——症状与"回车没反应"一模一样，但成因完全不同
+  （§11.13 是密码文本没接上，这里是分支条件不成立）。现在 `niri.kdl` 写 `GREETER_FACE "1"`，
+  `install.sh` 探测 `/lib/security/howdy/pam.py`，没有就改成 `"0"`（免得在一台没装如何的机器上留个死键）。
+- **不回退"人脸优先"的收益**：①人从镜头前路过不会被登进去；②自动扫脸其实**掩盖了密码路径到底通不通**
+  （修那个 bug 时它一直把症状伪装成"人脸失败"）。代价：要抬手按一下回车。
+- **指纹不参与**：fprint 只挂在 `/etc/pam.d/sudo` 与 `/etc/pam.d/polkit-1` 上（用户自己分的），
+  greetd 这条 PAM 栈里没有它，设计里的 fido2 分支永不激活——不写任何代码，保持不变即可。
+- 提示文案：空闲时显示 `Press Enter for face unlock, or just type your password`（`hintOverride`，
+  仅当 PAM 没给更具体的 hint 时）。`tests/smoke.sh` 现在 7 个场景，新增的 `enter-triggers-face`
+  先断言"没按回车绝不开扫"再按回车断言确实开扫并拿到 `start_session`。

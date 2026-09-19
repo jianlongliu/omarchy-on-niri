@@ -24,6 +24,11 @@ greetd ──► /usr/local/bin/split-greeter ──► niri（本目录的 niri
    `auth_message(secret)` 才把密码框交给用户，用 `post_auth_message_response` 送回。
 4. 空字段按回车 = 重新武装人脸扫描（对应锁屏里"回车重试指纹/摄像头"的语义）。
 
+**人脸是显式动作，不是默认行为。** 启动时什么都不发起：**在空输入上回车**才开扫（`LockInput.onAccepted`
+空提交 → `faceRequested`），**直接打字就是纯密码**。设计里回车走不走人脸取决于 `lock.faceConfigured`，
+缺省是 `false`，所以 `niri.kdl` 里必须写 `GREETER_FACE "1"`（`install.sh` 会探测 howdy，没有就写 `"0"`，否则回车是死键）。
+`GREETER_AUTOBEGIN=1` 恢复"开机自动扫脸"（只有测试用）。指纹不参与：fprint 只挂在 `sudo` / `polkit-1` 上。
+
 **一次尝试是有期限的（`GREETER_ATTEMPT_TIMEOUT_MS`，默认 12s）。** PAM 有可能**永远不回答**
 （howdy 卡在摄像头上、info 循环），而 greetd 一条连接上同时只能有一个会话：卡住的那条会把后面
 所有请求堵在门口 —— 在真机上就表现成"输密码毫无反应，也不报错"（这就是 2026-09-19 那次锁在门外的
@@ -129,7 +134,8 @@ GREETER_SELFTEST_PASSWORD=x GREETER_SELFTEST_OPEN_PICKER=1 qs -n -p .
 **没有** `mode` 行；圆角走 `GREETER_CORNER_RADIUS`。
 
 登录用户 / 会话命令在 `niri.kdl` 的 `environment` 段（`GREETER_USER` / `GREETER_SESSION`）；
-`GREETER_ACCOUNTS_DIR` 覆盖每个账户的取色与壁纸目录（只在测试里用，缺省 `/var/lib/greeter/users`）。
+`GREETER_ACCOUNTS_DIR` 覆盖每个账户的取色与壁纸目录（只在测试里用，缺省 `/var/lib/greeter/users`）；
+`GREETER_FACE=1` 声明"这台机装了人脸工具"，决定回车是触发扫脸还是死键；`GREETER_AUTOBEGIN=1` 开机自动扫脸（测试用）。
 
 主题/壁纸由 `sync.sh`（`split-greeter-sync`）拷进 `/var/lib/greeter`：`/data` 壁纸库对
 greeter 用户不可读，所以是拷贝而非软链。布局：

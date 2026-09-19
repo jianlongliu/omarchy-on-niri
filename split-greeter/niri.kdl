@@ -21,6 +21,10 @@ environment {
     // Wallpaper and avatar come from the selected account's synced artwork
     // (split-greeter-sync); GREETER_ACCOUNTS_DIR moves that directory.
     GREETER_CORNER_RADIUS "10"
+    // 1 = a face tool is wired into PAM (see /etc/pam.d/greetd), which is what
+    // makes "press Enter on an empty field" ask for a face. install.sh flips it
+    // to 0 when howdy is not installed.
+    GREETER_FACE "1"
 }
 
 gestures {

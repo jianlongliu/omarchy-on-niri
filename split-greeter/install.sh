@@ -23,6 +23,13 @@ install -d -m 755 "$DEST" "$DEST/bridge"
 for file in shell.qml Greetd.qml Users.qml UserPicker.qml SelfTest.qml niri.kdl; do
   install -m 644 "$SRC/$file" "$DEST/$file"
 done
+
+# Face unlock is only offered when a face tool is actually wired into PAM: with no
+# howdy, telling the design a face is configured would make Enter a dead key.
+if [ ! -e /lib/security/howdy/pam.py ]; then
+  sed -i 's/^\( *GREETER_FACE *\)"1"/\1"0"/' "$DEST/niri.kdl"
+  echo "install: howdy not found, disabled face unlock (GREETER_FACE 0)"
+fi
 for dir in designs Commons Ui; do
   install -d -m 755 "$DEST/$dir"
   for file in "$SRC/$dir"/*; do

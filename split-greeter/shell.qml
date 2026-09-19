@@ -94,6 +94,13 @@ ShellRoot {
     }
 
     Greetd {
+    // Face is an explicit action now: nothing scans at startup. Pressing Enter on
+    // an empty field is what asks for a face (LockInput.onAccepted -> faceRequested
+    // -> begin()), typing a password skips it. Auto-scanning on launch logged
+    // people in just for walking past the camera, and it also hid whether the
+    // password path worked. GREETER_AUTOBEGIN=1 restores the old behaviour
+    // (the smoke suite uses it for the passwordless cases).
+    autoBegin: (Quickshell.env("GREETER_AUTOBEGIN") || "") === "1"
       id: greetd
       username: lastUser.remembered.length > 0
         ? lastUser.remembered
@@ -121,7 +128,14 @@ ShellRoot {
       backgroundPath: window.accountWallpaper(greetd.username)
       avatarPath: greetd.avatarPath
       loginUser: greetd.username
-      hintOverride: greetd.hint
+      // Without this the design treats Enter on an empty field as a no-op:
+      // LockInput.onAccepted only asks for a face when lock.faceConfigured is set
+      // (Split/DesignBase default it to false). install.sh writes GREETER_FACE=1
+      // into niri.kdl when howdy is present.
+      faceConfigured: (Quickshell.env("GREETER_FACE") || "") === "1"
+      hintOverride: greetd.hint.length > 0
+                    ? greetd.hint
+                    : "Press Enter for face unlock, or just type your password"
       // The design's own watchdog reclaims focus for the password field whenever
       // it is not focused (DesignBase.qml:213-226), which silently stole every
       // keystroke from the account picker: Tab opened it, arrows and Enter went
