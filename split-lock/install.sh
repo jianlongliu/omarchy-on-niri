@@ -110,8 +110,10 @@ elif [[ -d $HOME/.config/omarchy/plugins/$THIRD_PARTY_LOCK ]]; then
 fi
 
 say
-say "Done. The shell watches the plugin directory, so the next lock should show"
-say "Split. If it still looks like the old lock, run: omarchy-restart-shell"
+say "Done. The plugin directory is watched, but a plugin of kind \"service\" is"
+say "loaded once (keepLoaded): the lock that is live now stays live, so enabling"
+say "this one silently loses the handler race. Restart the shell to finish:"
+say "  omarchy-restart-shell"
 say
 say "Then test it yourself: lock the session, unlock with your password, and"
 say "press Enter on an empty field for face unlock. Rollback is in the header."

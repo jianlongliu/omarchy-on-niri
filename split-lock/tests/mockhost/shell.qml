@@ -1,16 +1,17 @@
 // Mock host for the Split lock view: it reproduces exactly what Omarchy's own
-// lock service does (Service.qml:306-323) — property bindings plus the
-// passwordTextEdited / submitPassword / clearFailureRequested handlers — and
-// then asserts the wires. Run it through tests/state.sh, which assembles a temp
-// tree with symlinks for qs.Commons and qs.Ui (in production the shell provides
-// those modules; standalone they must be resolvable by name).
+// lock service does (Service.qml:306-323) — property bindings plus all four
+// handlers the service connects (passwordTextEdited / submitPassword /
+// clearFailureRequested / wakeRequested) — and then asserts the wires. Run it
+// through tests/state.sh, which assembles a temp tree with symlinks for
+// qs.Commons and qs.Ui (in production the shell provides those modules;
+// standalone they must be resolvable by name).
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import qs.Commons
 // tests/state.sh assembles a throwaway config tree with this file, LockView.qml,
-// designs/ and the shell's Commons/Ui side by side, so the relative import below
-// resolves there (that layout, not this one, is what the test runs).
+// the design files and the shell's Commons/Ui side by side, so the relative
+// import below resolves there (that layout, not this one, is what the test runs).
 import "." as Lock
 
 ShellRoot {
@@ -24,6 +25,7 @@ ShellRoot {
   property bool inputEnabled: true
   property string backgroundPath: ""
   property string submitted: ""
+  property bool woke: false
   property int checks: 0
   property int failures: 0
 
@@ -66,6 +68,7 @@ ShellRoot {
       onPasswordTextEdited: function(password) { root.enteredPassword = password }
       onSubmitPassword: function(password) { root.submitted = password }
       onClearFailureRequested: root.failureMessage = ""
+      onWakeRequested: root.woke = true
     }
   }
 
@@ -106,6 +109,10 @@ ShellRoot {
       // 7. The clear-failure request goes back out.
       lockView.clearFailureRequested()
       root.check("clear-failure reaches host", root.failureMessage, "")
+
+      // 8. Waking goes back out too (the service unblanks the outputs on it).
+      lockView.wakeRequested()
+      root.check("wake reaches host", root.woke, true)
 
       console.warn("lockhost: RESULT checks=" + root.checks + " failures=" + root.failures)
       Qt.exit(root.failures === 0 ? 0 : 1)

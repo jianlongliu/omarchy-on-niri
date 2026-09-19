@@ -1814,3 +1814,14 @@ Omarchy 的锁层从 `hyprctl -j monitors` 读两个字段，shim 之前都在�
 
 **证据边界**：离线契约测试（8 项具名断言）证明的是**属性/信号接线**；`Service.qml` 在真实会话里跑起来（PAM、锁面、真实按键）要等**用户自己锁一次**才算证实。PAM 前提 `/etc/pam.d/omarchy-lock-password` 已在（否则 `lock()` 直接返回 `missing-pam`）。
 
+### §11.19 换锁**必须重启 shell**（keepLoaded 的 handler 竞争，2026-09-19）
+
+实测：把 explorer 禁用、把 `yvonne.split-lock` 启用之后，**活着的锁仍然是 explorer 的**。两层原因：
+
+1. `service` 类插件是 `keepLoaded: true` —— 禁用/启用只改配置，**不会卸载已在跑的实例**；
+2. 每个锁 Service 都注册 `IpcHandler { target: "lock" }`，Quickshell 只让**先到的那个**生效；后到的会打印 `Handler was registered but will not be used because another handler is registered for target lock`（行里带完整文件路径）。**赢家什么都不打印** —— 所以"新实例日志里没有 `target lock` 落选行 + `omarchy-shell lock isLocked` 能应答"就是"我们的 handler 赢了"的正向证据。
+
+因此换锁流程必须包含 `omarchy-restart-shell`（`install.sh` 结尾已按"必做一步"写）。
+
+顺手得到的一条无痛验证法：`omarchy-shell lock preview` 会把 `LockView` 以 `inputEnabled: false` 挂成 Overlay 显示（点一下就关）——**不用锁屏**就能确认视图建得起来、渲染对不对。2026-09-19 截图确认：壁纸、时钟、头像圆牌、密码框、`Press Enter to log in` 都在。
+

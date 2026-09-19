@@ -48,7 +48,7 @@ note "-- lockview-contract" ""
 check "shell exited 0" "$code" 0
 check "no QML errors" "$(grep -c ' ERROR' "$dir/run.log")" 0
 check "no missing-property errors" "$(grep -c 'non-existent property' "$dir/run.log")" 0
-check "all contract checks ran" "$(grep -o 'checks=[0-9]*' "$dir/run.log" | tail -1)" "checks=8"
+check "all contract checks ran" "$(grep -o 'checks=[0-9]*' "$dir/run.log" | tail -1)" "checks=9"
 check "zero failures inside" "$(grep -o 'failures=[0-9]*' "$dir/run.log" | tail -1)" "failures=0"
 
 # Always show what the mock actually asserted. "0 ERROR lines" on its own is also
