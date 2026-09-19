@@ -1467,7 +1467,7 @@ sudo snapper -c home create -d "pre-dms-removal"
 sudo pacman -Rns dms-shell dms-shell-niri dankcalendar-bin
 ```
 
-- **保留** `greetd-dms-greeter-bin`（见 11.1 的两条理由）。
+- **保留** `greetd-dms-greeter-bin`（见 11.1 的两条理由）。若确实想换成"纯输密码"的登录界面（`agreety` / `tuigreet` / SDDM），按 §11.10 的顺序走：先改 `/etc/greetd/config.toml` 并实测能登，再卸 greeter 包。
 - 卸完留下的残留：`/etc/pam.d/dankshell`（DMS 锁屏用的，已无用途，留着无害，想清理再删）、`~/.config/systemd/user/graphical-session.target.wants/dms.service` 之类的 enable 软链（包内 unit 随包消失，软链若在可删）。**`/etc/pam.d/greetd` 别碰**（greeter 还在用，DMS 在里面写过 howdy 的块）。
 - 若 `systemctl --user` 里还有 dms 的 failed 状态：`systemctl --user reset-failed`。
 - 主账户原有的 `~/.config/niri/`（DMS 那套配置）**不会随包卸载消失**，装移植前先备份再换基座。
@@ -1540,12 +1540,9 @@ omarchy-migrate --pending          # 应为空
 - **是什么**：给 Omarchy 的**锁屏设计库 + 选择器 + 设计器**（manifest `clonedFrom: omarchy.lock`，装上即顶替 stock 锁屏，卸载/停用即回 stock）。24 套内置设计（Classic 就是 stock），密码框带显示按钮，部分设计显示头像；`Designer.qml` + `Editor.qml` 可自建设计，自定义放 `~/.config/omarchy/lock-designs/`，视频素材放 `lock-videos/`。
 - **认证能力**（与 DMS 对等，且**各自独立 PAM 服务**，本机目前只有 `omarchy-lock-password` 存在）：指纹（`omarchy-lock-fingerprint`，有指纹器就自动监听）、facelock（`omarchy-lock-face` + `pam_facelock.so`）、安全钥匙（`omarchy-lock-fido2` + `pam_u2f.so`，由 `extras/setup-fido2.sh` 写入，**唯一需要 root 的一步**）。刻意分开的原因写在它的 README 里：把 `pam_u2f.so` 塞进密码服务会把每次打错的密码都变成钥匙的 PIN 尝试，八次就把钥匙锁死。
 - **顺带功能**：DPMS 空白策略（默认锁后 5s 关屏，可选 Never；还有 `keepDisplaysOnWithHdmi` 这种 HDMI 唤醒绕行开关）、解锁动画（fade/zoom/rise + 时长）、多显示器 `setInputMonitor`（其它屏只显示时钟）、12/24 小时制、`extras/install.sh` 加启动器/菜单入口。
-- **开机画面：README 明确标为 experimental**（原文 `## Boot screen (drive decryption) — experimental`："it works and fails safe（主题坏了 Plymouth 退回纯文本提示、启动本身不受影响），but it is **younger than the rest of the plugin**"）。它是插件里**唯一**触碰预会话世界的能力：那条问**磁盘口令**的界面其实是 Plymouth（shell 还没起），只有带 `plymouth/` 孪生版的 `Terminal` / `Rain` 两套设计能给它换皮；应用时按当前主题取色生成 Plymouth 主题，作为 **systemd-stub 的 initrd addon** 写进 EFI 分区（`omarchy_linux.efi.extra.d/*.addon.efi`，依赖 Omarchy UKI；非 UKI 系统自动退回"烘焙 + 重建 initramfs"老路），`B` / Untouched 可还原。
-  本机现状：`plymouth 26.134.222` 已装，但 `/boot/EFI/Linux/` 里只有 `arch-linux.efi`、**没有** `omarchy_linux.efi` → 真要启用会走 initramfs 重建那条老路；`/etc/systemd/system/omarchy-lock-explorer-boot.{path,service}` 与 `~/.local/state/omarchy/lock-explorer-boot` 标记都不存在 → **当前没启用**。锁屏/设计器/认证那部分 README 没有任何 experimental 字样。
-- **"给开机换皮"到底算不算魔改（2026-09-19 核查）**：
-  - **addon 机制本身是官方的**：man 7 `systemd-stub` 原文 —— `ESP/…/foo.efi.extra.d/*.addon.efi` 会被当作 PE 二进制加载并取用其中的 section（`.cmdline` / `.dtb` / `.initrd` / `.ucode`），"Addons allow those resources to be passed regardless of the kernel version being booted"。也就是说"一次小文件写入、不重建 initramfs"是**正规扩展点**，不是 hack（插件注释与 `extras/no-rebuild-boot-theme.md` 记录了 2026-08-24 真机验证）。
-  - **但本机两条路都堵**：①插件把 UKI 路径写死为 `/boot/EFI/Linux/omarchy_linux.efi`（`plymouth/apply.sh:24`，`addon_capable()` 要求该文件存在），本机 UKI 叫 `arch-linux.efi` → 判定不可用，自动落到 legacy 分支：烘焙进 `/usr/share/plymouth/themes/omarchy-boot/` + `plymouth-set-default-theme omarchy-boot` + **`mkinitcpio -P` 重建 initramfs**（`plymouth/install-root.sh:100-142`，另带 `limine-mkinitcpio` 分支，本机无该命令）；②即便对上名字也白搭——**本机开了 Secure Boot**，man 原文说明 addon 在 Secure Boot 下"will be validated using keys in UEFI DB, Shim's DB or Shim's MOK, and only loaded if the check passes" → **未签名的 addon 会被静默忽略**（且 addon 与 UKI 若都带 `.uname` section 还必须完全一致）。
-  - 结论：在这台机器上，"给 LUKS 口令屏换皮"的现实路径就是**改 Plymouth 默认主题 + 重建 initramfs**，确实动了启动链——而它恰好是 README 唯一标 experimental 的那块。要开就得当作一次有回滚准备的启动链改动来做（快照 + 可还原 stock），不要顺手开。
-- **它**不能**当 display manager（登录界面）。** 三条：①`ext-session-lock-v1` 要求"先有会话再拿锁"，DM 反过来要在会话之前运行并负责**启动**会话；②它是 Quickshell 插件（`kinds: service/overlay`），由**用户会话内**的壳层加载，登录前不存在；greeter 由 greetd 以 `greeter` 用户拉起（dms-greeter 还自带一个 `DMS_RUN_GREETER=1` 的 niri 实例）；③PAM 服务不同（锁用 `omarchy-lock-*`，greeter 用 `/etc/pam.d/greetd`）。它离 DM 最近的地方正是上面那条 **experimental 的 Plymouth 磁盘口令屏**——而且那也只是"给开机提示换皮"，不负责认证会话、不启动会话。
-- **想摆脱 dms-greeter** 的正路：上游 Omarchy 自带的 **SDDM** 主题（`default/sddm/{hyprland.lua,omarchy/metadata.desktop}`；本机当前登录链走 greetd），或 greetd 的 `tuigreet` / `regreet` / `gtkgreet`（extra）。
+- **登录界面（DM）：这个插件当不了** —— 它是会话内的 Quickshell 插件（`ext-session-lock-v1` 要先有会话），DM 在会话之前运行并负责**启动**会话。想要"输密码登录"不需要它，三条路：
+  - **零改动**：`dms-greeter`（现已装）本身就是输密码登录界面；卸 DMS **壳层**不必动它（§11.1）。
+  - **摆脱 DMS 包、成本最低**：`greetd-agreety` **已装**，把 `/etc/greetd/config.toml`（主账户 sudo，0600）的 `[default_session]` 改成 `command = "agreety --cmd niri-session"`（`user = "greeter"`）→ 纯文本"用户名 + 密码 → 进 niri"。注意顺序：先在 TTY（Ctrl+Alt+F2）留好救急通道 → 改配置 → **登出实测能进** → 再卸 `greetd-dms-greeter-bin`；卸它前先 `pacman -D --asexplicit quickshell`（否则 `-Rs` 会把 quickshell 一起删，§11.1）。
+  - **好看/图形化**：`greetd-tuigreet`（extra，带会话选择器）或 SDDM（上游 Omarchy 自带主题 `default/sddm/`）。
+- **开机换皮（README 唯一标 experimental 的部分，本机不做）**：官方快路是 systemd-stub 的 initrd addon（`foo.efi.extra.d/*.addon.efi`，不重建 initramfs），但本机走不到——插件把 UKI 名写死成 `omarchy_linux.efi`（`plymouth/apply.sh:24`，本机是 `arch-linux.efi`），且 Secure Boot 只加载签名过的 addon；现实路径是 `plymouth-set-default-theme` + `mkinitcpio -P` 重建 initramfs，等于动启动链，**不建议顺手开**。
 - **迁移**：插件本体在 `plugins/` 下（9.4M，随 `~/.config/omarchy` 一起走）；每账户状态 = `shell.json` 的插件条目（本机 `design: "split"`）+ `lock-videos/`（软链）+ `lock-designs/`；`omarchy-lock-fido2` / `omarchy-lock-face` 若要启用需在新账户（同一台机只需一次，`/etc` 全机共享）重跑对应脚本。
