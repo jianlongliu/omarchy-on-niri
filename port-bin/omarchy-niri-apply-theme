@@ -1,13 +1,29 @@
 #!/usr/bin/env python3
-"""Re-apply the current Omarchy theme's border colors into niri's config.kdl.
+"""Re-apply the current Omarchy theme's border colours into niri's config.
 
-Omarchy's only compositor-facing look setting (beyond Hyprland defaults) is the
-window focus-ring/border colour, emitted as active_border_color / inactive_border_color
-in the generated theme/hyprland.lua.  niri's composer look lives in config.kdl, so this
-writes those two colours into the focus-ring block in place.
+Omarchy's only compositor-facing look setting (beyond Hyprland defaults) is the window
+border colour, emitted as active_border_color / inactive_border_color in the generated
+theme/hyprland.lua.  The cycle is matugen's palette -> theme colors.toml
+hyprland_active_border (primary -> tertiary -> primary_container, 45deg) -> that lua plus
+theme/shell.toml, where the shell renders the same token as the Omarchy menu card's border.
 
-By default it only writes config.kdl; the new colour lands on the next niri config
-reload.  Pass --reload to also run `niri msg action load-config-file` immediately.
+The niri ring should read like that menu ring, so this writes it from that token:
+
+  - focus-ring (drawn outside the window) takes the gradient's first half,
+  - border (drawn inside the window) takes its second half,
+  - active-color of both keeps the leading / middle stop as the solid fallback.
+
+niri takes two stops per gradient, so a three-stop theme gradient needs those two bands to
+show all of its colours; a two-stop theme uses the focus ring alone and a flat theme leaves
+solid colours behind.  The script switches `border` on/off with the theme and leaves the
+widths alone, and keeps the unfocused border transparent (border space is reserved inside
+the tile, so a second band costs two logical pixels of window content height and width).
+
+Note the angle: BorderGeometry.js measures it from the +x axis downwards (45 = down-right),
+while niri renders CSS linear-gradient (0 = up, clockwise), hence the +90 translation.
+
+By default it only writes the config; the new colour lands on the next niri config reload.
+Pass --reload to also run `niri msg action load-config-file` immediately.
 """
 
 import os
@@ -17,19 +33,16 @@ import subprocess
 import sys
 
 THEME_LUA = os.path.expanduser("~/.local/state/omarchy/current/theme/hyprland.lua")
+THEME_SHELL = os.path.expanduser("~/.local/state/omarchy/current/theme/shell.toml")
 NIRI_CFG = os.path.expanduser("~/.config/niri/config.kdl")
+INVISIBLE = "#00000000"
 
 
 def normalize(color: str):
-    """Normalise a Hyprland/Omarchy colour to niri's hex form.  None if unparseable.
-
-    A Hyprland border may be a gradient ("rgba(..) rgba(..) rgba(..) 45deg"); niri's
-    focus-ring is one flat colour, so use the gradient's leading stop.
-    """
-    tokens = color.strip().strip('"').split()
-    if not tokens:
+    """Normalise one Hyprland/Omarchy colour token to niri's hex form, or None."""
+    c = color.strip().strip('"')
+    if not c:
         return None
-    c = tokens[0]
     m = re.fullmatch(r"rgba\(([0-9a-fA-F]{6,8})\)", c)
     if m:
         return "#" + m.group(1).lower()
@@ -46,12 +59,35 @@ def normalize(color: str):
     return None
 
 
+def parse_gradient_spec(spec: str):
+    """Parse "rgba(..) rgba(..) rgba(..) 45deg" into (niri hex stops, angle string)."""
+    colours, angle = [], None
+    for token in spec.strip().strip('"').split():
+        m = re.fullmatch(r"(-?[\d.]+)deg", token)
+        if m:
+            angle = m.group(1)
+            continue
+        norm = normalize(token)
+        if norm:
+            colours.append(norm)
+    return colours, angle
+
+
+def niri_angle(theme_angle):
+    """Translate the shell's gradient angle to niri's (CSS) angle (see module docstring)."""
+    try:
+        degrees = float(theme_angle) if theme_angle is not None else 0.0
+    except ValueError:
+        degrees = 0.0
+    return "%d" % (int(round(degrees + 90)) % 360)
+
+
 def extract_colors():
     """Pull active_border_color/inactive_border_color out of the generated theme lua.
 
     A theme may define its active border as a gradient, which Omarchy renders as a Lua
-    table -- `{ colors = { "rgba(..)", .. }, angle = 45 }`.  niri's focus-ring is one
-    flat colour, so unwrap the first entry of such a table.
+    table -- `{ colors = { "rgba(..)", .. }, angle = 45 }`.  The solid colour consumers use
+    the table's first entry.
     """
     active = inactive = None
     try:
@@ -74,35 +110,182 @@ def extract_colors():
     return normalize(active) if active else None, normalize(inactive) if inactive else None
 
 
-def patch_focus_ring(text, active, inactive):
-    """Set active-color/inactive-color inside the first focus-ring block."""
-    lines = text.splitlines(keepends=True)
+def extract_lua_gradient():
+    """(colours, angle) from the `{ colors = {..}, angle = 45 }` table, if there is one."""
+    try:
+        with open(THEME_LUA) as fh:
+            text = fh.read()
+    except OSError:
+        return [], None
+    m = re.search(r"local\s+active_border_color\s*=\s*\{(.*)\}\s*$", text, re.M)
+    if not m:
+        return [], None
+    body = m.group(1)
+    angle = re.search(r"angle\s*=\s*(-?[\d.]+)", body)
+    colours = [c for c in (normalize(t) for t in re.findall(r'"(rgba?\([^"]*\)|#[0-9a-fA-F]{3,8})"', body)) if c]
+    return colours, angle.group(1) if angle else None
+
+
+def extract_menu_gradient():
+    """(colours, angle) of the ring as the shell draws it, i.e. the menu card's border.
+
+    theme/shell.toml `[hyprland] active-border-foreground` is the token the menu ring is
+    rendered from, so it is the source of truth; a theme that ships no shell.toml falls
+    back to the lua table.  A flat token comes back as a single stop.
+    """
+    try:
+        with open(THEME_SHELL) as fh:
+            in_hyprland = False
+            for line in fh:
+                stripped = line.strip()
+                if stripped.startswith("["):
+                    in_hyprland = stripped.startswith("[hyprland]")
+                    continue
+                if not in_hyprland or stripped.startswith("#"):
+                    continue
+                if re.match(r"active-border-foreground\s*=", stripped):
+                    spec = re.search(r'"([^"]*)"', stripped)
+                    if spec:
+                        colours, angle = parse_gradient_spec(spec.group(1))
+                        if colours:
+                            return colours, angle
+    except OSError:
+        pass
+    return extract_lua_gradient()
+
+
+def split_stops(colours, single=False):
+    """Split the theme gradient into the (outer, inner) band stop pairs.
+
+    niri draws two stops per gradient, so a three-stop theme gradient is carried by two
+    bands instead: the focus ring outside the window takes the first half and the border
+    inside it takes the second half.  Both meet at the middle stop, which is what makes the
+    pair read as the theme's single gradient.  Two stops give both bands the same pair.
+
+    With single=True the ring draws the whole gradient itself and the border stays off,
+    which trades the middle stop for a plain two-stop sweep (useful for A/B comparing).
+    """
+    if single or len(colours) < 3:
+        return (colours[0], colours[-1]), (colours[0], colours[-1])
+    mid = len(colours) // 2
+    return (colours[0], colours[mid]), (colours[mid], colours[-1])
+
+
+def gradient_args(stops, angle):
+    return 'from="%s" to="%s" angle=%s' % (stops[0], stops[1], niri_angle(angle))
+
+
+def find_block(lines, name):
+    """Return (open, close) line indexes of the first `name {` block, or (-1, -1)."""
     depth = 0
-    in_ring = False
-    ring_open = -1
+    open_at = -1
     for i, line in enumerate(lines):
         stripped = line.strip()
-        if not in_ring and re.match(r"focus-ring\s*\{", stripped):
-            in_ring = True
-            depth = 1
-            ring_open = i
+        if open_at < 0:
+            if re.match(name + r"\s*\{", stripped):
+                open_at = i
+                depth = 1
             continue
-        if in_ring:
-            depth += stripped.count("{") - stripped.count("}")
-            if depth <= 0:
-                break
-            if re.match(r"active-color\b", stripped):
-                lines[i] = re.sub(r'active-color\s+"[^"]*"', 'active-color "%s"' % active, line)
-            elif re.match(r"inactive-color\b", stripped):
-                lines[i] = re.sub(r'inactive-color\s+"[^"]*"', 'inactive-color "%s"' % inactive, line)
-    return "".join(lines), ring_open
+        depth += stripped.count("{") - stripped.count("}")
+        if depth <= 0:
+            return open_at, i
+    return -1, -1
+
+
+def set_key(lines, open_at, close_at, key, args, indent):
+    """Write `key <args>` inside a block, inserting it after the block's first key if absent."""
+    for i in range(open_at + 1, close_at):
+        if re.match(key + r"\b", lines[i].strip()):
+            own = lines[i][:len(lines[i]) - len(lines[i].lstrip())]
+            lines[i] = "%s%s %s\n" % (own, key, args)
+            return i
+    anchor = open_at + 1
+    for i in range(open_at + 1, close_at):
+        if re.match(r"\w[\w-]*\s", lines[i].strip()):
+            anchor = i + 1
+            break
+    lines.insert(anchor, "%s%s %s\n" % (indent, key, args))
+    return anchor
+
+
+def drop_key(lines, open_at, close_at, key):
+    """Remove `key ...` from a block if present."""
+    for i in range(close_at, open_at, -1):
+        if re.match(key + r"\b", lines[i].strip()):
+            del lines[i]
+
+
+def set_flag(lines, open_at, close_at, flag, indent):
+    """Turn a bare on/off flag inside a block into `flag`, inserting it if absent."""
+    for i in range(open_at + 1, close_at):
+        if re.fullmatch(r"(on|off)", lines[i].strip()):
+            lines[i] = "%s%s\n" % (indent, flag)
+            return i
+    idx = open_at + 1
+    while idx < close_at and lines[idx].strip().startswith("//"):
+        idx += 1
+    lines.insert(idx, "%s%s\n" % (indent, flag))
+    return idx
+
+
+def patch_ring(text, active, inactive, gradient, single=False):
+    """Write the theme's border colours into the focus-ring and border blocks.
+
+    Returns (text, patched_any).  `gradient` is (colours, angle); with one stop or none the
+    ring falls back to solid colours and any gradient lines are dropped.
+    """
+    lines = text.splitlines(keepends=True)
+    stop_pairs = None
+    if gradient and gradient[0] and len(gradient[0]) >= 2:
+        stop_pairs = split_stops(gradient[0], single)
+    angle = gradient[1] if gradient else None
+
+    patched = False
+    two_band = bool(stop_pairs and stop_pairs[0] != stop_pairs[1])
+    ring_open, ring_close = find_block(lines, "focus-ring")
+    if ring_open < 0:
+        return text, False
+    indent = " " * (len(lines[ring_open]) - len(lines[ring_open].lstrip()) + 4)
+    set_flag(lines, ring_open, ring_close, "on", indent)
+    ring_open, ring_close = find_block(lines, "focus-ring")
+    set_key(lines, ring_open, ring_close, "active-color", '"%s"' % (active or gradient[0][0]), indent)
+    set_key(lines, ring_open, ring_close, "inactive-color", '"%s"' % (inactive or "#505050"), indent)
+    patched = True
+
+    if stop_pairs:
+        set_key(lines, ring_open, ring_close, "active-gradient", gradient_args(stop_pairs[0], angle), indent)
+    else:
+        drop_key(lines, ring_open, ring_close, "active-gradient")
+
+    # The border draws the gradient's second half, just inside the focus ring.  With only
+    # one half to draw there is nothing to put in it, and a transparent band would just
+    # look like a gap, so it stays off.
+    border_open, border_close = find_block(lines, "border")
+    if border_open >= 0:
+        b_indent = " " * (len(lines[border_open]) - len(lines[border_open].lstrip()) + 4)
+        if two_band:
+            mid = gradient[0][len(gradient[0]) // 2]
+            set_flag(lines, border_open, border_close, "on", b_indent)
+            border_open, border_close = find_block(lines, "border")
+            set_key(lines, border_open, border_close, "active-color", '"%s"' % mid, b_indent)
+            set_key(lines, border_open, border_close, "inactive-color", '"%s"' % INVISIBLE, b_indent)
+            set_key(lines, border_open, border_close, "active-gradient", gradient_args(stop_pairs[1], angle), b_indent)
+            set_key(lines, border_open, border_close, "inactive-gradient",
+                    gradient_args((INVISIBLE, INVISIBLE), angle), b_indent)
+        else:
+            set_flag(lines, border_open, border_close, "off", b_indent)
+            border_open, border_close = find_block(lines, "border")
+            drop_key(lines, border_open, border_close, "active-gradient")
+            drop_key(lines, border_open, border_close, "inactive-gradient")
+
+    return "".join(lines), patched
 
 
 def candidate_configs():
     """config.kdl plus the files it includes, in include order.
 
-    The niri port splits the compositor config into included files, and the focus-ring
-    block lives in layout.kdl, so the ring is not necessarily in config.kdl itself.
+    The niri port splits the compositor config into included files, and the ring lives in
+    layout.kdl, so the focus-ring block is not necessarily in config.kdl itself.
     """
     paths = [NIRI_CFG]
     try:
@@ -117,9 +300,21 @@ def candidate_configs():
     return paths
 
 
+def describe(active, inactive, gradient, single=False):
+    if gradient and gradient[0] and len(gradient[0]) >= 2:
+        outer, inner = split_stops(gradient[0], single)
+        if outer != inner:
+            return "%s + %s ring bands at niri angle %s" % (
+                "%s->%s" % outer, "%s->%s" % inner, niri_angle(gradient[1]))
+        return "single %s->%s ring at niri angle %s" % (outer[0], outer[1], niri_angle(gradient[1]))
+    return "flat %s ring" % active
+
+
 def main():
     reload_now = "--reload" in sys.argv[1:]
+    single = "--single-band" in sys.argv[1:]
     active, inactive = extract_colors()
+    gradient = extract_menu_gradient()
     if not active and not inactive:
         print("omarchy-niri-apply-theme: no theme border colours found; leaving niri config untouched")
         return 1
@@ -128,18 +323,19 @@ def main():
         with open(path) as fh:
             original = fh.read()
 
-        patched, block = patch_focus_ring(original, active or "#7fc8ff", inactive or "#505050")
-        if block < 0:
+        patched, ok = patch_ring(original, active, inactive, gradient, single)
+        if not ok:
             continue
 
         if patched == original:
-            print("omarchy-niri-apply-theme: colours already up to date (%s / %s)" % (active, inactive))
+            print("omarchy-niri-apply-theme: colours already up to date (%s)"
+                  % describe(active, inactive, gradient, single))
         else:
             shutil.copy2(path, path + ".bak-niri-theme")
             with open(path, "w") as fh:
                 fh.write(patched)
-            print("omarchy-niri-apply-theme: wrote focus-ring colours %s / %s to %s"
-                  % (active, inactive, os.path.basename(path)))
+            print("omarchy-niri-apply-theme: wrote %s to %s"
+                  % (describe(active, inactive, gradient, single), os.path.basename(path)))
         break
     else:
         print("omarchy-niri-apply-theme: no focus-ring block found in %s or its includes"

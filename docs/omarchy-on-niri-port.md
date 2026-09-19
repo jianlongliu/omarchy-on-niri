@@ -62,7 +62,7 @@ hyprctl 调用面有界、可直接映射。
 | `~/bin/hyprctl` (624 行, +x) | hyprctl 垫片：Omarchy 的 `hyprctl` 调用 → `niri msg`，纯 stdlib，不依赖 jq；`cmd_binds` 支持 `include` 递归展开（config.kdl 模块化后键位仍可见，见 §4） |
 | `~/.local/share/omarchy/shell/Commons/Niri.qml` (186 行) | QuickShell 单例，**订阅 niri 事件流**（`niri msg -j event-stream`），暴露 `workspaces/focusedWorkspace/focusedMonitor` + `overviewOpen`（§6、§8.15） |
 | `~/.local/share/omarchy/shell/plugins/blurwallpaper/` (`BlurWallpaper.qml` + `manifest.json`) | 移植自有 QuickShell 插件（id `omarchy.blurwallpaper`，kind `service`）：overview 期间渲染强模糊壁纸；图层**常驻映射**、由 niri 只在 overview 内合成（§8 第 10 条、§8.16） |
-| `~/bin/omarchy-niri-apply-theme` (Python, +x) | 把当前 Omarchy theme 的边框色写进 niri 的 `focus-ring`（C 层换色）；**沿 `include` 定位**含 `focus-ring` 的模块、支持渐变取首个色站（§5.6） |
+| `~/bin/omarchy-niri-apply-theme` (Python, +x) | 把当前 Omarchy theme 的边框色写进 niri 的环（C 层换色）；**沿 `include` 定位**含 `focus-ring` 的模块；色源是菜单同款 token，三色渐变拆成 `focus-ring`+`border` **两带**（角度 +90，§5.6） |
 | `~/bin/materal-update` (Python, +x) | **主题动态取色生成器**：读当前壁纸 → matugen 出 M3 配色 → 映射成 omarchy `colors.toml` → 重套主题（§8.10；仓库副本 `port-bin/materal-update`） |
 | `~/.config/omarchy/themes/tonal-spot/` | 用户级主题（`matugen.toml` + 自生成 `backgrounds/` + 静态 ANSI 16 色），`omarchy theme set Tonal-Spot` 选用（§8.10） |
 | `~/.config/omarchy/hooks/theme-set.d/20-materal` | 换 theme 时重新取色（与 `10-niri-border` 并列，§8.10；仓库副本 `hooks/theme-set.d/20-materal`） |
@@ -242,14 +242,30 @@ Omarchy 的 look'n'feel（`looknfeel.lua`）默认把 gaps/rounding/动画/layou
 `active_border_color` / `inactive_border_color`（catppuccin 为 `#89b4fa` / `rgba(595959aa)`）。
 
 niri 上这个颜色由 `focus-ring` 块决定（模块化拆分后位于 `~/.config/niri/layout.kdl`，§5.7）。
-`omarchy-niri-apply-theme`（Python）读当前 `theme/hyprland.lua`，把 `active-color`/`inactive-color`
-就地写进 `focus-ring`（Hyprland 的 `rgba(rrggbbaa)` 归一化成 niri 的 `#rrggbbaa`），并备份。
-默认只写不重载：重载会重置 niri 的运行时覆盖（如 SCALE 按钮改的 scale/mode），所以换色在下次
-`load-config-file`/重启时生效。
+`omarchy-niri-apply-theme`（Python）**沿主题生成链路取色**，不自己拍颜色：
+
+- 色源是 `theme/shell.toml` 的 `[hyprland] active-border-foreground` —— **omarchy menu 卡片那圈用的
+  就是它**（`[menu] border = "hyprland.active-border-foreground"`），由 matugen 出的
+  `primary → tertiary → primary_container` 45°（`colors.toml` 的 `hyprland_active_border`）经
+  `omarchy-theme-set-templates` 渲染而来；主题没生成 shell.toml 时回落到 `theme/hyprland.lua` 的 Lua table。
+- 写进 `layout.kdl` 的是**两带**（因为 niri 26.04 **每个渐变色只吃两停**，`colors="#a" "#b" "#c"`
+  列表被 `niri validate` 拒，见 §5.6 末尾）：
+  - `focus-ring`（画在窗口**外侧**）：`active-color`（首色站，兼作 fallback）+ `active-gradient
+    from=<首> to=<中> angle=<主题角度+90>` —— 渐变的前半段；
+  - `border`（画在窗口**内侧**）：`on` + `active-color`（中间站）+ `active-gradient from=<中>
+    to=<末> angle=<主题角度+90>` + `inactive-*` 全透明 —— 渐变的后半段。
+  两带在中间站接头，合起来才是主题那条三色渐变；主题边框退回平色/两停时脚本自动改回单带
+  （`focus-ring` 一条渐变 + `border off`）。写前备份 `.bak-niri-theme`。
+- 脚本只管颜色和 `border` 的 on/off，**不动宽度**（当前两处各 `width 2`）。`border` 的色带画在
+  tile **内部**，所以要占内容 2 逻辑像素：`niri msg --json windows` 里 `window_size` 612×724
+  对 `tile_size` 616×728、`window_offset_in_tile` `[2,2]`；未聚焦窗的 border 透明，看起来仍是原先的无框。
+- 默认只写不重载：重载会重置 niri 的运行时覆盖（如 SCALE 按钮改的 scale/mode），所以换色在下次
+  `load-config-file`/重启时生效。
 
 ```sh
-~/bin/omarchy-niri-apply-theme        # 只写 focus-ring
-~/bin/omarchy-niri-apply-theme --reload  # 写 + niri msg action load-config-file
+~/bin/omarchy-niri-apply-theme              # 只写（两带，默认）
+~/bin/omarchy-niri-apply-theme --reload     # 写 + niri msg action load-config-file
+~/bin/omarchy-niri-apply-theme --single-band  # 单带对比版：环=首→末、border off（丢掉中间站）
 ```
 
 换 style 时由 `theme-set.d/10-niri-border` 钩子自动触发（只写，不重载）。
@@ -261,9 +277,32 @@ niri 上这个颜色由 `focus-ring` 块决定（模块化拆分后位于 `~/.co
 > - **沿 `include` 指令递归**找含 `focus-ring` 的模块（脚本自己走 include 树，与垫片 `cmd_binds`
 >   同一思路），找到即写。
 > - **支持渐变**：`hyprland.lua` 里 `active_border_color` 可能是 Lua **table**
->   （`{ colors = { "rgba(...)", ... }, angle = 45 }`）而非字符串；niri 没有渐变焦点环，取**首个色站**。
+>   （`{ colors = { "rgba(...)", ... }, angle = 45 }`）而非字符串。第一版只取**首个色站**（纯色环），
+>   2026-09-19 晚起改为写 `active-gradient`，见下一条。
 > 验证：`omarchy theme set Tonal-Spot` 后 `layout.kdl` 的 `focus-ring` 变成该主题的
 > `active_border_color`（见 §9）。脚本在 `~/bin/`，不在 omarchy 仓库内，故不进 `niri.patch`。
+
+> ✅ **环改成与菜单同一条渐变（2026-09-19 晚）**：原先只写首色站，环是纯粉、和菜单那圈对不上。
+> 现在色源换成菜单同款 token（`theme/shell.toml [hyprland] active-border-foreground`，同样是 matugen
+> 那条 `primary→tertiary→primary_container` 45°）。
+>
+> ⚠️ **角度必须 +90**：壳层 `shell/Commons/BorderGeometry.js` 从 **+x 轴向下**量角度（45° = 右下），
+> niri 走 CSS `linear-gradient` 约定（0 = 上、顺时针），所以主题的 45° 要写成 `angle=135`。
+> 写成 45 时环的粉端跑到了左下（和菜单镜像），这是"颜色不一样"最扎眼的一处；改 135 后粉端回到左上。
+>
+> **三色靠两带还原**：niri 每带只吃两停，于是 `focus-ring` 拿走渐变前半段（首→中）、`border`
+> 拿后半段（中→末），两带在中间站接头。像素验证（`niri msg windows` 定位聚焦窗、逐点取色）：
+> - 环的外带在 s=0.05 处 (254,177,204) vs 菜单卡片同位置 (254,176,203)，**ΔRGB 合计 2**；
+> - 内带跟的是菜单后半段：s=0.55→0.95 差值 36/28/35/20/29（合计，满分 765）；
+> - 单带（`--single-band`）对菜单的均值差 ≈47、两带"各管半程"最好时 ≈32 —— 两带更贴菜单的暖段，
+>   单带则在整体平均上略稳，所以留了开关给肉眼镜选。
+> - 代价：`border` 占内容 2 逻辑像素（见上），未聚焦窗的 border 透明故外观不变。
+>
+> **没做到的事（诚实记录）**：菜单那条渐变在 t=0.5 有拐点，而 niri 的每一带都是**直线**插值，
+> 所以单带或多带都无法逐像素复刻拐点：环的中间色调会比菜单略冷/略暗一点。实测菜单自身曲线也比
+> `0/0.5/1` 均匀停靠的模型"跑得快"（s=0.45 处已是 (214,159,136)，模型给 (242,185,156)），故别拿
+> 均匀三停模型当验收基准，要比就比**同一张图里的像素**。`niri validate` 通过，二次运行输出
+> "already up to date"（幂等），主题退平色时 `border` 自动关掉、`active-gradient` 行删除。
 
 ### 5.7 模块化拆分 + 显示/字体/圆角（2026-08-25 调校）
 
@@ -276,7 +315,7 @@ niri 上这个颜色由 `focus-ring` 块决定（模块化拆分后位于 `~/.co
 | `config.kdl` | 编排器：`environment` / `spawn` / `animations` / `screenshot-path` + 6 个 `include` |
 | `input.kdl` | 输入设备（键盘 / 触摸板 / 鼠标 / trackpoint） |
 | `monitor.kdl` | `output "eDP-1"`：分辨率 / modeline / scale |
-| `layout.kdl` | gaps / focus-ring / border / shadow / struts |
+| `layout.kdl` | gaps / focus-ring / border / shadow / struts；`focus-ring` 与 `border` 里的 `active-color` / `active-gradient`（以及 `border` 的 on/off）是**脚本生成值**（首次运行 `omarchy-niri-apply-theme` 自动插入，§5.6） |
 | `window-rules.kdl` | 逐应用规则 + 全局圆角 |
 | `effects.kdl` | 磨砂 blur 参数 + layer-rule（§8.8，2026-08-26 磨砂时追加，注意它也被 include）|
 | `binds.kdl` | 全部按键绑定（须包在 `binds { }` 内） |
@@ -996,6 +1035,10 @@ materal-update --print    # 只打印推导出的调色板
 
 ### 8.11 bar 插件层（胶囊工作区 / Arch logo / 浮栏）
 
+> **插件层总览另见 `docs/plugins.md`**（正本 `~/Documents/omarchy-niri-plugins.md`）：那份写**第三方 / 自研
+> 插件的现状与运维** —— 装了哪些、密钥与设置、验证命令、更新与本地补丁重放、坑清单；
+> 本节与 §8.17 只讲**随 niri 移植产生的魔改**（patch 存档 `~/.config/omarchy/niri-port/plugin-patches/`）。
+
 三件事都是**用户层插件**，放在 `~/.config/omarchy/plugins/`（仓库外 → `omarchy update` 碰不到，
 `niri.patch` 也不必为它们加 hunk）。bar 结构仍由 `~/.config/omarchy/shell.json` 决定。
 
@@ -1369,7 +1412,7 @@ pkexec ~/.local/share/omarchy/bin/omarchy-apply-lock     # 或 sudo omarchy-appl
 - [x] 键位重映射：方向键方案 + `Mod+K`/`Mod+Ctrl+L` 让给 Omarchy（`load-config-file` 重载后）。
 - [x] 背景壁纸显示：`qt6-imageformats` + QML/theme-set 修复后，`grim` 见波纹像素。
 - [x] A 层：菜单项全部指向 `config.kdl`（不再出空文件），`omarchy-refresh-hyprland` niri no-op。
-- [x] C 层：`omarchy-niri-apply-theme` 写入 `#89b4fa`/`#595959aa`，`niri validate` 通过、热重载 OK。**2026-08-30 查出：§5.7 模块化后 `focus-ring` 移入 `layout.kdl`、脚本仍写 `config.kdl` → 静默失效；2026-09-19 已改为"沿 `include` 定位 + 渐变取首色站"并重验（见 §5.6）。**
+- [x] C 层：`omarchy-niri-apply-theme` 写入 `#89b4fa`/`#595959aa`，`niri validate` 通过、热重载 OK。**2026-08-30 查出：§5.7 模块化后 `focus-ring` 移入 `layout.kdl`、脚本仍写 `config.kdl` → 静默失效；2026-09-19 已改为"沿 `include` 定位 + 渐变取首色站"并重验，当晚再升级为"菜单同款 token + 三色拆两带 + 角度 +90"（见 §5.6）。**
 - [x] 更新覆盖层：`omarchy-niri-repatch` 幂等（已应用判 no-op；stash 还原后能干净重放）。
 - [x] `theme-set`/`post-update` 钩子触发正常、非 niri 静默跳过。
 - [ ] 截图/剪贴板 CLI 全链路实测（slurp/grim 交互，需桌面环境）。
@@ -1398,7 +1441,8 @@ pkexec ~/.local/share/omarchy/bin/omarchy-apply-lock     # 或 sudo omarchy-appl
 - [x] **迁移归零**：121 条全部标记，实跑 33 条（30 通过）；`omarchy-migrate --pending` 为空（见 §8.9.3）。
 - [x] **`cf`（Cloudflare CLI）**：`cf --version` → `v0.10.0`（依赖 `mise`）。
 - [x] **主题动态取色（2026-09-19）**：`omarchy theme bg next` → path 单元触发 → `materal-update` 重取色并重套主题（staged `colors.toml` 与推导一致、生成了 `shell.toml`、无残留 guard）；重复运行判 "already matches"（幂等）；`omarchy theme set catppuccin` → `omarchy theme set Tonal-Spot` 钩子同样生效（见 §8.10）。
-- [x] **C 层回归修复（2026-09-19）**：脚本沿 `include` 找到 `layout.kdl` 的 `focus-ring` 并写入主题色（渐变取首色站），`niri validate` 通过（见 §5.6）。
+- [x] **C 层回归修复（2026-09-19）**：脚本沿 `include` 找到 `layout.kdl` 的 `focus-ring` 并写入主题色（当时渐变取首色站），`niri validate` 通过（见 §5.6）。**晚些时候连升两级**：色源换成菜单同款 `active-border-foreground`；再把三色渐变拆成 `focus-ring`+`border` 两带并修掉角度约定（+90）——菜单卡片与窗口环逐点比对，外带 ΔRGB 合计 2，内带跟后半段（§5.6）。
+- [x] **窗口边框 = 菜单那圈（2026-09-19 晚）**：环的两带均由主题 token 生成（`--single-band` 保留单带对比版）；代价是 `border` 占内容 2 逻辑像素（`window_size` 612×724 vs `tile_size` 616×728），未聚焦窗透明不受影响（见 §5.6）。
 - [x] **浮栏几何（2026-09-19）**：像素实测 bar 占物理 y 16..79、左缘 x = 16；平铺窗口停在 728 = 800 − (32 bar + 8 floatGap + 16 niri gaps)，niri 独占区与自身 gaps 不打架（见 §8.11）。
 - [x] **bar 部件（2026-09-19）**：胶囊工作区（聚焦点拉伸 2.6×、四级 alpha）与 Arch logo 渲染正常，点击经 `hyprctl` 垫片走通（见 §8.11）。
 - [x] **主题精简（2026-09-19）**：仓库自带主题删剩 `catppuccin`（含 `catppuccin-latte` 共删 21 个），用户层保留 `tonal-spot`；`omarchy-theme-list` → 只有 Catppuccin / Tonal Spot；覆盖层 `--reverse --check` 仍通过、当前主题与壁纸无断链（见 §8.7）。
