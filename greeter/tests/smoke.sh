@@ -10,8 +10,10 @@
 set -eu
 
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-GREETER=$(dirname "$HERE")
-MOCK=$GREETER/bridge/mock-greetd.py
+# Default: the checkout. GREETER=/etc/greetd/omarchy-greeter smokes the installed
+# copy instead (its shell and its bridge), which is what greetd actually runs.
+GREETER=${GREETER:-$(CDPATH= cd -- "$HERE/.." && pwd)}
+MOCK=$HERE/../bridge/mock-greetd.py
 BRIDGE=$GREETER/bridge/greetd-bridge.py
 WALLPAPER=${WALLPAPER:-$HOME/.local/state/omarchy/current/theme/backgrounds/1-totoro.webp}
 

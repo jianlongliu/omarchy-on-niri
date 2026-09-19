@@ -63,7 +63,8 @@ user = "greeter"
 ## 不登出也能测
 
 ```sh
-./tests/smoke.sh
+./tests/smoke.sh                                   # 仓库里的那份
+GREETER=/etc/greetd/omarchy-greeter ./tests/smoke.sh   # 装好的那份（含它自己的桥）
 ```
 
 它用 `bridge/mock-greetd.py` 假装 greetd、用 `GREETER_ACCOUNTS_DIR` 指到一份临时账户目录，
@@ -72,6 +73,13 @@ user = "greeter"
 greetd 是否收到 `start_session`、greeter 是否干净退出、有无 QML 报错；
 日志落在 `/tmp/greeter-smoke-<场景>.log`。桥接本身另有 24 项协议断言：
 `python3 bridge/test-bridge.py`。
+
+装完可以直接验：`niri validate -c /etc/greetd/omarchy-greeter/niri.kdl`、
+`pkexec -u greeter sh -c 'for f in $(find /etc/greetd/omarchy-greeter -type f); do [ -r "$f" ] || echo BAD $f; done'`、
+以及上面那条 `GREETER=/etc/greetd/... smoke.sh`（不需要登出、也不需要改 greetd 配置）。
+
+**注意**：`greeter` 账户的 passwd home 是 `/`，所以 `niri.kdl` 里的 `HOME "/var/lib/greeter"`
+是**必须**的——少了它主题和状态目录全都找不到。
 
 单跑一次（要截界面时用）：
 

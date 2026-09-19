@@ -13,6 +13,8 @@ environment {
     // The greeter's HOME: sync.sh puts the theme's colors.toml / shell.toml in
     // $HOME/.local/state/omarchy/current/theme so the login screen matches the
     // desktop palette.
+    // Load-bearing: the greeter user's passwd home is "/", so HOME must be set
+    // here or nothing can find the synced theme.
     HOME "/var/lib/greeter"
     GREETER_USER "jianlongliu"
     GREETER_SESSION "niri-session"

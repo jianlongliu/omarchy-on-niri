@@ -62,19 +62,20 @@ sync_user() { # user — that account's palette + wallpaper
         copied=yes
       fi
     done
-    [ -n "$copied" ] && what="theme $(basename "$(readlink -f "$state/theme")")"
+    [ -n "$copied" ] && what="theme $(cat "$state/theme.name" 2>/dev/null || echo "$(basename "$(readlink -f "$state/theme")")")"
   fi
   [ -d "$root/theme" ] || ln -sfn "$shared_theme" "$root/theme"
 
   background=$(find_background "$state" || true)
   if [ -n "$background" ]; then
-    install -m 644 -L "$background" "$root/wallpaper"
+    install -m 644 "$background" "$root/wallpaper"
     what="$what + wallpaper"
   else
     ln -sfn "$dest/wallpaper" "$root/wallpaper"
   fi
   chown -h greeter:greeter "$root/theme" "$root/wallpaper" 2>/dev/null || true
 
+  [ -e "$root/wallpaper" ] || what="$what (NO WALLPAPER FOUND)"
   echo "$user: $what"
 }
 
@@ -85,7 +86,10 @@ set_default() { # user — what accounts without their own artwork fall back to
     [ -r "$state/theme/$name" ] && install -m 644 "$state/theme/$name" "$shared_theme/$name"
   done
   background=$(find_background "$state" || true)
-  [ -n "$background" ] && install -m 644 -L "$background" "$dest/wallpaper"
+  [ -n "$background" ] && install -m 644 "$background" "$dest/wallpaper"
+
+  # Report the theme by name, not by the directory everyone calls "theme".
+  name=$(cat "$state/theme.name" 2>/dev/null || basename "$(readlink -f "$state/theme")")
   [ -r "$home/.config/omarchy/shell.toml" ] && \
     install -m 644 "$home/.config/omarchy/shell.toml" "$dest/.config/omarchy/shell.toml"
   echo "shared default: $1"
@@ -96,7 +100,11 @@ if [ "$#" -gt 0 ]; then
   default=$1
 else
   users=$(getent passwd | awk -F: '$3 >= 1000 && $3 < 60000 { print $1 }')
-  default=${SUDO_USER:-$(echo "$users" | head -1)}
+  # Who called us: sudo keeps SUDO_USER, pkexec passes PKEXEC_UID.
+  default=${SUDO_USER:-}
+  [ -z "$default" ] && [ -n "${PKEXEC_UID:-}" ] && \
+    default=$(getent passwd "$PKEXEC_UID" | cut -d: -f1)
+  [ -z "$default" ] && default=$(echo "$users" | head -1)
 fi
 
 for user in $users; do

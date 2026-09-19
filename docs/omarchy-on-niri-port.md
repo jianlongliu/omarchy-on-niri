@@ -1582,10 +1582,14 @@ greetd ─► /usr/local/bin/omarchy-greeter ─► niri -c /etc/greetd/omarchy-
 3. 先开着 TTY（Ctrl+Alt+F2）→ 把 `[default_session]` 改成 `command = "/usr/local/bin/omarchy-greeter"`、`user = "greeter"` → 登出实测 → 起不来就在 TTY 改回原值（dms-greeter 留的备份在 `/etc/greetd/config.toml.backup-*`）。
 4. **实测能进之后**，才谈 `sudo pacman -D --asexplicit quickshell` 与卸 `greetd-dms-greeter-bin`（§11.1：不先 asexplict，`-Rns` 会顺手带走 quickshell，本 greeter 和 Omarchy shell 一起瘫）。
 
+**2026-09-19 装机状态（`pkexec` 已执行）**：`/etc/greetd/omarchy-greeter`（root:root，文件世界可读）+ `/usr/local/bin/omarchy-greeter{,-sync}` 已就位；`omarchy-greeter-sync` 已跑过一遍（`yvonne` = `tonal-spot` 主题 + 当前壁纸；`jianlongliu` 因为**还没迁移**、`~/.local/state/omarchy/current` 根本不存在 → 该账户目前软链到共享缺省）。**`/etc/greetd/config.toml` 未动**——把 greetd 切到本 greeter 仍是用户自己在 TTY 里做的一步。装机校验实测：greeter 身份下 `/etc/greetd/omarchy-greeter` 下**所有文件可读**、桥可执行、状态目录可写；`niri validate -c /etc/greetd/omarchy-greeter/niri.kdl` 通过；壁纸 sha256 与源文件一致。
+
+**注意**：`greeter` 账户的 passwd home 是 **`/`**（`greeter:x:964:964:...:/:/bin/bash`），所以 `niri.kdl` 里那行 `HOME "/var/lib/greeter"` 是**关键行**，缺了它主题/状态目录全找不到。
+
 **不登出也能验收**（都在会话里跑，用 `bridge/mock-greetd.py` 假装 greetd）：
 
 - `python3 greeter/bridge/test-bridge.py` —— **24 项协议断言全过**：错密码、成功、失败后重试、交互式 secret、人脸命中、人脸未命中转密码、未知用户、epoch 回显、cancel、socket 不可用（不崩）。
-- `greeter/tests/smoke.sh` —— 4 场景**全过**（人脸命中直通 / 人脸未命中回落密码 / 错密码**不产生**会话 / 切账户后登录），断言「greetd 是否收到 `start_session`」+「greeter 是否干净退出」+「无 QML 报错」。
+- `greeter/tests/smoke.sh` —— 4 场景**全过**（人脸命中直通 / 人脸未命中回落密码 / 错密码**不产生**会话 / 切账户后登录），断言「greetd 是否收到 `start_session`」+「greeter 是否干净退出」+「无 QML 报错」。加 `GREETER=/etc/greetd/omarchy-greeter` 就是**验装好的那份**（含它自己 `bridge/` 下的桥）——实测也是 4/4，并真拿到了 `start_session`。
 - 视觉证据：Split 正常渲染（左壁纸 + 时钟、右半透明面板、错误态红框、选择器头像/首字母）；**壁纸跟账户**（实测背景均值 `2.5 → 195.5`）；**配色跟账户**（切到测试账户后 `Color.background` 由 `#111318` 变 `#7f0000`，来源 `users/yvonne/theme`）。
 - 单跑一次（要截界面时）：`--delay` 调大，再用 `GREETER_SELFTEST_OPEN_PICKER=1` / `GREETER_SELFTEST_PICK=<user>` 驱动；`SelfTest.qml` 只在 `GREETER_SELFTEST_PASSWORD` 非空时经 `Loader` 加载，生产路径不经过它。
 
