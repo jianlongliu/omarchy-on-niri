@@ -16,8 +16,8 @@ environment {
     HOME "/var/lib/greeter"
     GREETER_USER "jianlongliu"
     GREETER_SESSION "niri-session"
-    GREETER_WALLPAPER "/var/lib/greeter/wallpaper"
-    GREETER_AVATAR "/var/lib/AccountsService/icons/jianlongliu"
+    // Wallpaper and avatar come from the selected account's synced artwork
+    // (omarchy-greeter-sync); GREETER_ACCOUNTS_DIR moves that directory.
     GREETER_CORNER_RADIUS "10"
 }
 

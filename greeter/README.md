@@ -79,7 +79,7 @@ greetd 是否收到 `start_session`、greeter 是否干净退出、有无 QML �
 python3 bridge/mock-greetd.py --socket /tmp/m.sock --user jianlongliu --password hunter2 \
   --log /tmp/start.log --howdy --delay 5 &
 GREETD_SOCK=/tmp/m.sock GREETER_BRIDGE=$PWD/bridge/greetd-bridge.py \
-GREETER_USER=jianlongliu GREETER_WALLPAPER=/path/wall.webp GREETER_CORNER_RADIUS=10 \
+GREETER_USER=jianlongliu GREETER_ACCOUNTS_DIR=/var/lib/greeter/users GREETER_CORNER_RADIUS=10 \
 GREETER_SELFTEST_PASSWORD=x GREETER_SELFTEST_OPEN_PICKER=1 qs -n -p .
 ```
 
@@ -90,7 +90,7 @@ GREETER_SELFTEST_PASSWORD=x GREETER_SELFTEST_OPEN_PICKER=1 qs -n -p .
 分辨率固定 modeline 2560x1600@60、`scale 1.5`（和 dms-greeter 的 greeter 合成器一致），
 **没有** `mode` 行；圆角走 `GREETER_CORNER_RADIUS`。
 
-登录用户 / 会话命令全在 `niri.kdl` 的 `environment` 段（`GREETER_USER` / `GREETER_SESSION`）；
+登录用户 / 会话命令在 `niri.kdl` 的 `environment` 段（`GREETER_USER` / `GREETER_SESSION`）；
 `GREETER_ACCOUNTS_DIR` 覆盖每个账户的取色与壁纸目录（只在测试里用，缺省 `/var/lib/greeter/users`）。
 
 主题/壁纸由 `sync.sh`（`omarchy-greeter-sync`）拷进 `/var/lib/greeter`：`/data` 壁纸库对
