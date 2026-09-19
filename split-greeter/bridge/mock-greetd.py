@@ -66,9 +66,17 @@ def serve_connection(conn, args, log):
                 stage = "response"
                 reply(conn, {"type": "auth_message", "auth_message_type": "secret", "auth_message": "Password: "})
                 continue
-            if user_ok and request.get("password") == args.password:
-                log.append("create_session:success")
-                reply(conn, {"type": "success"})
+            if user_ok:
+                # Real greetd's create_session carries no password field and a
+                # server that got one would ignore it. This mock used to accept it,
+                # which is how "type the password, press Enter" looked green here
+                # while doing nothing on the real VT: PAM never saw the secret, the
+                # secret prompt came back empty, and only the second attempt worked.
+                log.append("auth_message:secret")
+                stage = "response"
+                reply(conn, {"type": "auth_message", "auth_message_type": "secret",
+                             "auth_message": "Password: "})
+                continue
             else:
                 log.append("create_session:auth_error")
                 reply(conn, {"type": "error", "error_type": "auth_error", "description": "Authentication failed"})

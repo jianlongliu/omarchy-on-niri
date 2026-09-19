@@ -146,6 +146,7 @@ run_key_case() { # name, mode (password | switch)
 run_case "howdy-match"      jianlongliu "--howdy"    "GREETER_AUTOBEGIN=1"        yes
 run_case "howdy-miss+pass"  jianlongliu "--howdy-fail --delay 2" "GREETER_AUTOBEGIN=1 GREETER_SELFTEST_PASSWORD=hunter2" yes
 run_case "wrong-password"   jianlongliu ""           "GREETER_AUTOBEGIN=1 GREETER_SELFTEST_PASSWORD=wrong"    no yes
+run_case "typed-before-prompt" jianlongliu "--howdy-fail" "GREETER_SELFTEST_PASSWORD=hunter2" yes
 run_case "switch-account"   yvonne      "--howdy"    "GREETER_AUTOBEGIN=1 GREETER_SELFTEST_PASSWORD=x GREETER_SELFTEST_PICK=yvonne" yes
 
 # Enter on an empty field is what asks for a face now. Run with the default

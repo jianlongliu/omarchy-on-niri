@@ -1848,3 +1848,19 @@ Omarchy 的锁层从 `hyprctl -j monitors` 读两个字段，shim 之前都在�
 - **顺序**：等迁到主账户、`install.sh` 那条路径稳定之后再做，否则要同时维护两条装法。
 - 动机案例：卸 DMS 时 `-Rs` 差点把 quickshell 一起删 —— "文件归属不清"正是 pacman 要解决的问题。
 
+### §11.22 登录界面"第一次输密码没反应"的真因（2026-09-19，真机发现并修复）
+
+**现象**（用户真机）：第一次输密码回车没反应、界面又要求输一次，第二次照做才进去。
+
+**真因不在 UI 接线**（不是 §11.13 那类），而在 **greetd 协议本身**：
+
+- `create_session` **没有密码字段**。桥原来把密码塞进 `create_session` 的 `password` 里发出去 —— 真实 greetd 忽略未知字段，**这个秘密根本没送到 PAM**。
+- 于是 PAM 照常跑（本机 `/etc/pam.d/greetd`：`ir-light` → howdy `sufficient` → `system-local-login`），howdy 报 `No face model known`，`pam_unix` 才问 `Password:` —— 而此刻输入框已被清空，人只好再输一次。第二次走的是"回答当前提示"那条路（`awaitingSecret` = true），所以能进去。
+- `Greetd.qml` 里本该兜住这件事的 `queuedPassword`（提示还没来就先打好的密码，等提示来了再交）**从来没被赋过值**，一直是死代码 —— 洞因此一直开着。
+
+**修法**：① 桥不再把密码放进 `create_session`（秘密只作为"对提示的回答"传递）；② `queuedPassword` 真正落地 —— 凡是在"没有待答提示"时发出密码（直接登录、或人脸扫到一半改输密码后重连），都先入队，等 `auth_message(secret)` 一到就用它回答；`auth_ok`/`auth_fail`/切账户时清空（不会自动重试错密码）。
+
+**测试为什么没抓到**：mock 的 `create_session` **认**那个 `password` 字段（真实 greetd 不认）—— 宽容的夹具让"密码压根没发出去"在测试里看起来完全正常。现在 mock 与 greetd 同样忽略它，并新增用例 `typed-before-prompt`（`--howdy-fail` + 立刻提交密码），**先红后绿**：修之前它卡到整例超时（`exit=124`），修完全套 8 例 `FAILURES: 0`。
+
+**教训**：夹具必须和真东西一样严格。"测试绿 + 真机不工作"这种组合，八成是夹具比现实宽松（§11.13 是同一个病的另一个症状：当时自测直接调 `submitPassword()`，跳过了真正的接线）。
+

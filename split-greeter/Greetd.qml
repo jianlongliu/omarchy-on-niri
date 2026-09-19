@@ -30,7 +30,10 @@ Item {
   property bool faceAttempt: false
   // PAM is waiting for a secret (howdy missed, or there is no howdy at all).
   property bool awaitingSecret: false
-  // Typed before the secret prompt arrived: handed over once it does.
+  // Typed before the secret prompt arrived: handed over once it does. It has to
+  // live here rather than in the request: greetd's create_session carries no
+  // password, and on this machine the first prompt is howdy's (which throws the
+  // answer away), so a secret sent "with the login" reaches nobody.
   property string queuedPassword: ""
   // Bumped per login attempt. Replies from an attempt the UI has abandoned
   // (the previous account's face scan finishing after a switch) carry the old
@@ -131,6 +134,8 @@ Item {
       root.restartHelper("password entered while the face scan was running")
     } else {
       root.errorMessage = ""
+      // Hold it: the login starts here, but PAM's first prompt may be howdy's.
+      root.queuedPassword = password
       root.command({ op: "auth", epoch: root.epoch, username: root.username, password: password })
     }
   }
@@ -170,6 +175,7 @@ Item {
         root.busy = true
         root.epoch += 1
         attemptWatchdog.restart()
+        root.queuedPassword = typed
         root.command({ op: "auth", epoch: root.epoch, username: root.username, password: typed })
       } else if (root.autoBegin) {
         root.begin()

@@ -104,9 +104,10 @@ def handle(greetd, request):
         # after a failed create_session is not reusable.
         greetd.close()
         message = {"type": "create_session", "username": request.get("username") or ""}
-        password = request.get("password")
-        if password:
-            message["password"] = password
+        # No password here. greetd's create_session has no such field and would
+        # ignore one, so the secret only ever travels as the answer to a prompt —
+        # which is why the caller keeps it queued until a prompt arrives.
+
         auth_reply(greetd, greetd.request(message), epoch)
     elif op == "respond":
         auth_reply(
