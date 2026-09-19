@@ -1765,6 +1765,23 @@ greetd 重拉 greeter 时，新实例的脸扫**命中**了 → greetd 立刻又
 **7. 回滚**：`snapper` undo（第 0 步）+ 配置文件级回退见 §11.9；greetd 有 `config.toml.omarchy-greeter-backup` 备份。
 
 **8. 还没做的事**（免得你翻不到以为漏了）
-- 自研锁屏 `split-lock/`：仓库里已有骨架（stock 契约 + 薄桥 `LockView.qml`，**未跑过、未换装**；做完才谈"去掉 lock-explorer 插件"）。
+- 自研锁屏 `split-lock/`：桥 `LockView.qml` 已跑通（§11.16，8 项契约测试三轮稳定），**尚未换装**；换装前先补 niri shim 并留退路。
 - niri 的 `hyprctl` shim 缺 `dpmsStatus` / `solitaryBlockedBy` → stock 锁屏的"锁住自救"会永远误判成已解锁，做锁屏前补。
 - 浮栏弹窗避让（toast/托盘面板压栏 8px）。
+
+### §11.16 自研锁屏 `split-lock/`：桥已跑通（2026-09-19）
+
+**结论：`LockView.qml` 就是全部适配层，已验证；尚未换装到活会话。**
+
+stock 的锁 Service 用**文件名**实例化 `LockView { ... }`（`reference/Service.qml` 约 304-323 行），而 Split / `DesignBase` 的属性和信号与 stock 视图**同名同形**（`submitPassword` / `clearFailureRequested`）——所以把自己的包装命名为 `LockView.qml` 本身就是适配，不需要重构，也不需要第二个视图。
+
+**离线契约测试**：`cd split-lock && ./tests/state.sh` —— 8 项、三轮稳定、全程 offscreen（不碰活会话、不锁屏）。它拼一个一次性 qs 工程（`Commons`/`Ui` 软链 + 平铺的 `.qml`），跑一个照抄 Service 绑定的 mock host，双向断言：视图能实例化、host→view 推送、view→host 的 `passwordTextEdited` / `submitPassword` / 失败回传 / 清除，以及 `clearFailureRequested` 能出去。qs 日志留在 `/tmp/split-lock-state.log`。
+
+**两个踩过的坑（都已写进代码注释）**：
+
+1. **目录导入不可靠**：视图里写 `import "designs"` 时，只要它是被当作"类型"加载的（而不是配置的根文件），`Split` 就解析失败。改成把设计文件**平铺**到 `LockView.qml` 同级 —— 同目录类型隐式解析 —— 这类失败整片消失。
+2. **offscreen 下不能出现 `PanelWindow`**：layer-shell 窗口需要真实后端，mock host 用它就报 `No PanelWindow backend loaded`；换成 `Rectangle` 容器后干净通过（被测的是属性/信号接线，与父容器是谁无关）。
+
+**`displaysBlank` / `powerSaverActive` 为什么可以不管**：Service 会传这两个（`Service.qml:34-48` 定义，与 `backgroundVersion` 一起在 310 附近传入视图），而 `DesignBase` 没有对应属性，不声明 Quickshell 会直接拒绝创建视图。stock 视图只为**一件事**用它们——暂停壁纸播放（`reference/LockView.qml:94`）；本设计的 `Wallpaper` 是静态 `Image`（`Wallpaper.qml:22`），**没有动画可暂停**。真正有用的是 `loadBackground` / `backgroundVersion`（缓存击穿的 `fileUrl`），设计里已经尊重（`Wallpaper.qml:25`）。
+
+**还没做（换装前必须）**：① niri 的 `hyprctl` shim 补 `dpmsStatus` / `solitaryBlockedBy`，否则 stock 锁屏的"锁住自救"会永远误判成已解锁；② 先留好退路再让插件上位；③ 锁屏/解锁/打错密码由**用户自己**按一次，不主动锁他的屏。
