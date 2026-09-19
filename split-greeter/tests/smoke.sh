@@ -10,7 +10,7 @@
 set -eu
 
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-# Default: the checkout. GREETER=/etc/greetd/omarchy-greeter smokes the installed
+# Default: the checkout. GREETER=/etc/greetd/split-greeter smokes the installed
 # copy instead (its shell and its bridge), which is what greetd actually runs.
 GREETER=${GREETER:-$(CDPATH= cd -- "$HERE/.." && pwd)}
 MOCK=$HERE/../bridge/mock-greetd.py

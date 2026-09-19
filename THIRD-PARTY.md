@@ -1,4 +1,10 @@
-# Third-party code
+# Split Greeter — third-party code
+
+The login screen in `split-greeter/` is called **Split Greeter**: it is a greetd
+greeter (a Quickshell front end) built around the **Split** design from
+`io.github.sirjul1337.lock-explorer` by SirJul1337 — hence the name. The design
+is used under the MIT license below, with attribution; it is not our work.
+
 
 This repository is a port of [Omarchy](https://github.com/basecamp/omarchy) for
 niri. Omarchy's MIT license and copyright (David Heinemeier Hansson) are in
@@ -6,7 +12,7 @@ niri. Omarchy's MIT license and copyright (David Heinemeier Hansson) are in
 
 ## omarchy-lock-explorer — MIT, Copyright (c) 2026 SirJul1337
 
-`greeter/designs/`, `greeter/Commons/` and `greeter/Ui/` are vendored from the
+`split-greeter/designs/`, `split-greeter/Commons/` and `split-greeter/Ui/` are vendored from the
 `io.github.sirjul1337.lock-explorer` plugin, which the login screen reuses (the
 Split design). Its license, verbatim:
 
@@ -37,6 +43,6 @@ SOFTWARE.
 That plugin's own `Service.qml` is based on Omarchy's built-in `omarchy.lock`
 plugin, which is covered by [LICENSE](LICENSE).
 
-The greeter's own code (`shell.qml`, `Greetd.qml`, `UserPicker.qml`, `Users.qml`,
+The Split Greeter's own code (`shell.qml`, `Greetd.qml`, `UserPicker.qml`, `Users.qml`,
 `SelfTest.qml`, `StateTest.qml`, `bridge/`, `tests/`, `install.sh`, `sync.sh`,
 `niri.kdl`) was written for this port and is covered by [LICENSE](LICENSE).

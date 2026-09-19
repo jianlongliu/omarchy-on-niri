@@ -1547,15 +1547,15 @@ omarchy-migrate --pending          # 应为空
 - **开机换皮（README 唯一标 experimental 的部分，本机不做）**：官方快路是 systemd-stub 的 initrd addon（`foo.efi.extra.d/*.addon.efi`，不重建 initramfs），但本机走不到——插件把 UKI 名写死成 `omarchy_linux.efi`（`plymouth/apply.sh:24`，本机是 `arch-linux.efi`），且 Secure Boot 只加载签名过的 addon；现实路径是 `plymouth-set-default-theme` + `mkinitcpio -P` 重建 initramfs，等于动启动链，**不建议顺手开**。
 - **迁移**：插件本体在 `plugins/` 下（9.4M，随 `~/.config/omarchy` 一起走）；每账户状态 = `shell.json` 的插件条目（本机 `design: "split"`）+ `lock-videos/`（软链）+ `lock-designs/`；`omarchy-lock-fido2` / `omarchy-lock-face` 若要启用需在新账户（同一台机只需一次，`/etc` 全机共享）重跑对应脚本。
 
-### 11.11 登录界面：自研 Quickshell greeter（Split 设计，多账户 + 人脸）
+### 11.11 登录界面：自研 Quickshell greeter「Split Greeter」（Split 设计，多账户 + 人脸）
 
-§11.10 的三条路里选了"自研"：**直接复用锁屏插件的 Split 设计当 DM**，既不依赖 dms-shell，也不依赖会话内 shell。代码在仓库 `greeter/`（本机 `~/omarchy-on-niri/greeter/`，**只在本地提交，未推远端**）。顺带确认：`greetd-dms-greeter-bin` 只依赖 `greetd quickshell qt6-declarative`，**不依赖 dms-shell**，与 DMS 的唯一耦合是 `dms-greeter sync` 把 DMS 主题/壁纸拷进 `/var/cache/dms-greeter`（0750 `greeter:greeter`，普通用户读不到）。
+§11.10 的三条路里选了"自研"：**直接复用锁屏插件的 Split 设计当 DM**，既不依赖 dms-shell，也不依赖会话内 shell。代码在仓库 `split-greeter/`（本机 `~/omarchy-on-niri/greeter/`，**只在本地提交，未推远端**）。顺带确认：`greetd-dms-greeter-bin` 只依赖 `greetd quickshell qt6-declarative`，**不依赖 dms-shell**，与 DMS 的唯一耦合是 `dms-greeter sync` 把 DMS 主题/壁纸拷进 `/var/cache/dms-greeter`（0750 `greeter:greeter`，普通用户读不到）。
 
 **结构**——greetd 拉起一个只跑本 greeter 的 niri 实例：
 
 ```
-greetd ─► /usr/local/bin/omarchy-greeter ─► niri -c /etc/greetd/omarchy-greeter/niri.kdl
-                                              └─► quickshell -p /etc/greetd/omarchy-greeter
+greetd ─► /usr/local/bin/split-greeter ─► niri -c /etc/greetd/split-greeter/niri.kdl
+                                              └─► quickshell -p /etc/greetd/split-greeter
                                                      ├─ designs/Split.qml  （vendored 的锁屏设计，宿主即 lock 对象）
                                                      ├─ Greetd.qml         （登录状态机 + epoch 守卫）
                                                      └─ bridge/greetd-bridge.py ─► $GREETD_SOCK
@@ -1573,27 +1573,27 @@ greetd ─► /usr/local/bin/omarchy-greeter ─► niri -c /etc/greetd/omarchy-
 | 刷脸未命中 | PAM 自己抛 `auth_message(secret)` | 界面这时才交出密码框，用 `post_auth_message_response` 送回 |
 | 扫描中就打了密码 | 在 QML 里排队 | 提示一到自动交付（单连接不允许提前发，也不会开第二个会话） |
 
-**多账户，且"长相"跟着账户**：账户 = `/etc/passwd` 里 uid≥1000，头像 = `/var/lib/AccountsService/icons/<user>`（没有就显示首字母圆牌）。右上角常驻账户按钮开选择器（↑↓ / Enter / Esc，也可鼠标点）。切账户 `epoch += 1`：**旧账户在途的人脸命中会被丢弃、并向 greetd 发 `cancel_session`**——宁可退回登录界面，也不登成错的人。成功登录的账户写 `~/.local/state/omarchy-greeter/last-user`，下次默认选中。**配色与壁纸跟着选中的账户**（启动时 = 上次登录的账户）：`omarchy-greeter-sync` 把每个账户的 `colors.toml` / `shell.toml` / 当前壁纸拷到 `/var/lib/greeter/users/<账户>/`，`shell.qml` 用 `Color.themeOverride` 把面板指过去；字体与间距是机器级，取共享缺省（`/var/lib/greeter`）。目录布局、测试钩子等细节见 `greeter/README.md`。
+**多账户，且"长相"跟着账户**：账户 = `/etc/passwd` 里 uid≥1000，头像 = `/var/lib/AccountsService/icons/<user>`（没有就显示首字母圆牌）。右上角常驻账户按钮开选择器（↑↓ / Enter / Esc，也可鼠标点）。切账户 `epoch += 1`：**旧账户在途的人脸命中会被丢弃、并向 greetd 发 `cancel_session`**——宁可退回登录界面，也不登成错的人。成功登录的账户写 `~/.local/state/split-greeter/last-user`，下次默认选中。**配色与壁纸跟着选中的账户**（启动时 = 上次登录的账户）：`split-greeter-sync` 把每个账户的 `colors.toml` / `shell.toml` / 当前壁纸拷到 `/var/lib/greeter/users/<账户>/`，`shell.qml` 用 `Color.themeOverride` 把面板指过去；字体与间距是机器级，取共享缺省（`/var/lib/greeter`）。目录布局、测试钩子等细节见 `split-greeter/README.md`。
 
 **装与回滚**——切 greetd 的 `[default_session].command` 是唯一能把人锁在门外的一步，脚本**不碰** `/etc/greetd/config.toml`：
 
-1. `sudo ./install.sh`：拷到 `/etc/greetd/omarchy-greeter`（世界可读，greeter 用户要读）+ `/usr/local/bin/omarchy-greeter{,-sync}`；建 `/var/lib/greeter/{users,.config/omarchy,.local/state/omarchy-greeter}`（属 `greeter`）。
-2. `sudo omarchy-greeter-sync`：同步**全部真实账户**的配色与壁纸（给共享缺省，没自己主题的账户走软链）。建议挂到已有的更新钩子后面，主题一换登录界面就跟着换。
-3. 先开着 TTY（Ctrl+Alt+F2）→ 把 `[default_session]` 改成 `command = "/usr/local/bin/omarchy-greeter"`、`user = "greeter"` → 登出实测 → 起不来就在 TTY 改回原值（dms-greeter 留的备份在 `/etc/greetd/config.toml.backup-*`）。
+1. `sudo ./install.sh`：拷到 `/etc/greetd/split-greeter`（世界可读，greeter 用户要读）+ `/usr/local/bin/split-greeter{,-sync}`；建 `/var/lib/greeter/{users,.config/omarchy,.local/state/split-greeter}`（属 `greeter`）。
+2. `sudo split-greeter-sync`：同步**全部真实账户**的配色与壁纸（给共享缺省，没自己主题的账户走软链）。建议挂到已有的更新钩子后面，主题一换登录界面就跟着换。
+3. 先开着 TTY（Ctrl+Alt+F2）→ 把 `[default_session]` 改成 `command = "/usr/local/bin/split-greeter"`、`user = "greeter"` → 登出实测 → 起不来就在 TTY 改回原值（dms-greeter 留的备份在 `/etc/greetd/config.toml.backup-*`）。
 4. **实测能进之后**，才谈 `sudo pacman -D --asexplicit quickshell` 与卸 `greetd-dms-greeter-bin`（§11.1：不先 asexplict，`-Rns` 会顺手带走 quickshell，本 greeter 和 Omarchy shell 一起瘫）。
 
-**2026-09-19 装机状态（`pkexec` 已执行）**：`/etc/greetd/omarchy-greeter`（root:root，文件世界可读）+ `/usr/local/bin/omarchy-greeter{,-sync}` 已就位；`omarchy-greeter-sync` 已跑过一遍（`yvonne` = `tonal-spot` 主题 + 当前壁纸；`jianlongliu` 因为**还没迁移**、`~/.local/state/omarchy/current` 根本不存在 → 该账户目前软链到共享缺省）。**`/etc/greetd/config.toml` 的改动是用户自己做的**：15:09 他把 `[default_session].command` 切成 `/usr/local/bin/omarchy-greeter`（备份 `/etc/greetd/config.toml.omarchy-greeter-backup`，168B = 旧的 dms 命令），15:15 登出后 tty1 起的就是本 greeter。装机校验实测：greeter 身份下 `/etc/greetd/omarchy-greeter` 下**所有文件可读**、桥可执行、状态目录可写；`niri validate -c /etc/greetd/omarchy-greeter/niri.kdl` 通过；壁纸 sha256 与源文件一致。
+**2026-09-19 装机状态（`pkexec` 已执行）**：`/etc/greetd/split-greeter`（root:root，文件世界可读）+ `/usr/local/bin/split-greeter{,-sync}` 已就位；`split-greeter-sync` 已跑过一遍（`yvonne` = `tonal-spot` 主题 + 当前壁纸；`jianlongliu` 因为**还没迁移**、`~/.local/state/omarchy/current` 根本不存在 → 该账户目前软链到共享缺省）。**`/etc/greetd/config.toml` 的改动是用户自己做的**：15:09 他把 `[default_session].command` 切成 `/usr/local/bin/split-greeter`（备份 `/etc/greetd/config.toml.split-greeter-backup`，168B = 旧的 dms 命令），15:15 登出后 tty1 起的就是本 greeter。装机校验实测：greeter 身份下 `/etc/greetd/split-greeter` 下**所有文件可读**、桥可执行、状态目录可写；`niri validate -c /etc/greetd/split-greeter/niri.kdl` 通过；壁纸 sha256 与源文件一致。
 
 **注意**：`greeter` 账户的 passwd home 是 **`/`**（`greeter:x:964:964:...:/:/bin/bash`），所以 `niri.kdl` 里那行 `HOME "/var/lib/greeter"` 是**关键行**，缺了它主题/状态目录全找不到。
 
 **不登出也能验收**（都在会话里跑，用 `bridge/mock-greetd.py` 假装 greetd）：
 
-- `python3 greeter/bridge/test-bridge.py` —— **24 项协议断言全过**：错密码、成功、失败后重试、交互式 secret、人脸命中、人脸未命中转密码、未知用户、epoch 回显、cancel、socket 不可用（不崩）。
-- `greeter/tests/smoke.sh` —— 4 场景**全过**（人脸命中直通 / 人脸未命中回落密码 / 错密码**不产生**会话 / 切账户后登录），断言「greetd 是否收到 `start_session`」+「greeter 是否干净退出」+「无 QML 报错」。加 `GREETER=/etc/greetd/omarchy-greeter` 就是**验装好的那份**（含它自己 `bridge/` 下的桥）——实测也是 4/4，并真拿到了 `start_session`。
+- `python3 split-greeter/bridge/test-bridge.py` —— **24 项协议断言全过**：错密码、成功、失败后重试、交互式 secret、人脸命中、人脸未命中转密码、未知用户、epoch 回显、cancel、socket 不可用（不崩）。
+- `split-greeter/tests/smoke.sh` —— 4 场景**全过**（人脸命中直通 / 人脸未命中回落密码 / 错密码**不产生**会话 / 切账户后登录），断言「greetd 是否收到 `start_session`」+「greeter 是否干净退出」+「无 QML 报错」。加 `GREETER=/etc/greetd/split-greeter` 就是**验装好的那份**（含它自己 `bridge/` 下的桥）——实测也是 4/4，并真拿到了 `start_session`。
 - 视觉证据：Split 正常渲染（左壁纸 + 时钟、右半透明面板、错误态红框、选择器头像/首字母）；**壁纸跟账户**（实测背景均值 `2.5 → 195.5`）；**配色跟账户**（切到测试账户后 `Color.background` 由 `#111318` 变 `#7f0000`，来源 `users/yvonne/theme`）。
 - 单跑一次（要截界面时）：`--delay` 调大，再用 `GREETER_SELFTEST_OPEN_PICKER=1` / `GREETER_SELFTEST_PICK=<user>` 驱动；`SelfTest.qml` 只在 `GREETER_SELFTEST_PASSWORD` 非空时经 `Loader` 加载，生产路径不经过它。
 
-**边界**：单输出（只配 `eDP-1`）；指纹 / FIDO2 没有专门 UI，作为 PAM 消息出现；`start_session` 固定 `niri-session`（`GREETER_SESSION` 可改），没有会话选择器；字体/间距不随账户切换；**不动 Plymouth / 启动链**（§11.10 的结论）。vendored 的 `designs/ Commons/ Ui/` 由 `greeter/vendor.py` 按组件闭包重拷并重放 4 处补丁（`Color.qml` 的 `themeOverride`、`DesignBase.qml` 的 `loginUser`/`hintOverride`、`Split.qml` 的提示行、`Style.qml` 的 `cornerRadius`），插件或 Omarchy 升级后重跑一次即可。
+**边界**：单输出（只配 `eDP-1`）；指纹 / FIDO2 没有专门 UI，作为 PAM 消息出现；`start_session` 固定 `niri-session`（`GREETER_SESSION` 可改），没有会话选择器；字体/间距不随账户切换；**不动 Plymouth / 启动链**（§11.10 的结论）。vendored 的 `designs/ Commons/ Ui/` 由 `split-greeter/vendor.py` 按组件闭包重拷并重放 4 处补丁（`Color.qml` 的 `themeOverride`、`DesignBase.qml` 的 `loginUser`/`hintOverride`、`Split.qml` 的提示行、`Style.qml` 的 `cornerRadius`），插件或 Omarchy 升级后重跑一次即可。
 
 ### 11.12 登录界面：一条卡住的 PAM 对话 = 密码"没反应"（2026-09-19 真机实测与修法）
 
@@ -1609,7 +1609,7 @@ greetd ─► /usr/local/bin/omarchy-greeter ─► niri -c /etc/greetd/omarchy-
 一个会话** → 之后所有请求（包括"切到 yvonne 再输密码"）全排在门外 → 界面既不动也不报错。epoch 守卫只
 丢弃过期**事件**，救不了这条被占住的连接。**这不是密码错，所以没有任何失败可显示。**
 
-**修法（`greeter/`，已装机）**：给"一次尝试"设期限 `GREETER_ATTEMPT_TIMEOUT_MS`（默认 12s），到点**整条换掉
+**修法（`split-greeter/`，已装机）**：给"一次尝试"设期限 `GREETER_ATTEMPT_TIMEOUT_MS`（默认 12s），到点**整条换掉
 helper 进程**——断开连接让 greetd 自己取消那个会话——新连接上直接发**带密码的** `create_session`（PAM 里
 howdy 仍会先跑，命中就依旧免密码）。两条触发路径：① 扫脸期间一开始输密码 → **立刻**走（实测 ~1s）；
 ② 什么都不做 → 超时后换掉，界面停在密码框（**不自动重扫**，避免死循环）。切账户同理，不再在同一条连接上
@@ -1619,7 +1619,7 @@ howdy 仍会先跑，命中就依旧免密码）。两条触发路径：① 扫�
 （= `/var/lib/greeter/greeter.log`，greeter 用户可写、所有账户可读）——之前输出只进 VT 控制台，人一被关在
 门外就没法诊断；② **Tab** 打开账户选择器（原来只有右上角小按钮）。
 
-**新增不需要合成器的回归测试**：`greeter/tests/state.sh` + `greeter/StateTest.qml`（只加载 `Greetd.qml`，
+**新增不需要合成器的回归测试**：`split-greeter/tests/state.sh` + `split-greeter/StateTest.qml`（只加载 `Greetd.qml`，
 没有 `PanelWindow`，所以 `QT_QPA_PLATFORM=offscreen` 就够）——**6 场景全过**：人脸命中 / 错密码不产生会话 /
 **卡住+输密码** / **卡住+看门狗** / 卡住时切账户 / 卡住且无人操作（只恢复、不登录）。每个卡住场景都额外断言
 "那次尝试真的被丢掉"（日志出现 `restarting the login helper`）。这是**被锁在门外、图形会话都没了时唯一能跑的

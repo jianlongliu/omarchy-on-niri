@@ -3,15 +3,15 @@
 #
 #   sudo ./install.sh
 #
-# Copies the shell to /etc/greetd/omarchy-greeter (world readable: the greeter
-# user has to read it) and installs /usr/local/bin/omarchy-greeter as greetd's
+# Copies the shell to /etc/greetd/split-greeter (world readable: the greeter
+# user has to read it) and installs /usr/local/bin/split-greeter as greetd's
 # session command. It never touches /etc/greetd/config.toml: switching greetd
 # over to this greeter is the one step that can lock you out, so it is printed
 # at the end for you to do at a TTY.
 set -eu
 
 SRC=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-DEST=/etc/greetd/omarchy-greeter
+DEST=/etc/greetd/split-greeter
 
 [ "$(id -u)" -eq 0 ] || {
   echo "run me with sudo" >&2
@@ -33,20 +33,20 @@ install -m 755 "$SRC/bridge/greetd-bridge.py" "$DEST/bridge/greetd-bridge.py"
 chmod -R a+rX "$DEST"
 
 # 2. greetd's session command for the greeter
-cat > /usr/local/bin/omarchy-greeter <<'EOF'
+cat > /usr/local/bin/split-greeter <<'EOF'
 #!/bin/sh
 # greetd entry point for the Omarchy greeter: run the greeter's own niri
 # instance. Login user, session and wallpaper are the GREETER_* values in
-# /etc/greetd/omarchy-greeter/niri.kdl.
-exec niri -c /etc/greetd/omarchy-greeter/niri.kdl
+# /etc/greetd/split-greeter/niri.kdl.
+exec niri -c /etc/greetd/split-greeter/niri.kdl
 EOF
-chmod 755 /usr/local/bin/omarchy-greeter
+chmod 755 /usr/local/bin/split-greeter
 
 # 3. theme sync command
-install -m 755 "$SRC/sync.sh" /usr/local/bin/omarchy-greeter-sync
+install -m 755 "$SRC/sync.sh" /usr/local/bin/split-greeter-sync
 
 # 4. the greeter user's state (its HOME is /var/lib/greeter)
-install -d -m 755 -o greeter -g greeter /var/lib/greeter/.local/state/omarchy-greeter
+install -d -m 755 -o greeter -g greeter /var/lib/greeter/.local/state/split-greeter
 install -d -m 755 -o greeter -g greeter /var/lib/greeter/.local/state/omarchy/current/theme
 install -d -m 755 -o greeter -g greeter /var/lib/greeter/.config/omarchy
 install -d -m 755 -o greeter -g greeter /var/lib/greeter/users
@@ -59,7 +59,7 @@ Installed. What is left is the part that can lock you out of the machine:
   2. Put this in /etc/greetd/config.toml:
 
          [default_session]
-         command = "/usr/local/bin/omarchy-greeter"
+         command = "/usr/local/bin/split-greeter"
          user = "greeter"
 
      (dms-greeter may have left the previous value in
@@ -68,7 +68,7 @@ Installed. What is left is the part that can lock you out of the machine:
      the previous command back.
   4. Give the login screen the current theme and wallpaper:
 
-         sudo omarchy-greeter-sync
+         sudo split-greeter-sync
 
   5. Only once logins work, and only if you want the DMS greeter gone:
 

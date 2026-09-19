@@ -1,4 +1,4 @@
-// Greeter compositor config. Copied to /etc/greetd/omarchy-greeter/niri.kdl by
+// Greeter compositor config. Copied to /etc/greetd/split-greeter/niri.kdl by
 // install.sh; niri runs it as the `greeter` user on the greeter VT.
 //
 // GREETER_* values are the greeter's whole configuration surface: login user,
@@ -19,7 +19,7 @@ environment {
     GREETER_USER "jianlongliu"
     GREETER_SESSION "niri-session"
     // Wallpaper and avatar come from the selected account's synced artwork
-    // (omarchy-greeter-sync); GREETER_ACCOUNTS_DIR moves that directory.
+    // (split-greeter-sync); GREETER_ACCOUNTS_DIR moves that directory.
     GREETER_CORNER_RADIUS "10"
 }
 
@@ -72,4 +72,4 @@ output "eDP-1" {
 // owns the tty, its stdout is only visible on that screen, which makes a failed
 // login impossible to diagnose from a session. $HOME is /var/lib/greeter here,
 // owned by the greeter user, so the redirect is writable.
-spawn-sh-at-startup "log=\"$HOME/greeter.log\"; printf '\n== %s greeter start ==\n' \"$(date -Is)\" >>\"$log\"; exec >>\"$log\" 2>&1; quickshell -p /etc/greetd/omarchy-greeter; niri msg action quit --skip-confirmation"
+spawn-sh-at-startup "log=\"$HOME/greeter.log\"; printf '\n== %s greeter start ==\n' \"$(date -Is)\" >>\"$log\"; exec >>\"$log\" 2>&1; quickshell -p /etc/greetd/split-greeter; niri msg action quit --skip-confirmation"

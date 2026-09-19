@@ -3,8 +3,8 @@
 # looks like the account that is selected (startup = the last account that
 # logged in).
 #
-#   sudo omarchy-greeter-sync                    # every human account, default = $SUDO_USER
-#   sudo omarchy-greeter-sync jianlongliu yvonne # just these, first one is also the default
+#   sudo split-greeter-sync                    # every human account, default = $SUDO_USER
+#   sudo split-greeter-sync jianlongliu yvonne # just these, first one is also the default
 #
 # Layout under /var/lib/greeter:
 #
@@ -28,7 +28,7 @@ dest=/var/lib/greeter
 shared_theme="$dest/.local/state/omarchy/current/theme"
 
 install -d -m 755 -o greeter -g greeter "$shared_theme" "$dest/users" \
-  "$dest/.config/omarchy" "$dest/.local/state/omarchy-greeter"
+  "$dest/.config/omarchy" "$dest/.local/state/split-greeter"
 
 find_background() { # state dir — echoes the active wallpaper, if any
   for candidate in "$1/background" "$1/theme/backgrounds/background"; do

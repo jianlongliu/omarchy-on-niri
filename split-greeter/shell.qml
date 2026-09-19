@@ -19,7 +19,7 @@ ShellRoot {
       right: true
     }
     color: "transparent"
-    WlrLayershell.namespace: "omarchy-greeter"
+    WlrLayershell.namespace: "split-greeter"
     // Overlay, like the lock screen: it is the only surface in the session, and
     // Exclusive keyboard focus is what niri grants on an overlay layer.
     WlrLayershell.layer: WlrLayer.Overlay
@@ -41,8 +41,8 @@ ShellRoot {
     }
     exclusionMode: ExclusionMode.Ignore
 
-    readonly property string stateDir: (Quickshell.env("HOME") || "/var/lib/greeter") + "/.local/state/omarchy-greeter"
-    // Per-account artwork, written by omarchy-greeter-sync: the login screen
+    readonly property string stateDir: (Quickshell.env("HOME") || "/var/lib/greeter") + "/.local/state/split-greeter"
+    // Per-account artwork, written by split-greeter-sync: the login screen
     // looks like the account it is about to log in (wallpaper + palette), so a
     // switch in the picker changes both. Startup shows the last logged-in
     // account. /var/lib/greeter/{theme,wallpaper} stays as the shared fallback.

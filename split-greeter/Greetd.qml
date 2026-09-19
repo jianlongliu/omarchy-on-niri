@@ -17,7 +17,7 @@ Item {
   property string username: ""
   property string session: "niri-session"
   property string avatarPath: ""
-  property string bridgePath: Quickshell.env("GREETER_BRIDGE") || "/etc/greetd/omarchy-greeter/bridge/greetd-bridge.py"
+  property string bridgePath: Quickshell.env("GREETER_BRIDGE") || "/etc/greetd/split-greeter/bridge/greetd-bridge.py"
   property string sessionEnv: "XDG_SESSION_TYPE=wayland"
 
   property bool ready: false

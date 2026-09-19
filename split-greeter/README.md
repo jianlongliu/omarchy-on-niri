@@ -4,8 +4,8 @@ greetd 的登录界面：渲染锁屏插件 `io.github.sirjul1337.lock-explorer`
 支持**多账户**与**人脸（howdy）优先**的认证，不依赖 dms-shell，也不依赖正在运行的 Omarchy shell。
 
 ```
-greetd ──► /usr/local/bin/omarchy-greeter ──► niri（本目录的 niri.kdl）
-                                                   └─► quickshell -p /etc/greetd/omarchy-greeter
+greetd ──► /usr/local/bin/split-greeter ──► niri（本目录的 niri.kdl）
+                                                   └─► quickshell -p /etc/greetd/split-greeter
                                                           ├─ designs/Split.qml   （复用的锁屏设计，宿主即 lock 对象）
                                                           ├─ Greetd.qml          （登录状态机）
                                                           └─ bridge/greetd-bridge.py ──► $GREETD_SOCK（greetd IPC）
@@ -44,7 +44,7 @@ greetd ──► /usr/local/bin/omarchy-greeter ──► niri（本目录的 ni
 头像（没有头像就显示首字母）。**Tab** 或右上角常驻的账户按钮打开选择器（↑↓ 选择、Enter 确认、
 Esc 取消，也可鼠标点；切账户同样会换连接，见上）。切换账户会 `epoch += 1`：**旧账户的人脸扫描即使随后命中也会被
 丢弃并向 greetd `cancel_session`**，绝不会登成错的人。成功登录的账户写入
-`$HOME/.local/state/omarchy-greeter/last-user`，下次默认选中。
+`$HOME/.local/state/split-greeter/last-user`，下次默认选中。
 
 ## 排查
 
@@ -71,9 +71,9 @@ python3 bridge/test-bridge.py     # 协议层（纯 python，不需要显示）
 ## 装与回滚
 
 ```sh
-sudo ./install.sh        # 拷到 /etc/greetd/omarchy-greeter + /usr/local/bin/omarchy-greeter
-sudo omarchy-greeter-sync                    # 每个真实账户的配色/壁纸都同步一遍
-sudo omarchy-greeter-sync jianlongliu yvonne # 只同步这两个（第一个同时作为共享缺省）
+sudo ./install.sh        # 拷到 /etc/greetd/split-greeter + /usr/local/bin/split-greeter
+sudo split-greeter-sync                    # 每个真实账户的配色/壁纸都同步一遍
+sudo split-greeter-sync jianlongliu yvonne # 只同步这两个（第一个同时作为共享缺省）
 ```
 
 `install.sh` **不动** `/etc/greetd/config.toml`——切 greetd 到本 greeter 是唯一能把人锁在门外的
@@ -81,7 +81,7 @@ sudo omarchy-greeter-sync jianlongliu yvonne # 只同步这两个（第一个同
 
 ```toml
 [default_session]
-command = "/usr/local/bin/omarchy-greeter"
+command = "/usr/local/bin/split-greeter"
 user = "greeter"
 ```
 
@@ -94,7 +94,7 @@ user = "greeter"
 
 ```sh
 ./tests/smoke.sh                                   # 仓库里的那份
-GREETER=/etc/greetd/omarchy-greeter ./tests/smoke.sh   # 装好的那份（含它自己的桥）
+GREETER=/etc/greetd/split-greeter ./tests/smoke.sh   # 装好的那份（含它自己的桥）
 ```
 
 它用 `bridge/mock-greetd.py` 假装 greetd、用 `GREETER_ACCOUNTS_DIR` 指到一份临时账户目录，
@@ -104,8 +104,8 @@ greetd 是否收到 `start_session`、greeter 是否干净退出、有无 QML �
 日志落在 `/tmp/greeter-smoke-<场景>.log`。桥接本身另有 24 项协议断言：
 `python3 bridge/test-bridge.py`。
 
-装完可以直接验：`niri validate -c /etc/greetd/omarchy-greeter/niri.kdl`、
-`pkexec -u greeter sh -c 'for f in $(find /etc/greetd/omarchy-greeter -type f); do [ -r "$f" ] || echo BAD $f; done'`、
+装完可以直接验：`niri validate -c /etc/greetd/split-greeter/niri.kdl`、
+`pkexec -u greeter sh -c 'for f in $(find /etc/greetd/split-greeter -type f); do [ -r "$f" ] || echo BAD $f; done'`、
 以及上面那条 `GREETER=/etc/greetd/... smoke.sh`（不需要登出、也不需要改 greetd 配置）。
 
 **注意**：`greeter` 账户的 passwd home 是 `/`，所以 `niri.kdl` 里的 `HOME "/var/lib/greeter"`
@@ -131,7 +131,7 @@ GREETER_SELFTEST_PASSWORD=x GREETER_SELFTEST_OPEN_PICKER=1 qs -n -p .
 登录用户 / 会话命令在 `niri.kdl` 的 `environment` 段（`GREETER_USER` / `GREETER_SESSION`）；
 `GREETER_ACCOUNTS_DIR` 覆盖每个账户的取色与壁纸目录（只在测试里用，缺省 `/var/lib/greeter/users`）。
 
-主题/壁纸由 `sync.sh`（`omarchy-greeter-sync`）拷进 `/var/lib/greeter`：`/data` 壁纸库对
+主题/壁纸由 `sync.sh`（`split-greeter-sync`）拷进 `/var/lib/greeter`：`/data` 壁纸库对
 greeter 用户不可读，所以是拷贝而非软链。布局：
 
 ```
@@ -143,7 +143,7 @@ greeter 用户不可读，所以是拷贝而非软链。布局：
 ```
 
 从没跑过 Omarchy 的账户，`users/<账户>/theme` 与 `wallpaper` 会是指向共享缺省的软链。
-改完主题重跑一次 `sudo omarchy-greeter-sync` 即可。
+改完主题重跑一次 `sudo split-greeter-sync` 即可。
 
 ## 复用的锁屏组件与补丁
 
