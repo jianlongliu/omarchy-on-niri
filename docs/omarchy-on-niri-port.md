@@ -1449,7 +1449,7 @@ pkexec ~/.local/share/omarchy/bin/omarchy-apply-lock     # 或 sudo omarchy-appl
 2. `sudo usermod -aG video jianlongliu`
 3. **卸 DMS**（11.5）
 4. **换 niri 基座**：原版默认 + 八类补回（11.6）
-5. **搬目录**（11.7）：整份 `~/.local/share/omarchy`、`~/.config/{omarchy,niri}`、`~/.local/state/omarchy`、`~/bin`、systemd 用户单元
+5. **搬目录**（11.7，含打包/解包命令）：整份 `~/.local/share/omarchy`、`~/.config/{omarchy,niri}`、`~/.local/state/omarchy`、`~/bin`、systemd 用户单元
 6. 改 `config.kdl` 里三处硬编码路径（11.7 末）
 7. 重新登录 → 自检（11.8）
 8. 稳定后再考虑清理 DMS 残留（11.9）
@@ -1506,7 +1506,26 @@ sudo pacman -Rns dms-shell dms-shell-niri dankcalendar-bin
 | `~/bin` | — | 垫片与包装脚本（仓库 `port-bin/` 是同一批；`__pycache__/*.pyc` 是缓存，删掉即可） |
 | `~/.config/systemd/user/materal-recolor.{path,service}` | 8K | 主题取色监听（§8.10）；用 `%h` 是便携的，但 `default.target.wants/` 里的绝对软链要重新 `enable` 生成 |
 | fcitx5 配置 + `~/.config/gtk-3.0/settings.ini` | — | 双源 + `ShareInputState=All`（§8.17）与 GTK 字号对齐 |
-| `~/.config/omarchy/lock-{videos,designs}` | 小 | 锁屏插件（`io.github.sirjul1337.lock-explorer`，§11.10）的**每账户状态**：`lock-videos/` 是指向插件目录的软链（随插件目录一起搬即有效），`lock-designs/` 放自建设计（本机还没有）；所选样式存在 `shell.json` 的插件条目里（本机 `{"design":"split"}`）。插件本体在 `plugins/` 下，随 `~/.config/omarchy` 一起走 |
+| `~/.config/omarchy/plugins/*` | 小 | **当前唯一的锁提供者是 `yvonne.split-lock`**（§11.18；explorer 已于 2026-09-19 移除，其每账户状态 `lock-{videos,designs}` 可搬可不搬）。其余用户插件：`charlieras262.floating-bar`（浮栏）、`ronald.input-sources`、`yvonne.{arch-logo,workspaces}`。整套 `plugins/` 随 `~/.config/omarchy` 一起走，无需单独处理 |
+
+**怎么运（实验账户 → 主账户）**：`/home/yvonne` 是 0700，主账户读不到，所以走 `/var/tmp`（§11.2 路线 2）。
+
+```bash
+# 实验账户侧：打包（/var/tmp 在 / 上、重启留存，约几百 MB）
+tar -C /home -czf /var/tmp/yvonne-to-main.tar.gz --exclude='__pycache__' \
+    yvonne/.local/share/omarchy yvonne/.config/omarchy yvonne/.config/niri \
+    yvonne/.local/state/omarchy yvonne/bin yvonne/.config/systemd/user \
+    yvonne/.config/fcitx5 yvonne/.config/gtk-3.0
+
+# 主账户侧：以 jianlongliu 身份解，**不要 sudo**（否则文件归 root），--strip-components 把顶层 yvonne/ 去掉
+tar -C "$HOME" -xzf /var/tmp/yvonne-to-main.tar.gz --strip-components=1
+```
+
+**搬完的三个坑**：
+
+1. **硬编码路径不止 `config.kdl` 那三行**：扫一遍 `grep -rl '/home/yvonne' ~/.config ~/bin ~/.local/share/omarchy ~/.local/state/omarchy 2>/dev/null`，逐个改。
+2. **绝对软链会悬空**：`find ~/.config ~/bin ~/.local -xtype l 2>/dev/null` 列出坏链重建（`systemctl --user enable --now ...` 那类必须重新生成）。
+3. **别把缓存和历史快照一起搬**：`__pycache__/`、`~/.cache/`、`niri-port/backups/` 可弃；但 `~/.local/share/omarchy/.git` **必须留**（238 条删除与分支状态在它身上）。
 
 搬完的**验收数字**（与实验账户逐一对齐）：
 
@@ -1525,8 +1544,10 @@ systemctl --user daemon-reload && systemctl --user enable --now materal-recolor.
 ```bash
 niri validate
 omarchy version
-omarchy-shell lock status          # passwordPam 应为 true
-omarchy-migrate --pending          # 应为空
+omarchy-shell lock status           # passwordPam 应为 true
+omarchy-shell lock isLocked         # 能应答（说明有锁处理器注册）
+omarchy-migrate --pending           # 应为空
+omarchy plugin list | grep lock     # 应只有 yvonne.split-lock enabled
 ~/bin/hyprctl -j monitors | jq -r '.[0].scale'
 ```
 
