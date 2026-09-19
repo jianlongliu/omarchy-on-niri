@@ -1705,3 +1705,66 @@ greetd 重拉 greeter 时，新实例的脸扫**命中**了 → greetd 立刻又
 - 提示文案：空闲时显示 `Press Enter for face unlock, or just type your password`（`hintOverride`，
   仅当 PAM 没给更具体的 hint 时）。`tests/smoke.sh` 现在 7 个场景，新增的 `enter-triggers-face`
   先断言"没按回车绝不开扫"再按回车断言确实开扫并拿到 `start_session`。
+
+### 11.15 迁移执行清单（照着做；2026-09-19 核过机器事实）
+
+**这份文档在哪**（主账户怎么拿到）：公开仓库
+<https://github.com/jianlongliu/omarchy-on-niri/blob/quattro/docs/omarchy-on-niri-port.md>（`git clone` 或浏览器都行，主账户可读）；
+§11 的纯摘录在 `/var/tmp/omarchy-migrate-to-main-account.md`（重启会被清，别当唯一副本）。
+本机的 `~/Documents/omarchy-on-niri.md` 是 0600，**主账户读不到**，不要指望它。
+
+**0. 前置**
+- 全程要 root 或 `sudo`：`/home/yvonne` 是 0600，主账户自己读不到源。
+- 快照（本机 btrfs + snapper，已有配置 `root`=/(含 /etc)、`home`=/home、`data`、`opencode`）：
+  ```bash
+  sudo snapper -c root create -d "pre-migration"
+  sudo snapper -c home create -d "pre-migration"
+  snapper -c root list | tail -3      # 记下编号，回滚用得到
+  ```
+  回滚：`sudo snapper -c root undo <N>` + `sudo snapper -c home undo <N>`，然后重启。
+- 工具确认：`command -v niri quickshell greetd fcitx5 howdy snapper` 应全有输出。
+
+**1. 顺序**：严格按 §11.3 的执行顺序（快照 → 卸 DMS → 原版 niri 默认配置当基座 → 整目录搬运 → 改硬编码 → 自检），别跳步。
+卸 DMS 时记得 §11.5 那条：先 `sudo pacman -D --asexplicit quickshell`，否则 `-Rns` 会连 quickshell 一起删掉（登录界面就没了）。
+
+**2. 必须带走的东西**（不只是点文件）
+- `~/bin/` 里自写的：`hyprctl`（niri 的 shim，**必需**；`.bak-*` 可丢）、`materal-update`、`omarchy-niri-apply-theme`、
+  `omarchy-niri-repatch`、`omarchy-niri-system`、`omarchy-powerprofiles-{list,set}`、`vantage`（分辨率 TUI，若在别处也一并带）。
+- `~/.config/omarchy/`：`themes/`（含 tonal-spot 等自定义）、`plugins/`、`shell.json`、hooks。
+- `~/.config/systemd/user/materal-recolor.{path,service}` → 搬完 `systemctl --user daemon-reload && systemctl --user enable --now materal-recolor.path`。
+- `~/.local/share/omarchy`（shell 本体 + bin + 主题，git 检出，带 `.git` 一起）。
+- 壁纸库 `/data/Pictures/Wallpapers`（所有主题都软链到这里，**路径大小写敏感**）。
+- 七个插件：`charlieras262.floating-bar`、`io.github.sirjul1337.lock-explorer`、`jrmmhm.pocket`、`meviusisback.ai-subs`、
+  `ronald.input-sources`、`yvonne.arch-logo`、`yvonne.workspaces`。其中 floating-bar 在 niri 上有补丁（`niri-port/plugin-patches/`）。
+- `~/.config/niri/` 整目录（含 `config.kdl`、`binds.kdl`、`niri-port/`）。
+
+**3. 硬编码 `/home/yvonne`：只需改 2 个文件**
+- `~/.config/niri/config.kdl` 三行：`OMARCHY_PATH`、`PATH` 的第一段、`spawn-sh-at-startup "quickshell -n -p …"`。
+- `~/.config/remmina/remmina.pref`（可选，RDP 客户端的默认目录）。
+- **实测口径**：整个 `~/.config/` 里真正含这个路径的**配置文件只有上面两个**；另外约 60 个命中全在浏览器/LevelDB 里，属噪音，别去 sed。
+- 自查：`grep -rn '/home/yvonne' ~/.config --include='*.kdl' --include='*.json' --include='*.toml' --include='*.conf' --include='*.ini'`
+
+**4. 属主**：整目录搬运是 root 做的，搬完必须归位，否则新会话一堆怪毛病：
+`sudo chown -R jianlongliu:jianlongliu /home/jianlongliu`（或只对搬进来的子目录逐个 chown，别撒到别处）。
+
+**5. 登录界面（Split Greeter）与锁屏门禁**
+- 装机：`sudo ~/omarchy-on-niri/split-greeter/install.sh`（→ `/etc/greetd/split-greeter`、`/usr/local/bin/split-greeter{, -sync}`），
+  greetd `config.toml` 的 `command` 指到 `/usr/local/bin/split-greeter`。
+- **PAM 门禁别漏**：`pkexec ~/.local/share/omarchy/bin/omarchy-apply-lock`——漏了就是"锁屏点不动 / `lock()` 返回 `missing-pam`"（§11.12）。
+- `sudo usermod -aG video jianlongliu`（howdy/摄像头要用）。
+- 人脸现状：**jianlongliu 已有人脸模型，yvonne 没有**（howdy 对 yvonne 报 `No face model known`）→ 迁到主账户后"回车＝人脸"开箱可用。
+
+**6. 自检清单**（每条都要有可观察结果，别凭感觉）
+- 重启 → 登录界面是 Split；可切账户；**空输入回车＝扫脸**；直接打字＝密码；输错有报错。
+- `Mod+Ctrl+L` 锁屏 → 输密码能解开（插件设计 = `design: "split"`）。
+- bar：floating-bar 浮栏在位；左 `yvonne.arch-logo` + `yvonne.workspaces`；右 `ronald.input-sources` 徽章；Monitor 面板能改缩放。
+- 主题取色（`materal-recolor`）、壁纸、字体 12px、fcitx5 输入源（单源会自动隐藏）。
+- 显示：固定 2560x1600@60（分辨率用 `vantage`，缩放走 bar 的 Monitor 面板）。
+- `niri msg action do-screen-transition` 之类基础 IPC、以及 `Super+Alt+L`（swaylock）/`Mod+Ctrl+L`（omarchy 锁）两条路都不冲突。
+
+**7. 回滚**：`snapper` undo（第 0 步）+ 配置文件级回退见 §11.9；greetd 有 `config.toml.omarchy-greeter-backup` 备份。
+
+**8. 还没做的事**（免得你翻不到以为漏了）
+- 自研锁屏 `split-lock/`：仓库里已有骨架（stock 契约 + 薄桥 `LockView.qml`，**未跑过、未换装**；做完才谈"去掉 lock-explorer 插件"）。
+- niri 的 `hyprctl` shim 缺 `dpmsStatus` / `solitaryBlockedBy` → stock 锁屏的"锁住自救"会永远误判成已解锁，做锁屏前补。
+- 浮栏弹窗避让（toast/托盘面板压栏 8px）。
