@@ -97,7 +97,7 @@ hyprctl 调用面有界、可直接映射。
 | `~/.local/share/omarchy/bin/omarchy-theme-set` | 背景走持久文件而非过渡快照（niri 黑桌面竞态，见 §8.9） |
 | `~/.local/share/omarchy/bin/omarchy-system-{logout,reboot,shutdown}` | 转调 `~/bin/omarchy-niri-system`（niri quit / logind D-Bus，§8 第 9 条） |
 | `~/.local/share/omarchy/bin/omarchy-refresh-hyprland` | **niri 感知**：`XDG_CURRENT_DESKTOP=niri` 时整脚本变 no-op（不再重建 `~/.config/hypr`）|
-| `~/.local/share/omarchy/default/omarchy/omarchy-menu.jsonc` | **菜单指向 niri 真配置**（见 §8.6）|
+| `~/.local/share/omarchy/default/omarchy/omarchy-menu.jsonc` | **菜单指向 niri 真配置**（见 §8.6）；2026-09-19 给 `install.package` / `install.aur` / `remove.package` 加 `xdg-terminal-exec` 回退（§8 第 21 条）|
 | `~/.config/niri/config.kdl` | 编排器：`environment`/`spawn`/`animations`/`screenshot-path` + 6 个 `include`（§5.7）；`focus-ring` 在 `layout.kdl`，颜色由主题驱动（§5.6）|
 | `~/.config/niri/{input,monitor,layout,window-rules,effects,binds}.kdl` | 模块化拆分出的子配置（§5.7）：输入/显示器/布局/窗口规则(含圆角)/磨砂(effects)/按键 |
 | `~/.config/niri/effects.kdl` | 2026-09-19 给 `^omarchy-bar$` 配 `background-effect { xray false }`（浮栏磨砂；圆角模糊区域由插件端下发，§8.8）|
@@ -669,6 +669,24 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
     "a password is required"）→ Chromium 系主题色不跟着变；`materal-recolor` 也因此在 2026-09-19
     02:01 失败过一次。下次查上游是否预期 polkit/sudoers 放行，或我们这层该跳过这一步。
 
+21. **`Install > Package` / `AUR` 点了没反应、也不报错（2026-09-19 修）**：菜单里只有三条绕过演示终端
+    包装器、直接调 `xdg-terminal-exec`（`install.package` / `install.aur` / `remove.package`），而本机
+    **没有这个包**（上游 `install/omarchy-base.packages` 里列着它，移植环境缺）→ `bash -lc` 直接
+    "command not found"，没有窗口、没有提示，看起来就像菜单坏了。其余 install 项走
+    `omarchy-launch-floating-terminal-with-presentation`，那条 niri 分支早有 ghostty 回退，一直是好的。
+    修法两层：① `sudo pacman -S xdg-terminal-exec` 补回基础依赖——ghostty 的 desktop entry 是合规的
+    （`Categories=System;TerminalEmulator;` + `X-TerminalArgExec=-e` + `X-TerminalArgAppId=--class=`），
+    所以 `--app-id=org.omarchy.terminal` 会实打实翻成 ghostty 的 `--class`，**即使 ghostty 带
+    `--gtk-single-instance=true`，新窗口也是这个 app-id**（`niri msg windows` 实测）；② 三条 action 加回退，
+    `command -v xdg-terminal-exec` 通过才用它、否则走那个 ghostty 包装器（与 §3.2 里三条 `uwsm-app`
+    回退同构），这样**没装包的新机器也不会哑**。
+    配套 niri 规则：`~/.config/niri/window-rules.kdl` 加 `match app-id=r#"^org\.omarchy\.terminal$"#` →
+    `open-floating true` + `0.6 / 0.7` + 与 ghostty 同款 `xray false` 模糊。app-id 一变，ghostty 那条模糊
+    规则就不再匹配这条终端，不补模糊的话半透明窗会直接穿帮（这才是必须一起加的原因，不只是为了好看）。
+    实测：`xdg-terminal-exec --print-cmd` 展开正确；窗口 `Is floating: yes`、768×532；两个分支各跑一次
+    都有结果；`test/shell.d/menu-test.sh` 仍只有那条既有红（它断言 `setup.input` 指上游 `input.lua`，
+    而 §8.6 已把它改成 `niri/input.kdl`）。
+
 ### 8.6 A 层：菜单指向 niri 真配置，Hyprland 层降级
 
 Omarchy 有两层配置，只有层1在 niri 上真正生效：
@@ -716,8 +734,8 @@ Omarchy 有两层配置，只有层1在 niri 上真正生效：
   `launch-floating-terminal-with-presentation`、`refresh-hyprland`、`theme-set`、`menu.jsonc`、
   `qmldir`、`Background.qml`、`Bar.qml`、`Workspaces.qml`、`Menu.qml`、`KeyboardPanel.qml`、
   `osd/Osd.qml`、`AppLibrary.qml`，以及 2026-08-25 加的 3 个 `omarchy-system-{logout,reboot,shutdown}`）
-  ——这 17 个文件正是 `niri.patch` 的内容（`17 个文件 / 32 个 hunk`；2026-09-18 合并上游时为 30，
-  2026-09-19 菜单自愈守卫 +2，见 §8.14）。
+  ——这 17 个文件正是 `niri.patch` 的内容（`17 个文件 / 33 个 hunk`；2026-09-18 合并上游时为 30，
+  2026-09-19 菜单自愈守卫 +2（§8.14）、Install/Remove 终端回退 +1（§8 第 21 条））。
   上游改到其中任何一个，`git pull --ff-only` 会因本地未提交改动而**失败中止**整个更新——这是需要
   手动合并的情况。
 - **不在 patch 里的新增文件**：`shell/Commons/Niri.qml`、`shell/plugins/blurwallpaper/` 是**未跟踪**
@@ -761,7 +779,8 @@ niri 26.04 的 `background-effect` + Quickshell 的 `ext_background_effect` 形�
 而是每个面板用 `BackgroundEffect.blurRegion` 只磨砂自己的卡片区域。
 
 **仓库内改动（已进 `niri-port/niri.patch`；2026-09-18 合并上游 `d174d4a` 后整份 patch = 17 个文件 /
-30 个 hunk，2026-09-19 起 32 个 hunk（菜单自愈守卫，§8.14）；`--reverse --check` 通过）**：
+30 个 hunk，2026-09-19 起 32 个 hunk（菜单自愈守卫，§8.14）、再 +1 到 33（Install/Remove 终端回退，
+§8 第 21 条）；`--reverse --check` 通过）**：
 - `shell/plugins/menu/Menu.qml`：加 `import Quickshell.Wayland._BackgroundEffect`，根 `PanelWindow`
   挂 `BackgroundEffect.blurRegion: Region { item: card; radius: root.cornerRadius }`。
 - `shell/Ui/KeyboardPanel.qml`：同上，根 `PanelWindow` 挂
@@ -1074,7 +1093,8 @@ laravel 从 `~/.config/composer/vendor/bin/laravel` 改成 `~/.local/bin/laravel
 
 - **与我们 patch 的重叠**：只有 `default/omarchy/omarchy-menu.jsonc` 一个文件，且是**不同区域**——
   上游动第 277–282 / 343–350 行，我们的 4 个 hunk 在 108 / 123 / 184 / 364 行（菜单 action 指向
-  `niri/*.kdl` 与 `omarchy-niri-apply-theme`）。
+  `niri/*.kdl` 与 `omarchy-niri-apply-theme`；那之后 2026-09-19 又加了 install/remove 的回退，
+  该文件现为 5 个 hunk，见 §8 第 21 条）。
 - **做法**：走 §8.7 的"第三种情况"——只 `git stash push -- default/omarchy/omarchy-menu.jsonc`，
   FF 拉上游，`git stash pop` 由 git `Auto-merging` 干净合并，无冲突。
 - **验收**（全部通过）：`git apply --reverse --check niri.patch` ✓（**补丁基线数值当时不变，仍是
@@ -1118,7 +1138,8 @@ laravel 从 `~/.config/composer/vendor/bin/laravel` 改成 `~/.local/bin/laravel
 坏掉时只有 `user loaded items=10` → `merged order=11`（合并后 `items` 是字典，没有 `.length`，探针里
 `merged items=undefined` 就是这个原因，不是 bug）。
 
-**根治**（已进 `niri.patch`；`Menu.qml` 2 → 4 个 hunk，整份 patch 30 → 32）：
+**根治**（已进 `niri.patch`；`Menu.qml` 2 → 4 个 hunk，整份 patch 30 → 32；2026-09-19 再 +1 到 33，
+见 §8 第 21 条）：
 
 - `Menu.qml` 新增 `menuHasRootChildren()`：模型里存在 `parent === "root"` 的条目即判健康（顶层条目在
   `MenuModel.js` 里默认落到 `"root"`，jsonc 不写 `parent` 字段）。
