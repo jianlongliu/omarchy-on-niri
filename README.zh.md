@@ -52,7 +52,8 @@ omarchy-on-niri/
 │                     + plugin-patches/（第三方 bar 插件的本地魔改补丁，只能手工重放）
 ├── niri-config/  <- local/*.kdl（本机在用的 niri 配置）+ omarchy.kdl.template（另一条路）
 │                     + shell.json 示例（Omarchy 配置层1）
-├── local-config/ <- 本机 ~/.config 覆盖层：ghostty（关装饰 + 磨砂交给 niri）+ dankcolors 主题
+├── local-config/ <- 本机 ~/.config 覆盖层：ghostty（关装饰 + 半透明 + 关自带模糊）
+│                     + materal-recolor 单元；配色走 Omarchy 主题
 │                     + materal-recolor.{path,service}；拷到 ~/.config/ 用，说明见该目录 README
 ├── config/       <- **上游 Omarchy 的默认配置树**（未改动，不是本机在用的那份）
 ├── plugins/      <- 自研插件源码（jianlongliu.arch-logo；split-lock 自成一档）

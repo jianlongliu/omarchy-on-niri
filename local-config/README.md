@@ -3,7 +3,7 @@
 TL;DR — `config/` in this repo is **upstream Omarchy's** default config tree (untouched). This
 directory is the other layer: the subset of `~/.config/` that this machine actually runs and that
 upstream does not ship. Without it a fresh install comes up with window decorations, no frosting and
-a dead recolor unit. Copy the files over your own, then adjust fonts, DPI and theme.
+a dead recolor unit. Copy the files over your own, then adjust fonts and DPI.
 
 `config/` 是**上游 Omarchy 的默认树**（我们没动过，`config/ghostty/config` 与
 `~/.local/share/omarchy/config/ghostty/config` 逐字节相同）。本目录是压在它上面的**本机覆盖层**：
@@ -14,9 +14,18 @@ a dead recolor unit. Copy the files over your own, then adjust fonts, DPI and th
 | 仓库路径 | 机器路径 | 为什么必须收 |
 |---|---|---|
 | `ghostty/config` | `~/.config/ghostty/config` | 移植的关键改动就在里面：`window-decoration = false`、`background-opacity = 0.85`、**`background-blur-radius = 0`**（niri 不实现 KDE blur 协议，ghostty 自带模糊会叠成双层；磨砂交给 niri 的 `background-effect`）。**磨砂五处之一**，漏了就是"有装饰、无磨砂"的旧症状 |
-| `ghostty/themes/dankcolors` | `~/.config/ghostty/themes/dankcolors` | 上面那份写了 `theme = dankcolors`。静态主题文件（454 B，DMS 时代遗留，**没有任何生成器**——仓库和上游都搜不到出处）。不收它，照抄配置的人会因"未知主题"起不来；不想用就把那行删掉，或改回上游那条 `config-file = ?"~/.local/state/omarchy/current/theme/ghostty.conf"` |
 | `systemd/user/materal-recolor.path` | `~/.config/systemd/user/…` | 换壁纸自动重新取色：`.path` 盯 Omarchy 的壁纸文件，一变就拉起 `.service` |
 | `systemd/user/materal-recolor.service` | 同上 | oneshot，跑 `%h/bin/materal-update`（本移植的 matugen 包装脚本，仓库 `port-bin/materal-update`，机制见 `docs/omarchy-on-niri-port.md` §8.10）。单元本身**不是上游的、也没有包认领** |
+
+配色走 **Omarchy 自己的主题**，没有私有主题文件：
+
+```
+config-file = ?"~/.local/state/omarchy/current/theme/ghostty.conf"
+```
+
+这一行是上游的写法（`default/themed/ghostty.conf.tpl` 渲染出当前主题的那份），换主题即换配色。
+`?` 表示文件不在也不报错。**2026-09-20 之前本机卡在 DMS 时代遗留的静态主题 `theme = dankcolors`
+上，那份文件没有任何生成器、仓库和上游都搜不到出处，所以已删掉改回这条路。**
 
 不在这个目录里的两类本机文件，分别在仓库别处：
 
@@ -27,12 +36,9 @@ a dead recolor unit. Copy the files over your own, then adjust fonts, DPI and th
 
 ```bash
 cp local-config/ghostty/config ~/.config/ghostty/config          # 先备份你自己的
-rm -f ~/.config/ghostty/config.bak-*                            # 别把备份带过去
-mkdir -p ~/.config/ghostty/themes && cp local-config/ghostty/themes/dankcolors ~/.config/ghostty/themes/
-# 想随主题走而不是用死颜色：把 config 里的 `theme = dankcolors` 换成
-#   config-file = ?"~/.local/state/omarchy/current/theme/ghostty.conf"
 cp local-config/systemd/user/materal-recolor.* ~/.config/systemd/user/
 systemctl --user enable --now materal-recolor.path              # 需要 ~/bin/materal-update 在位
+ghostty +validate-config                                        # 无输出即通过
 ```
 
 - **字体是个人口味**：`font-family = SFMono Nerd Font` / `Microsoft YaHei`、`mouse-scroll-multiplier`、

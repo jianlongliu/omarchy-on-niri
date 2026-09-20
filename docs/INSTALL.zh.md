@@ -114,16 +114,16 @@ cp "$REPO/niri-config/shell.json" ~/.config/omarchy/shell.json
 
 ```sh
 cp "$REPO/local-config/ghostty/config" ~/.config/ghostty/config      # 先备份你自己的
-mkdir -p ~/.config/ghostty/themes ~/.config/systemd/user
-cp "$REPO/local-config/ghostty/themes/dankcolors" ~/.config/ghostty/themes/
+mkdir -p ~/.config/systemd/user
 cp "$REPO/local-config/systemd/user/materal-recolor."* ~/.config/systemd/user/
 systemctl --user enable --now materal-recolor.path                   # 需要 ~/bin/materal-update 在位
+ghostty +validate-config                                             # 无输出即通过
 ```
 
 `ghostty/config` 里三条是移植必需的（`window-decoration = false`、`background-opacity = 0.85`、
 **`background-blur-radius = 0`** —— niri 不实现 KDE blur 协议，磨砂要交给 niri 的 `background-effect`）；
-`theme = dankcolors` 指着 `themes/dankcolors` 那个静态文件，不收会因"未知主题"起不来（也可以改回上游的
-`config-file = ?"~/.local/state/omarchy/current/theme/ghostty.conf"`）。字体/键位是个人口味，按需改。
+配色走 Omarchy 主题（`config-file = ?"~/.local/state/omarchy/current/theme/ghostty.conf"`，上游写法，
+`?` 表示文件不在也不报错），不需要任何私有主题文件。字体/键位是个人口味，按需改。
 细节见 `local-config/README.md`。
 
 ---

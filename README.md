@@ -60,7 +60,8 @@ omarchy-on-niri/
 ├── niri-port/    <- overlay: niri.patch + Niri.qml (reapplied after each update)
 ├── niri-config/  <- local/*.kdl (what this machine runs) + omarchy.kdl.template (the other route)
 │                     + shell.json sample (Omarchy config layer 1)
-├── local-config/ <- the machine's ~/.config layer: ghostty (blur off + opacity) + dankcolors theme
+├── local-config/ <- the machine's ~/.config layer: ghostty (decorations off, opacity, blur off)
+│                     + the materal-recolor units; colours come from the Omarchy theme
 │                     + materal-recolor.service/.path; copy over your own, see its README
 ├── config/       <- upstream Omarchy's default config tree, untouched (NOT this machine's)
 ├── plugins/      <- self-written plugin sources (jianlongliu.arch-logo; split-lock has its own dir)

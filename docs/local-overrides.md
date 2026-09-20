@@ -30,7 +30,7 @@
 | `niri-port/plugin-patches/` | 4 个第三方插件的本地魔改补丁（+ README 说明怎么生成/怎么重放） | 手工 `git apply`（无自动重放器） |
 | `scripts/check-doc-links.sh` | 校验 `~/Documents` 那九个软链仍指向 `docs/`（提交文档前跑） | `./scripts/check-doc-links.sh` |
 | `scripts/kdl-sync.sh`、`scripts/local-files-sync.sh` | 机器 ↔ 仓库的对账：前者比 `niri-config/local/*.kdl`（家目录占位符），后者比 `local-config/` + `plugins/` + `split-lock/ir-light`（逐字节） | 各自直接跑；不在本机则 `skip` |
-| `local-config/` | **本机 `~/.config` 覆盖层**（上游默认树 `config/` 之外那几份）：`ghostty/config`（含 `background-blur-radius = 0` 这条磨砂必需改动）、`ghostty/themes/dankcolors`、`systemd/user/materal-recolor.{path,service}` | 拷到 `~/.config/` 对应路径（见该目录 README）；`materal-recolor.path` 还要 `systemctl --user enable --now` |
+| `local-config/` | **本机 `~/.config` 覆盖层**（上游默认树 `config/` 之外那几份）：`ghostty/config`（含 `background-blur-radius = 0` 这条磨砂必需改动；配色走 Omarchy 主题的 `config-file`，不带私有主题文件）、`systemd/user/materal-recolor.{path,service}` | 拷到 `~/.config/` 对应路径（见该目录 README）；`materal-recolor.path` 还要 `systemctl --user enable --now` |
 | `plugins/jianlongliu.arch-logo/` | 自研 bar 插件的源码（`BarWidget.qml` + `arch-logo.svg` + `manifest.json`；无 `clonedFrom`，不是上游克隆） | 拷到 `~/.config/omarchy/plugins/jianlongliu.arch-logo/` |
 | `split-lock/ir-light` | PAM 人脸栈点名的 IR 补光脚本（`pam_exec.so /usr/local/bin/ir-light`）的仓库副本 | `install -m 0755 split-lock/ir-light /usr/local/bin/ir-light`；**硬件专属，见 §5** |
 | `niri-config/local/*.kdl`（7 份） | **本机在用的 niri 配置**（`config` + `input/monitor/layout/window-rules/effects/binds` 的模块化拆分） | 拷到 `~/.config/niri/`、把 `/home/<user>` 换成自己家目录、按自己显示器改 `monitor.kdl`，然后 `niri validate`；说明见 `niri-config/README.md` |
@@ -166,11 +166,13 @@ git apply --reverse --check niri.patch   # 必须通过
 7. ~~本机 niri 配置（`~/.config/niri/` 七份 kdl，约 910 行）~~ **已收进仓库（2026-09-20）**：
    `niri-config/local/`（家目录参数化为 `/home/<user>`，`monitor.kdl` 的 modeline 标了「本机面板专属」）。
    此前仓库只有 `niri-config/omarchy.kdl.template`，而本机**没用**那条路 —— 别人照仓库装会缺合成器侧一整块。
-8. ~~本机 ghostty 配置~~ **已收进仓库（2026-09-20）**：`local-config/ghostty/config` +
-   `local-config/ghostty/themes/dankcolors`。此前仓库里的 `config/ghostty/config` 是**上游默认**（与
+8. ~~本机 ghostty 配置~~ **已收进仓库（2026-09-20）**：`local-config/ghostty/config`。
+   此前仓库里的 `config/ghostty/config` 是**上游默认**（与
    `~/.local/share/omarchy/config/ghostty/config` 逐字节相同），于是**磨砂五处里"ghostty"那一处整个缺失** ——
-   别人照仓库装得到的是"有窗口装饰、无磨砂"，正是本移植当初修掉的症状。`theme = dankcolors` 指着那份
-   454 B 的静态主题文件（DMS 时代遗留，仓库与上游都搜不到生成器），不一起收 ghostty 会因未知主题起不来。
+   别人照仓库装得到的是"有窗口装饰、无磨砂"，正是本移植当初修掉的症状。
+   配色**不随仓库带私有主题文件**：本机原先是 DMS 时代遗留的 `theme = dankcolors`（那份 454 B 静态文件仓库与
+   上游都搜不到生成器），2026-09-20 已改回上游写法 `config-file = ?"~/.local/state/omarchy/current/theme/ghostty.conf"`
+   —— 换主题即换配色，机器上那份 `~/.config/ghostty/themes/dankcolors` 已无引用、仅存于本机。
 9. ~~自研插件 `jianlongliu.arch-logo` 的源码~~ **已收进仓库（2026-09-20）**：`plugins/jianlongliu.arch-logo/`
    （3 个文件，12 K）。它 manifest 里**没有 `clonedFrom`**，不是上游克隆，所以没有 patch 可以复现 ——
    此前仓库里只在文档里提过它。（`jianlongliu.workspaces` 有 `omarchy.clonedFrom`，靠

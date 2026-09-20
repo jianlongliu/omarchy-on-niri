@@ -123,17 +123,17 @@ default tree, which upstream does not ship. Skip it and you get window decoratio
 
 ```sh
 cp "$REPO/local-config/ghostty/config" ~/.config/ghostty/config      # back up yours first
-mkdir -p ~/.config/ghostty/themes ~/.config/systemd/user
-cp "$REPO/local-config/ghostty/themes/dankcolors" ~/.config/ghostty/themes/
+mkdir -p ~/.config/systemd/user
 cp "$REPO/local-config/systemd/user/materal-recolor."* ~/.config/systemd/user/
 systemctl --user enable --now materal-recolor.path                   # needs ~/bin/materal-update
+ghostty +validate-config                                             # silent means it parsed
 ```
 
 Three lines in `ghostty/config` are required by the port (`window-decoration = false`,
 `background-opacity = 0.85`, **`background-blur-radius = 0`** — niri implements no KDE blur protocol, so the
-frosting has to come from niri's own `background-effect`); `theme = dankcolors` points at that static file in
-`themes/`, and without it ghostty refuses to start on an unknown theme (you can also switch back to upstream's
-`config-file = ?"~/.local/state/omarchy/current/theme/ghostty.conf"`). Fonts and keybindings are taste. Details
+frosting has to come from niri's own `background-effect`); colours come from the Omarchy theme
+(`config-file = ?"~/.local/state/omarchy/current/theme/ghostty.conf"`, upstream's own line — the `?` means a
+missing file is not an error), so no private theme file is involved. Fonts and keybindings are taste. Details
 in `local-config/README.md`.
 
 ---
