@@ -13,12 +13,16 @@ standalone installer** — it assumes a working Arch + niri login session and an
   `Bar.qml` / `Workspaces.qml` / `Background.qml`).
 - `port-bin/` — the PATH-first override scripts that translate the Hyprland-coupled bits to niri
   (the `hyprctl` shim is the critical one; `uwsm-app` rescues every `uwsm-app -- <cmd>` call site
-  in Omarchy's `bin/`, which is a uwsm-session facility a niri session does not have).
+  in Omarchy's `bin/`, which is a uwsm-session facility a niri session does not have; `omarchy-update`
+  replaces the upstream updater, which assumes the Omarchy package repo is configured; plus the
+  picker warm-up and the display text-size shim).
 - `niri-port/` — the idempotent overlay patch (`niri.patch` + `Niri.qml`) that survives `omarchy update`,
   plus `plugin-patches/` (local edits to third-party bar plugins, applied by hand — nothing replays them).
 - `niri-config/` — the niri-side wiring (`omarchy.kdl.template` to merge into `config.kdl`, plus a
   `shell.json` sample).
 - `hooks/` — Omarchy update/theme hooks that reapply the port.
+- `default/systemd/user/omarchy-picker-warmup.service` — the session-scoped picker warm-up unit
+  (`install.sh` installs and enables it; disable with `toggles/picker-warmup-off`).
 - `install.sh` — optional convenience wrapper. **Not the supported path**: the manual steps are in
   `docs/INSTALL.md` and should be followed by hand.
 - `docs/INSTALL.md` — the hand-run install procedure (deps, file placement, config merge, overlay, backlight).

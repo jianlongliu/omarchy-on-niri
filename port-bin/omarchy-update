@@ -1,0 +1,33 @@
+#!/bin/bash
+# 手装（dev-link）移植机专用垫片：`~/bin` 在会话 PATH 里排在 $OMARCHY_PATH/bin
+# 之前，所以 omarchy menu 的 Update → Omarchy 与 bar 的 system-update 部件
+# （都裸调 `omarchy-update`）走这里。
+#
+# 为什么换掉上游脚本：这类机器没装 omarchy 包、没配 Omarchy 自家仓库 —— 上游流程
+# 会卡在 omarchy-update-keyring（omarchy-keyring 装不到，set -e 直接终止），
+# 后面还用 yay（这类机器上通常是 paru），中间却已经跑过
+# `pacman -Syu --noconfirm` 的无人值守全系统升级。
+#
+# 注意：CLI 打 `omarchy update` 走 dispatcher（绝对路径 $OMARCHY_PATH/bin/omarchy-update），
+# 本垫片拦不到——别用那个写法。
+#
+# 上游代码跟进仍走手动路径（见 docs/omarchy-on-niri-port.md §8.9 / §8.13）：
+# git pull → omarchy-niri-repatch → omarchy-restart-shell。
+# 回退：rm ~/bin/omarchy-update
+
+set -euo pipefail
+
+if [[ ${1:-} == "-h" || ${1:-} == "--help" ]]; then
+  cat <<'EOF'
+omarchy-update（本机垫片）= sudo pacman -Syu
+
+不含上游那套：代码 FF、niri 覆盖层重放、迁移、AUR 更新、孤儿包清理。
+上游代码跟进请走文档 §8.13 手动路径（git pull → omarchy-niri-repatch
+→ omarchy-restart-shell）。
+EOF
+  exit 0
+fi
+
+echo -e "\e[32m\n更新系统包（sudo pacman -Syu）\e[0m"
+sudo pacman -Syu
+echo -e "\e[33m\nAUR 包没动；需要时另跑：paru -Sua\e[0m"

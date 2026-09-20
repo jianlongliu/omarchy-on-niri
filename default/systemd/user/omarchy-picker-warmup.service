@@ -1,0 +1,26 @@
+[Unit]
+Description=Warm the Omarchy theme and background pickers after login
+# Session-scoped like omarchy-crash-watch.service: the warm-up talks to the
+# running shell over IPC, so it needs the session (and the shell) up.
+After=graphical-session.target
+PartOf=graphical-session.target
+ConditionEnvironment=WAYLAND_DISPLAY
+# Set by disabling the warm-up. Checked here so a disabled warm-up stays
+# disabled across logins without the unit having to be disabled.
+ConditionPathExists=!%h/.local/state/omarchy/toggles/picker-warmup-off
+
+[Service]
+Type=oneshot
+# A hand-installed (dev-link) port has no `omarchy` package, so the user
+# manager's environment carries neither OMARCHY_PATH nor the PATH the shims
+# live on -- the same reason omarchy-crash-watch.service sets them explicitly.
+Environment=OMARCHY_PATH=%h/.local/share/omarchy
+Environment=PATH=%h/bin:%h/.local/share/omarchy/bin:/usr/local/bin:/usr/bin
+# Delay: the warm-up fans out thumbnail generation, and a session that has just
+# come up is still busy with disk. Change it here.
+Environment=PICKER_WARMUP_DELAY=45
+ExecStartPre=/bin/sleep ${PICKER_WARMUP_DELAY}
+ExecStart=%h/bin/omarchy-picker-warmup
+# Background chore: do not fight the session for CPU or IO.
+Nice=19
+IOSchedulingClass=idle

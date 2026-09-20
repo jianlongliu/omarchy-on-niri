@@ -50,7 +50,22 @@ mkdir -p "$HOME_DIR/.config/omarchy/hooks/post-update.d" "$HOME_DIR/.config/omar
 install -m 0755 "$REPO_DIR"/hooks/post-update.d/* "$HOME_DIR/.config/omarchy/hooks/post-update.d/"
 install -m 0755 "$REPO_DIR"/hooks/theme-set.d/*    "$HOME_DIR/.config/omarchy/hooks/theme-set.d/"
 
-# ---- 4. apply the idempotent overlay patch to the Omarchy install ----
+# ---- 4. picker warm-up unit (session-scoped, off-switchable) ----
+# The theme/background pickers pay a cold-cache cost on their first open after login
+# unless something reads the thumbnail cache first. See port-bin/omarchy-picker-warmup.
+log "Installing the picker warm-up unit (~/.config/systemd/user)"
+UNIT_DIR="$HOME_DIR/.config/systemd/user"
+mkdir -p "$UNIT_DIR/graphical-session.target.wants"
+install -m 0644 "$REPO_DIR/default/systemd/user/omarchy-picker-warmup.service" \
+  "$UNIT_DIR/omarchy-picker-warmup.service"
+ln -sfn "$UNIT_DIR/omarchy-picker-warmup.service" \
+  "$UNIT_DIR/graphical-session.target.wants/omarchy-picker-warmup.service"
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl --user daemon-reload || warn "daemon-reload failed (no user manager running?)"
+fi
+warn "  warm-up is on from the next login; to disable: touch ~/.local/state/omarchy/toggles/picker-warmup-off"
+
+# ---- 5. apply the idempotent overlay patch to the Omarchy install ----
 if [[ -x "$BIN_DIR/omarchy-niri-repatch" ]]; then
   log "Applying niri-port overlay to $OMARCHY_PATH (idempotent)"
   "$BIN_DIR/omarchy-niri-repatch" || warn "repatch returned nonzero (see ~/bin/omarchy-niri-repatch)"
@@ -58,7 +73,7 @@ else
   warn "omarchy-niri-repatch not in ~/bin; skipping overlay apply (will be installed next run)."
 fi
 
-# ---- 5. lock screen PAM authentication (required; machine-wide) ----
+# ---- 6. lock screen PAM authentication (required; machine-wide) ----
 # Without /etc/pam.d/omarchy-lock-password the shell REFUSES to lock: the lock
 # IPC answers "missing-pam" and nothing happens (a session locked with no working
 # PAM has no way back). That file comes from the Omarchy installer
@@ -76,7 +91,7 @@ else
   warn "  /etc/pam.d/omarchy-lock-fingerprint. Check 'fprintd-list \$USER' and remove it."
 fi
 
-# ---- 6. niri compositor wiring: prepare snippet + print manual step ----
+# ---- 7. niri compositor wiring: prepare snippet + print manual step ----
 log "Preparing niri composeor snippet at ~/.config/niri/omarchy.kdl"
 mkdir -p "$HOME_DIR/.config/niri"
 sed "s|__HOME__|$HOME_DIR|g" "$REPO_DIR/niri-config/omarchy.kdl.template" > "$HOME_DIR/.config/niri/omarchy.kdl"
@@ -90,13 +105,13 @@ else
   warn "No existing niri config.kdl; install the generated ~/.config/niri/omarchy.kdl as a starting point."
 fi
 
-# ---- 7. per-machine reminders ----
+# ---- 8. per-machine reminders ----
 warn ""
 warn "Per-machine checks (cannot be auto-detected reliably):"
 warn "  - monitor output name: run 'niri msg outputs' and adjust any hardcoded eDP-1."
 warn "  - backlight device:    check /sys/class/backlight/* (e.g. intel_backlight) + udev/video group rules."
 warn "  - power backend:       power-profiles-daemon (powerprofilesctl) or TLP (tlp + tlp-pd)."
-warn "  - lock screen auth:    'omarchy-shell lock status' must report \"passwordPam\": true (step 5)."
+warn "  - lock screen auth:    'omarchy-shell lock status' must report \"passwordPam\": true (step 6)."
 warn "  - system deps:         see README.md 'Requirements / dependencies' (jq, qt6-imageformats, inotify-tools, etc.)."
 warn ""
 

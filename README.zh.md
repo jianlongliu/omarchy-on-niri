@@ -11,7 +11,9 @@ Arch + niri 登录会话、并且**已经装好 Omarchy**（或者你会先装 O
 - 打了 QML/Niri 移植的 Omarchy 源码（`shell/Commons/Niri.qml`、打了 patch 的
   `Bar.qml` / `Workspaces.qml` / `Background.qml`）。
 - `port-bin/` — 放进 `PATH` 最前面的覆盖脚本，把跟 Hyprland 耦合的部分翻译到 niri
-  （其中 `hyprctl` 垫片是最关键的一个）。
+  （其中 `hyprctl` 垫片是最关键的一个；另有 `uwsm-app`、`omarchy-update`、
+  `omarchy-picker-warmup`、`omarchy-display-text-size`）。
+- `default/systemd/user/` — 随移植分发的用户单元（选择器预热）。
 - `niri-port/` — 幂等的覆盖层 patch（`niri.patch` + `Niri.qml`），能在 `omarchy update` 之后存续。
 - `niri-config/` — niri 侧的接线（要合并进 `config.kdl` 的 `omarchy.kdl.template`，外加一份 `shell.json` 示例）。
 - `hooks/` — Omarchy update/theme 钩子，负责重放移植覆盖层。
@@ -27,7 +29,8 @@ Arch + niri 登录会话、并且**已经装好 Omarchy**（或者你会先装 O
 omarchy-on-niri/
 ├── shell/        <- 移植后的 Omarchy Quickshell 源码（层1）
 ├── bin/          <- Omarchy 自己的脚本（上游原样，未改）
-├── port-bin/     <- 移植胶水：hyprctl 垫片 + uwsm-app 垫片 + niri 的 system/power/theme/repatch 脚本
+├── port-bin/     <- 移植胶水：hyprctl 垫片 + uwsm-app 垫片 + omarchy-update/picker-warmup/display-text-size 垫片
+│                     + niri 的 system/power/theme/repatch 脚本
 │                     install.sh 会把这些拷进 ~/bin（PATH 最前、挺过 `omarchy update`）
 ├── niri-port/    <- 覆盖层：niri.patch + Niri.qml（每次更新后重放）
 │                     + plugin-patches/（第三方 bar 插件的本地魔改补丁，只能手工重放）

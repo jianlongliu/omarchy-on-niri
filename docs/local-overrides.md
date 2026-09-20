@@ -51,9 +51,9 @@
 | `omarchy-niri-apply-theme` | 按主题 token 写 niri 的边框渐变（两带方案） | ✅ |
 | `omarchy-niri-repatch` | 重放覆盖层（幂等） | ✅ |
 | `omarchy-powerprofiles-{list,set}` | 电源档位 | ✅ |
-| `omarchy-update` | 垫片 → `sudo pacman -Syu`；本机跑不通上游 update 流程 | ❌ **机器独有** |
-| `omarchy-picker-warmup` | 配合用户单元延迟预热选择器缩略图 | ❌ **机器独有** |
-| `omarchy-display-text-size` | bar 的 Display 面板字号滑块驱动全桌面（CLI 路径绕过它） | ❌ **机器独有** |
+| `omarchy-update` | 垫片 → `sudo pacman -Syu`；手装机跑不通上游 update 流程 | ✅ `port-bin/`（2026-09-20 收进） |
+| `omarchy-picker-warmup` | 配合用户单元延迟预热选择器缩略图 | ✅ `port-bin/`（2026-09-20 收进） |
+| `omarchy-display-text-size` | bar 的 Display 面板字号滑块驱动全桌面（CLI 路径绕过它） | ✅ `port-bin/`（2026-09-20 收进） |
 | `wechat`、`clipboard-sync.sh`、`clipboard-handler.sh` | 移植之前的老自建，保留 | ❌（与本移植无关） |
 
 - 上表前 8 个与仓库 `port-bin/` **逐字节一致**（2026-09-20 `md5sum` 逐个核过）。
@@ -107,7 +107,7 @@
 | 单元 | 说明 | 仓库里有? |
 |---|---|---|
 | `omarchy-crash-watch.service` | 本机版：`ExecStart` 指 `~/.local/share/omarchy/bin/omarchy-crash-watch`，并显式给 `PATH`/`OMARCHY_PATH`（用户管理器环境里没有这两样） | ✅ `default/systemd/user/`（模板指 `/usr/bin/…`，本机包不存在） |
-| `omarchy-picker-warmup.service` | `PICKER_WARMUP_DELAY=45` + `ExecStartPre=/bin/sleep`；`toggles/picker-warmup-off` 存在即跳过 | ❌ **机器独有** |
+| `omarchy-picker-warmup.service` | `PICKER_WARMUP_DELAY=45` + `ExecStartPre=/bin/sleep`；`toggles/picker-warmup-off` 存在即跳过 | ✅ `default/systemd/user/`（`%h` 模板，2026-09-20 收进；`install.sh` 第 4 步装并链接） |
 | `materal-recolor.{path,service}`、`wechat-clipboard-sync`、`wl-clip-persist`、`wl-gammarelay`、`xsettingsd` | 与本移植无关，共存 | — |
 
 - 两个 omarchy 单元都软链进 `graphical-session.target.wants/`。
@@ -136,8 +136,9 @@ git apply --reverse --check niri.patch   # 必须通过
 
 ## 8. 缺口：本机有、仓库没有（换机不可复现）
 
-1. `~/bin/omarchy-update`、`~/bin/omarchy-picker-warmup`、`~/bin/omarchy-display-text-size`
-2. `~/.config/systemd/user/omarchy-picker-warmup.service`（+ `graphical-session.target.wants/` 软链）
+1. ~~三个 `~/bin` 垫片~~ **已收进仓库（2026-09-20）**：`port-bin/{omarchy-update,omarchy-picker-warmup,omarchy-display-text-size}`
+2. ~~`omarchy-picker-warmup.service`~~ **已收进仓库**：`default/systemd/user/omarchy-picker-warmup.service`
+   （写成 `%h` 模板；本机那份是写死 `/home/jianlongliu` 的等价物）
 3. ~~`plugin-patches`~~ **已收进仓库（2026-09-20）**：`niri-port/plugin-patches/`（4 个 patch + README，
    说明怎么 `git diff` 生成、怎么 `git apply` 重放）；机器上同目录的 `.bak-*` 是历史，仍只在本地。
 4. `~/.config/omarchy/{shell.json,shell.toml,extensions/omarchy-menu.jsonc}` 的实际取值

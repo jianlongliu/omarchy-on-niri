@@ -1,0 +1,43 @@
+#!/bin/bash
+# Warm the Omarchy theme and background pickers after login, so the first
+# desktop double-click / style menu picker is not paying cold-cache costs.
+#
+# Runs from omarchy-picker-warmup.service ~45 s after graphical-session.target.
+# Costs: reads the thumbnail cache off disk and lets the picker scripts rebuild
+# their rows cache. Nothing here renders, so the first real open still pays the
+# driver-side pipeline/first-frame cost.
+#
+# Disable with: touch ~/.local/state/omarchy/toggles/picker-warmup-off
+
+theme_name=$(cat "$HOME/.local/state/omarchy/current/theme.name" 2>/dev/null)
+current_background=$(readlink -f "$HOME/.local/state/omarchy/current/background" 2>/dev/null)
+
+warm() {
+  local label="$1"
+  shift
+
+  local started ended
+  started=$(date +%s%3N)
+  "$@" >/dev/null 2>&1 || printf 'warmup: %s failed (ok if the shell was down)\n' "$label" >&2
+  ended=$(date +%s%3N)
+  printf 'warmup: %-10s %6d ms\n' "$label" "$((ended - started))" >&2
+}
+
+warm theme omarchy-theme-switcher --preload
+
+# Order matters: the shell keeps only the last preloaded row set in memory, so
+# the background picker goes last. Its arguments must stay identical to
+# omarchy-theme-bg-switcher, otherwise the warmed rows are not the ones the real
+# open asks for and the work is wasted.
+warm background omarchy-menu-images --preload \
+  --selected "$current_background" \
+  "$HOME/.local/state/omarchy/current/theme/backgrounds" \
+  "$HOME/.config/omarchy/backgrounds/$theme_name"
+
+# The row pipeline only stats the cached thumbnails; the decode happens later in
+# the picker. Pulling them into the page cache now is what makes the first open
+# feel instant.
+if [[ -d "$HOME/.cache/omarchy/image-selector" ]]; then
+  warm thumbnails bash -c \
+    'find "$HOME/.cache/omarchy/image-selector" -maxdepth 1 -type f -name "*.jpg" -print0 | xargs -0 -r cat >/dev/null'
+fi

@@ -1,0 +1,84 @@
+#!/bin/bash
+
+# TEXT SIZE 全桌面垫片(2026-09-20)
+#
+# bar 上 Display 面板的 TEXT SIZE 滑块直接执行 `omarchy-display-text-size`(走 PATH),
+# 而 ~/bin 在会话 PATH 最前 —— 这个垫片先接管,补上官方脚本不管的层:
+#   GTK(dconf + gtk-2/3/4 settings.ini)、Qt(qt6ct)、fcitx5、XSETTINGS 的字体字号
+# 官方脚本继续负责 shell [font] base-size / GTK text-scaling-factor / 终端 pt。
+#
+# 锚点(与官方一致):12px ≡ 9pt @96dpi ≡ GTK factor 1.0 ≡ 终端 9pt。
+# 顺序要紧:先落各层 pt,官方脚本再读 dconf 的 font-name 去量化 factor。
+# 官方包升级不会覆盖本文件(它在 ~/bin,不是 $OMARCHY_PATH/bin)。
+
+set -uo pipefail
+
+REAL="${OMARCHY_PATH:-$HOME/.local/share/omarchy}/bin/omarchy-display-text-size"
+SHELL_DEFAULT_PX=12
+TERM_DEFAULT_PT=9
+BASE_PT=9   # 基准 pt:12px ≡ 9pt。吃 factor 的层固定用它
+
+[[ -x $REAL ]] || { echo "shim: 官方脚本不可执行: $REAL" >&2; exit 1; }
+
+pt_for() {
+  awk -v s="$1" -v p="$TERM_DEFAULT_PT" -v b="$SHELL_DEFAULT_PX" \
+    'BEGIN { printf "%d", int(s * p / b + 0.5) }'
+}
+
+set_gtk_base() {
+  # 吃 text-scaling-factor 的层:字体 pt 固定钉在基准 9pt,缩放交给官方 factor。
+  # 理由:官方 factor = round(f * px / 12) / f,f 就是它从 dconf 读到的这个 pt。
+  # f=9 时渲染 = round(0.75*px)pt(12px→9pt、14px→11pt、16px→12pt,正是我们要的);
+  # 若这里写成"目标 pt",f 会跟着漂,渲染就变成 round(f*px/12) —— 14px 会算成 13pt=17px。
+  local pt="$BASE_PT" f
+  gsettings set org.gnome.desktop.interface font-name "SF Pro $pt" 2>/dev/null || true
+  gsettings set org.gnome.desktop.interface monospace-font-name "SFMono Nerd Font $pt" 2>/dev/null || true
+  for f in "$HOME/.config/gtk-3.0/settings.ini" "$HOME/.config/gtk-4.0/settings.ini"; do
+    [[ -f $f ]] || continue
+    sed -i -E "s/(gtk-font-name= *\")[^\"]*(\")/\1SF Pro $pt\2/" "$f"
+    sed -i -E "s/(^gtk-font-name= *)[^\"]*$/\1SF Pro $pt/" "$f"
+  done
+  f="$HOME/.config/xsettingsd/xsettingsd.conf"
+  [[ -f $f ]] && sed -i -E "s|^Gtk/FontName .*|Gtk/FontName \"SF Pro $pt\"|" "$f"
+}
+
+set_pt_layers() {
+  # 没有 factor 机制的层(Qt / fcitx5 / GTK2)只能写目标 pt = round(0.75*px)
+  local pt="$1" f
+  f="$HOME/.config/qt6ct/qt6ct.conf"
+  if [[ -f $f ]]; then
+    sed -i -E "s|^(fixed=)\"[^\"]*\"|\1\"SFMono Nerd Font,$pt,-1,5,50,0,0,0,0,0\"|" "$f"
+    sed -i -E "s|^(general=)\"[^\"]*\"|\1\"SF Pro,$pt,-1,5,50,0,0,0,0,0\"|" "$f"
+  fi
+  f="$HOME/.gtkrc-2.0"
+  if [[ -f $f ]]; then
+    sed -i -E "s/(gtk-font-name= *\")[^\"]*(\")/\1SF Pro $pt\2/" "$f"
+    sed -i -E "s/(^gtk-font-name= *)[^\"]*$/\1SF Pro $pt/" "$f"
+  fi
+  f="$HOME/.config/fcitx5/conf/classicui.conf"
+  if [[ -f $f ]]; then
+    sed -i -E "s|^Font=\"[^\"]*\"|Font=\"SF Pro Text $pt\"|" "$f"
+    sed -i -E "s|^MenuFont=\"[^\"]*\"|MenuFont=\"SF Pro Text $pt\"|" "$f"
+    sed -i -E "s|^TrayFont=\"[^\"]*\"|TrayFont=\"SF Pro Display Bold $pt\"|" "$f"
+    fcitx5-remote -r 2>/dev/null || true
+  fi
+}
+
+case "${1:-}" in
+  "" | -h | --help) exec "$REAL" "$@" ;;
+  reset | default) pt="$TERM_DEFAULT_PT" ;;
+  *)
+    [[ ${1:-} =~ ^[0-9]+$ ]] || exec "$REAL" "$@"
+    pt="$(pt_for "$1")"
+    ;;
+esac
+
+# 调用留痕:排查"bar 滑块是否真的走到这里"时读 $XDG_RUNTIME_DIR/omarchy-display-text-size-shim.log
+printf '%s\targv=%s\tpt=%s\n' "$(date '+%F %T')" "${1:-<none>}" "$pt" \
+  >>"${XDG_RUNTIME_DIR:-/tmp}/omarchy-display-text-size-shim.log"
+
+# 先钉住基准 pt(官方脚本读它算 factor),再写没有 factor 机制的层
+set_gtk_base
+set_pt_layers "$pt"
+
+exec "$REAL" "$@"

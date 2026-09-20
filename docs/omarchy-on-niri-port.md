@@ -79,10 +79,13 @@ hyprctl 调用面有界、可直接映射。
 | `~/bin/uwsm-app` (+x) | **uwsm-app 垫片**：把 Omarchy `bin/` 里 ~30 处 `uwsm-app -- <cmd>` 调用一次救活（niri 会话没有 uwsm，原本全部静默死在 `setsid: failed to execute uwsm-app`）；丢掉 uwsm-app 自身选项后**原样 `exec "$@"`**——**故意不加 `setsid`**（2026-09-20，v1.1：会让 `systemd-run` 的 unit 秒退并清 cgroup，见 §8 第 22 条）；不做 systemd scope 记账（§8 第 22 条；仓库副本 `port-bin/uwsm-app`，离线回归测试 `port-bin/tests/test-uwsm-app-shim.sh`，13 项含 systemd-run 那条）|
 | `~/bin/omarchy-niri-repatch` (+x) | 上游更新后重放 niri 移植覆盖层（patch + `Niri.qml` + `plugins/*`）|
 | `~/bin/omarchy-powerprofiles-list` + `~/bin/omarchy-powerprofiles-set` (+x) | **TLP 感知**的电源 profile 脚本（见 §8 第 11 条）：优先 `powerprofilesctl`，缺则回退 D-Bus `net.hadess.PowerProfiles` |
+| `~/bin/omarchy-update` (+x) | 手装（dev-link）机的 update 垫片 = `sudo pacman -Syu`：上游流程会卡在 `omarchy-update-keyring`（没配 Omarchy 仓库）、再用 yay，中途却已跑无人值守 `pacman -Syu --noconfirm`。拦得住菜单/bar 的裸调 `omarchy-update`，拦不住 CLI 的 `omarchy update`（dispatcher 走绝对路径）。仓库 `port-bin/omarchy-update` |
+| `~/bin/omarchy-picker-warmup` (+x) + `~/.config/systemd/user/omarchy-picker-warmup.service` | 登录后 45s 延迟预热主题/背景选择器（读缩略图进页缓存；`Nice=19`/IO idle；`toggles/picker-warmup-off` 即关，§8 第 25 条）。仓库 `port-bin/omarchy-picker-warmup` + `default/systemd/user/omarchy-picker-warmup.service`（`%h` 模板） |
+| `~/bin/omarchy-display-text-size` (+x) | bar 的 Display 面板 TEXT SIZE 滑块垫片：官方脚本只管 shell `[font]`/GTK factor/终端 pt，这个补 GTK dconf+settings.ini、Qt(qt6ct)、fcitx5、XSETTINGS 各层（§8.19）。仓库 `port-bin/omarchy-display-text-size` |
 | `~/.config/omarchy/hooks/theme-set.d/10-niri-border` | 换 style 时自动 `omarchy-niri-apply-theme`（只写不重载，保护 SCALE）|
 | `~/.config/omarchy/hooks/post-update.d/10-niri-repatch` | `omarchy update` 后自动重放覆盖层 |
 | `~/.config/omarchy/niri-port/`（`niri.patch` + `Niri.qml` + `plugins/` + `plugin-patches/` + `backups/`）| 移植覆盖层产物（仓库外，重放用）|
-| `~/.ante/projects/-home-yvonne/memory/project-omarchy-niri.md` | 项目记忆 |
+| `~/.ante/projects/-home-jianlongliu/memory/`（`omarchy-niri-migration.md` 等） | 项目记忆（旧 yvonne 侧那份已废弃） |
 
 ### 3.2 修改
 
@@ -692,7 +695,8 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
       known_hosts 在 `~/.ssh`。
     - 重推流程：`git clone git@github.com:jianlongliu/omarchy-on-niri.git`（分支 `quattro`）→
       改 → `git commit` → `GIT_SSH_COMMAND="ssh -o BatchMode=yes" git push origin quattro`。
-    - 仓库结构含 `port-bin/`（含 hyprctl、uwsm-app 等 8 个 override）、`niri-config/`+`shell.json`、`hooks/`、
+    - 仓库结构含 `port-bin/`（含 hyprctl、uwsm-app、omarchy-update、omarchy-picker-warmup、
+      omarchy-display-text-size 等 11 个 override）、`niri-config/`+`shell.json`、`hooks/`、
       `install.sh`（非破坏引导，用户明确不要自动化拼装脚本，见 user-environment 记忆）、`docs/`、`README.md`。
     - 非单机即开即用：每台机器要核 monitor 输出名、背光设备、电源后端(TLP/PPD)、niri 版本。
 
@@ -873,7 +877,10 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
       `~/.config/systemd/user/omarchy-picker-warmup.service`（软链进 `graphical-session.target.wants/`，
       照 `omarchy-crash-watch.service` 的式样：`After=/PartOf=graphical-session.target`、
       `ConditionEnvironment=WAYLAND_DISPLAY`、显式 `Environment=OMARCHY_PATH/PATH`）→ 跑
-      `~/bin/omarchy-picker-warmup`。三个设计点：
+      `~/bin/omarchy-picker-warmup`。**2026-09-20 深夜这两份已收进仓库**
+      （`default/systemd/user/omarchy-picker-warmup.service` 用 `%h` 模板化 +
+      `port-bin/omarchy-picker-warmup`，`install.sh` 第 4 步安装并链进 `graphical-session.target.wants/`），
+      新机器不再靠手装。三个设计点：
       **① 延迟**：`Environment=PICKER_WARMUP_DELAY=45` + `ExecStartPre=/bin/sleep ${PICKER_WARMUP_DELAY}`
       （systemd 支持在命令里做变量展开，实测生效）—— 预热会同步 fan-out `nproc` 个 vipsthumbnail，
       会话刚起来时跟它抢盘不划算；**② 不抢资源**：`Nice=19` + `IOSchedulingClass=idle`；
