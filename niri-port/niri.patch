@@ -363,6 +363,23 @@ index ec0482a..985d1d9 100644
  
          bar: root.bar
          text: focused ? "\uDB85\uDCFB" : (modelData === 10 ? "0" : String(modelData))
+diff --git a/shell/plugins/image-picker/ImagePicker.qml b/shell/plugins/image-picker/ImagePicker.qml
+index 5c00240..5fbeb0c 100644
+--- a/shell/plugins/image-picker/ImagePicker.qml
++++ b/shell/plugins/image-picker/ImagePicker.qml
+@@ -507,7 +507,11 @@ Item {
+                   // selection moves through the carousel.
+                   source: item.sourceActivated && item.thumbnailPath ? Util.fileUrl(item.thumbnailPath) : ""
+                   fillMode: Image.PreserveAspectCrop
+-                  asynchronous: false
++                  // Niri port: decode off the GUI thread. A synchronous decode
++                  // of every visible slice (up to 33 at 1536x864) held the
++                  // picker's first frame back by ~300ms and froze the bar with
++                  // it; the pool fills the slices within the first frame now.
++                  asynchronous: true
+                   cache: true
+                   smooth: true
+                 }
 diff --git a/shell/plugins/menu/Menu.qml b/shell/plugins/menu/Menu.qml
 index aa879c1..95fc735 100644
 --- a/shell/plugins/menu/Menu.qml

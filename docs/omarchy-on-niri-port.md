@@ -72,6 +72,7 @@ hyprctl 调用面有界、可直接映射。
 | `~/.config/omarchy/backgrounds/{tonal-spot,catppuccin}` | 共享壁纸库软链 → `/data/Pictures/Wallpapers`（所有主题翻同一套图，§8.12） |
 | `~/omarchy-wallpaper-aio/` | 参考仓库 `jianlongliu/omarchy-wallpaper-aio` 的克隆：只含 `setup.sh`（把主题背景目录软链到壁纸库，§8.12） |
 | `~/bin/omarchy-niri-system` (+x) | **统一系统动作入口**：logout→`niri msg action quit --skip-confirmation`、reboot→logind D-Bus `Manager.Reboot`、shutdown→logind D-Bus `Manager.PowerOff`（均免密），统一 OSD+关窗+分发 |
+| `~/bin/uwsm-app` (+x) | **uwsm-app 垫片**：把 Omarchy `bin/` 里 ~30 处 `uwsm-app -- <cmd>` 调用一次救活（niri 会话没有 uwsm，原本全部静默死在 `setsid: failed to execute uwsm-app`）；丢掉 uwsm-app 自身选项后**原样 `exec "$@"`**——**故意不加 `setsid`**（2026-09-20，v1.1：会让 `systemd-run` 的 unit 秒退并清 cgroup，见 §8 第 22 条）；不做 systemd scope 记账（§8 第 22 条；仓库副本 `port-bin/uwsm-app`，离线回归测试 `port-bin/tests/test-uwsm-app-shim.sh`，13 项含 systemd-run 那条）|
 | `~/bin/omarchy-niri-repatch` (+x) | 上游更新后重放 niri 移植覆盖层（patch + `Niri.qml` + `plugins/*`）|
 | `~/bin/omarchy-powerprofiles-list` + `~/bin/omarchy-powerprofiles-set` (+x) | **TLP 感知**的电源 profile 脚本（见 §8 第 11 条）：优先 `powerprofilesctl`，缺则回退 D-Bus `net.hadess.PowerProfiles` |
 | `~/.config/omarchy/hooks/theme-set.d/10-niri-border` | 换 style 时自动 `omarchy-niri-apply-theme`（只写不重载，保护 SCALE）|
@@ -91,9 +92,10 @@ hyprctl 调用面有界、可直接映射。
 | `~/.local/share/omarchy/shell/plugins/osd/Osd.qml` | OSD 改"卡片大小 surface" + 磨砂（§8.8） |
 | `~/.local/share/omarchy/shell/services/AppLibrary.qml` | 加 `command -v uwsm-app` 回退（niri 无 uwsm-app，§8 第 14 条） |
 | `~/.local/share/omarchy/shell/plugins/background/Background.qml` | `readlinkProc` 回调强制即时切换背景（见 §8 第 1 条 b）|
-| `~/.local/share/omarchy/bin/omarchy-launch-tui` | 加 uid 终端回退（ghostty），因 niri 无 `uwsm-app`/`xdg-terminal-exec` |
-| `~/.local/share/omarchy/bin/omarchy-launch-editor` | 同上：`uwsm-app` 存在才用、否则直接 `setsid $editor` 启动（niri 无 uwsm）|
-| `~/.local/share/omarchy/bin/omarchy-launch-floating-terminal-with-presentation` | 同上：`uwsm-app`+`xdg-terminal-exec` 缺时遍历 `ghostty/kitty/alacritty/foot` 起演示终端 |
+| `~/.local/share/omarchy/shell/plugins/image-picker/ImagePicker.qml` | 切片 `Image` 改 `asynchronous: true`（首帧不再同步解码 33 张缩略图，§8 第 25 条）|
+| `~/.local/share/omarchy/bin/omarchy-launch-tui` | 加 uid 终端回退（ghostty），因 niri 无 `uwsm-app`/`xdg-terminal-exec`；2026-09-19 起垫片在位时走 `uwsm-app` 分支（§8 第 22 条）|
+| `~/.local/share/omarchy/bin/omarchy-launch-editor` | 同上：`uwsm-app` 存在才用、否则直接 `setsid $editor` 启动（niri 无 uwsm）；2026-09-19 起垫片在位时走 `uwsm-app` 分支（§8 第 22 条）|
+| `~/.local/share/omarchy/bin/omarchy-launch-floating-terminal-with-presentation` | 同上：`uwsm-app`+`xdg-terminal-exec` 缺时遍历 `ghostty/kitty/alacritty/foot` 起演示终端；2026-09-19 起垫片在位时走 `uwsm-app` 分支（§8 第 22 条）|
 | `~/.local/share/omarchy/bin/omarchy-theme-set` | 背景走持久文件而非过渡快照（niri 黑桌面竞态，见 §8.9） |
 | `~/.local/share/omarchy/bin/omarchy-system-{logout,reboot,shutdown}` | 转调 `~/bin/omarchy-niri-system`（niri quit / logind D-Bus，§8 第 9 条） |
 | `~/.local/share/omarchy/bin/omarchy-refresh-hyprland` | **niri 感知**：`XDG_CURRENT_DESKTOP=niri` 时整脚本变 no-op（不再重建 `~/.config/hypr`）|
@@ -178,11 +180,19 @@ spawn-sh-at-startup "quickshell -n -p /home/yvonne/.local/share/omarchy/shell"
 
 ### 5.3 Omarchy 绑定（不冲突子集）
 
+**2026-09-19/20 已按「每功能只留一个键」去重**（用户要求；被合并的旧键在 `binds.kdl` 里就地注释成
+`// dropped: …` 保留，要恢复取消注释即可；原委见 §8 第 24 条）：
+
 ```kdl
-Mod+Space        hotkey-overlay-title="Omarchy Menu" { spawn-sh "omarchy-menu toggle"; }
-Mod+Alt+Space    hotkey-overlay-title="Apps menu"    { spawn-sh "omarchy-menu toggle apps"; }
+Mod+D             hotkey-overlay-title="Apps menu"    { spawn-sh "omarchy-menu toggle apps"; }
+Mod+Space         hotkey-overlay-title="Omarchy Menu" { spawn-sh "omarchy-menu toggle"; }
+Mod+Return        hotkey-overlay-title="Terminal"     { spawn-sh "omarchy-launch-terminal"; }
+Mod+L             hotkey-overlay-title="Lock screen"  { spawn-sh "omarchy-system-lock"; }
+Mod+E             hotkey-overlay-title="Files"        { spawn "nautilus"; }
+Mod+Z             hotkey-overlay-title="Browser"      { spawn-sh "omarchy-launch-browser"; }
+Mod+Y             hotkey-overlay-title="Yazi"         { spawn-sh "omarchy-launch-terminal yazi"; }
+Ctrl+Shift+Escape hotkey-overlay-title="btop"         { spawn-sh "omarchy-launch-terminal btop"; }
 Mod+K             hotkey-overlay-title="Keybindings"  { spawn-sh "omarchy-menu-keybindings"; }
-Mod+Ctrl+L        hotkey-overlay-title="Lock system"  { spawn-sh "omarchy-system-lock"; }
 Mod+Ctrl+V       hotkey-overlay-title="Clipboard"    { spawn-sh "omarchy-shell shell toggle omarchy.clipboard"; }
 Mod+Ctrl+E       hotkey-overlay-title="Emojis"       { spawn-sh "omarchy-shell shell toggle omarchy.emojis"; }
 Mod+Ctrl+A       hotkey-overlay-title="Audio"        { spawn-sh "omarchy-shell shell toggle omarchy.audio"; }
@@ -191,10 +201,12 @@ Mod+Ctrl+D       hotkey-overlay-title="Display"      { spawn-sh "omarchy-shell s
 Mod+Ctrl+W       hotkey-overlay-title="Network"      { spawn-sh "omarchy-shell shell toggle omarchy.network"; }
 Mod+Ctrl+P       hotkey-overlay-title="Power"        { spawn-sh "omarchy-shell shell toggle omarchy.power"; }
 Mod+Ctrl+Alt+D   hotkey-overlay-title="Calendar"     { spawn-sh "omarchy-shell shell toggle omarchy.clock"; }
-Mod+Return       hotkey-overlay-title="Terminal"     { spawn "ghostty"; }
+Mod+Q            repeat=false                        { close-window; }
+Alt+F4                                               { close-window; }
+Mod+Shift+E                                          { quit; }
 Print            { spawn-sh "omarchy-capture-screenshot"; }
-Mod+Escape       hotkey-overlay-title="System menu" { spawn-sh "omarchy-menu toggle system"; }
-Mod+Shift+Escape allow-inhibiting=false             { toggle-keyboard-shortcuts-inhibit; }
+Ctrl+Alt+Delete  hotkey-overlay-title="System menu"  { spawn-sh "omarchy-menu toggle system"; }
+Mod+Shift+Escape allow-inhibiting=false              { toggle-keyboard-shortcuts-inhibit; }
 ```
 
 **媒体键重定向到 OSD 脚本（2026-08-25）**：原 niri 裸绑定只改值、不出 OSD。已改为经 Omarchy
@@ -344,10 +356,17 @@ output "eDP-1" {
   三档为 **原生 4K/2.25、均衡 2560×1600/1.5、省电 1920×1200/1.25**。本机最终用
   「均衡模式 + scale 2.0」。
 
-**字体（12px）**
+**字体（12px ≡ 9pt，2026-09-20 全桌面对齐，见 §8.19）**
 
-- Omarchy 栏字体（Layer 1）：`~/.config/omarchy/shell.toml` 的 `[font] base-size = 12`。
-- GTK 应用字体（GTK3 与 GTK4 要分别设）：`~/.config/gtk-3.0/settings.ini` 与 `~/.config/gtk-4.0/settings.ini` 的 `gtk-font-name = "SF Pro 12"`。GTK4 应用（Nautilus 等）只读 gtk-4.0，两处都要 12，否则 Nautilus 会偏小（曾为 11）。
+- **唯一基准** = bar 上 Display 面板的 `TEXT SIZE`：`~/.config/omarchy/shell.toml` 的 `[font] base-size = 12`（px）。
+- **换算锚点**（官方 `omarchy-display-text-size` 自己写明）：**12px ≡ 9pt @96dpi ≡ GTK text-scaling-factor 1.0 ≡ 终端 9pt**。
+  所以除 shell 外的每一层都用 **9pt**，而不是 12pt —— Pango 按 96dpi 折算，`12pt = 16px`，比 bar 大 33%，
+  这正是"应用字看着比 bar 大"的根因。
+- **各层落点**（基准 12px 时都是 9pt）：GTK 侧 `SF Pro 9` —— dconf `font-name`/`monospace-font-name`、
+  `gtk-3.0/4.0 settings.ini`、XSETTINGS `Gtk/FontName`（**固定基准，滑块调大时靠 factor 放大、不改这个 pt**）；
+  Qt `SF Pro,9` / `SFMono Nerd Font,9`、fcitx5 `SF Pro Text 9`、GTK2 `.gtkrc-2.0`、终端（这几层**写目标 pt**）。
+  GTK4 应用（如 Nautilus）只读 gtk-4.0，两处都要设。改 GTK 那个 pt 会把 factor 的量化基准一起带偏（§8.19）。
+- **连动**：`~/bin/omarchy-display-text-size` 垫片让 bar 的 TEXT SIZE 滑块一次驱动上面全部层（§8.19）。
 
 **窗口圆角（window-rules.kdl）** — 全局规则（无 `match` = 套用所有窗口）：
 
@@ -507,9 +526,10 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
    同时修正 `_focused_output_name()`：niri `focused-output` 输出形如 `Output "..." (eDP-1)`，
    原正则 `^[^:]+` 无冒号时吞掉整行，现改为提取末尾括号。
 3. **快捷键重映射已按用户方案落地**（2026-08-24）：tiling 改成方向键方案、移除 vim 键，
-   `Mod+K`=keybindings、`Mod+Ctrl+L`=锁屏 让给 Omarchy。`Mod+Ctrl+R`/`Mod+comma`
-   仍被 niri 占用，待后续让出。**`Mod+Escape` 已于 2026-08-31 让出**（改回 System menu，
-   逃生键挪至 `Mod+Shift+Escape`，见 §5.5）。
+   `Mod+K`=keybindings、`Mod+Ctrl+L`=锁屏 让给 Omarchy（**2026-09-19 起锁屏统一为 `Mod+L`**，见 §8 第 24 条）。
+   `Mod+Ctrl+R`/`Mod+comma` 仍被 niri 占用，待后续让出。**`Mod+Escape` 已于 2026-08-31 让出**
+   （改回 System menu；逃生键挪至 `Mod+Shift+Escape`，见 §5.5）；**2026-09-19 起系统菜单改到
+   `Ctrl+Alt+Delete`**（§8 第 24 条）。
 4. **显示器缩放 SCALE 生效**：`omarchy-hyprland-monitor-scaling` → `hyprctl eval hl.monitor(...)` 被
    `_eval_monitor` 处理。原实现把 `mode`+`scale`+`position` 塞进**一次** `niri msg output`，而 niri
    一次只能接受一个 action，导致整条命令失败、scale 不生效（字体大小走 shell 内部所以正常）。
@@ -517,7 +537,8 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
    且输出本就在该模式上）。验证：1.5→1.6 生效。
 5. **hyprctl schema 精度**：个别 Hyprland-only 字段可能是占位值；如遇脚本异常再补映射。
 6. **锁屏**：niri 侧 `Super+Alt+L`（swaylock）与 Omarchy `Mod+Ctrl+L`（`omarchy-system-lock`
-   → `omarchy-shell lock lock`）两条路线并存；后者依赖 QuickShell 的 `omarchy.lock` 插件，
+   → `omarchy-shell lock lock`）两条路线并存（**2026-09-19 已收敛为单键 `Mod+L`，swaylock 那条删了**，
+   见 §8 第 24 条）；后者依赖 QuickShell 的 `omarchy.lock` 插件，
    在 niri 上是否真正锁住待实测。
 7. **TUI 编辑器启动已修**：`omarchy-launch-tui` 原本走 `uwsm-app`+`xdg-terminal-exec`（Hyprland/uwsm
    组件，niri 会话没有），导致菜单 "Edit config file" 点了无反应。已回退到 `ghostty`（匹配 niri
@@ -646,7 +667,7 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
       known_hosts 在 `~/.ssh`。
     - 重推流程：`git clone git@github.com:jianlongliu/omarchy-on-niri.git`（分支 `quattro`）→
       改 → `git commit` → `GIT_SSH_COMMAND="ssh -o BatchMode=yes" git push origin quattro`。
-    - 仓库结构含 `port-bin/`（含 hyprctl 等 6 个 override）、`niri-config/`+`shell.json`、`hooks/`、
+    - 仓库结构含 `port-bin/`（含 hyprctl、uwsm-app 等 8 个 override）、`niri-config/`+`shell.json`、`hooks/`、
       `install.sh`（非破坏引导，用户明确不要自动化拼装脚本，见 user-environment 记忆）、`docs/`、`README.md`。
     - 非单机即开即用：每台机器要核 monitor 输出名、背光设备、电源后端(TLP/PPD)、niri 版本。
 
@@ -670,7 +691,7 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
     `barClearance`）与 `KeyboardPanel` 家族面板（`shell/Ui/KeyboardPanel.qml` 的 `gap`）按固定 bar
     高度算边距、**不计入 `floatGap`**，浮栏（§8.11）启用后这些弹窗的顶边会压住 bar 底缘约 8px。
     首选修法：在这两处各加一个 `barEdgeMargin` 项（`KeyboardPanel.qml` 已在 `niri.patch` 内，
-    会让 patch 从 17 个文件涨到 19 个）。零仓库改动的替代：让垫片把 `Style.gapsOut` 报得更大，
+    会让 patch 从 18 个文件涨到 20 个）。零仓库改动的替代：让垫片把 `Style.gapsOut` 报得更大，
     代价是面板间距一起变大。验证：打开托盘面板，量顶边是否 ≥ bar 底缘（物理 y ≈ 80）。
 
 19. **耗电/续航专项（2026-09-19 测过一轮，下次接着做）**：表现为"感觉慢 + 续航差"。已排除的
@@ -726,6 +747,91 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
     都有结果；`test/shell.d/menu-test.sh` 仍只有那条既有红（它断言 `setup.input` 指上游 `input.lua`，
     而 §8.6 已把它改成 `niri/input.kdl`）。
 
+22. **应用启动类调用统一到一个 `uwsm-app` 垫片（2026-09-19 修）**：上游 Omarchy `bin/` 里有 ~30 处
+    `uwsm-app -- <command>`——它的本意是把应用挂进 transient systemd user unit，那是 Hyprland/uwsm
+    会话才有的能力；本 niri 会话连 `uwsm` 都没有，于是这 30 处**全部静默死亡**：
+    `setsid: failed to execute uwsm-app: No such file or directory`。用户可见症状是"点了没反应、也不报错、
+    没有窗口"——`omarchy-launch-terminal`、`omarchy-launch-nautilus(-cwd)`、`omarchy-launch-browser`、
+    `omarchy-launch-webapp`、`omarchy-launch-1password`、`omarchy-launch-discord-community`、
+    `omarchy-restart-app`、各 `omarchy-install-*` 装完自动拉起应用、以及壳层 `services/AppLibrary.qml`
+    的 App 列表全在内（§8 第 7、14、21 条当年只修了其中漏出来的几处）。
+    **修法（统一，只加一个文件）**：新增 PATH-first 垫片 `~/bin/uwsm-app`（仓库副本 `port-bin/uwsm-app`，
+    随 `install.sh` 的 `port-bin/*` glob 装进 `~/bin`；`~/bin` 在 niri 会话和 Quickshell 壳层的 `PATH`
+    里都排第一，已实测）。它丢掉 uwsm-app 自身的选项和 `--` 之后 `exec "$@"`，**不做** systemd
+    scope/unit/cgroup 记账——调用方只依赖"进程起得来、且已脱离调用者"，niri 不需要更多。这样**不必**去
+    30 个调用点逐个打补丁（那会把 `niri.patch` 从 18 文件/34 hunk 顶到几十个 hunk，且每次上游更新都要
+    重放一遍）。§3.2 里那 4 处 `command -v uwsm-app` 守卫**保持原样**：垫片在位时它们走 uwsm-app 分支
+    （= 垫片 = 直接 exec，等价而更短），垫片被删时它们仍是"没装垫片的新机器"的兜底。
+    验证：`port-bin/tests/test-uwsm-app-shim.sh`（**离线**：假命令 + 临时目录，13 项——参数透传 /
+    uwsm-app 自身选项被丢 / 无 `--` 也认 / 无参 exit 1 / `--help`·`--version` exit 0 / 子命令退出码透传 /
+    systemd-run unit 存活 / `bash -n`）13/13 绿；真机 `omarchy-launch-terminal`、`omarchy-launch-browser`
+    实测均开出窗口。回退：`rm ~/bin/uwsm-app`。
+    **v1.1（2026-09-20）——垫片里那句 `setsid` 是有害的**：v1.0 写的是 `exec setsid "$@"`，在"调用方自己
+    已经 `setsid`"或"niri `spawn` 直接起"这两类路径上没问题（终端、编辑器、nautilus 都这么走，实测通），
+    但**凡是调用方用 `systemd-run --user` 起的就会静默失败**：unit 里的主进程本身就是 session leader，
+    `setsid` 只能 fork 后立刻退出 → systemd 判定 unit 已结束 → 按默认 `KillMode=control-group` 清掉整个
+    cgroup → 刚起的应用被杀。症状极具误导性：**退出码 0、无任何报错、没有窗口**（因为这类调用方都带
+    `--property=StandardError=null`）。踩到的是 `bin/omarchy-launch-browser`（默认浏览器＝Zen）。
+    定位手法：`journalctl --user` 能看到 `Started [systemd-run] …/bin/uwsm-app -- /usr/lib/zen-browser/firefox`，
+    说明 unit 起过；再做对照实验——直接 `systemd-run --user … /usr/lib/zen-browser/firefox`（不经垫片）
+    3 秒就出窗口 → 锁定垫片。修法：垫片改成 `exec "$@"`（调用方要脱离自己会 `setsid`），并给回归测试加了
+    "unit 在应用运行期间必须仍 active + 应用必须活到结束"两项。
+    **边界（垫片只解决"调用死掉"，不解决调用方语义错误）**：`omarchy-toggle-nightlight` 调
+    `uwsm-app -- hyprsunset`，niri 上 hyprsunset 本身没意义（§8 第 19 条一带）；`omarchy-launch-or-focus`
+    的默认命令写成 `uwsm-app -- $WINDOW_PATTERN`，把窗口匹配串当命令——这两个是上游调用方的毛病，另议。
+
+23. **screensaver 关掉并屏蔽（2026-09-20，用户要求「很烦，屏蔽和禁用他」）**：本机
+    `~/.config/omarchy/shell.json` 是 `idle = {lock: 300, screensaver: 150}`，所以空闲 2.5 分钟先弹
+    screensaver（在终端里跑 ASCII art）、5 分钟才锁屏。处置分两层，**都走官方机制、不碰 omarchy 本体**：
+    - **禁用（本体）**：官方开关 `~/.local/state/omarchy/toggles/screensaver-off`（`omarchy-toggle
+      screensaver-off` 打开）。`bin/omarchy-launch-screensaver` 开头就是
+      `omarchy-toggle-enabled screensaver-off && [[ $1 != force ]] && exit 1`，于是 idle 计时器这条路
+      直接死掉。实测：`omarchy-launch-screensaver` → exit 1、无新窗口（`niri msg windows` 前后一致）；
+      当时正在跑的那个实例（ghostty `--class=org.omarchy.screensaver`）已杀掉。
+    - **屏蔽（入口）**：用户 override 加 6 条 `when:"false"` —— `system.screensaver`（System 菜单）、
+      `trigger.toggle.screensaver`（Trigger→Toggle）、`style.screensaver` 及其 `.text`/`.image`/`.default`
+      （Style→Screensaver 那组 branding）。这几条是**唯独带 `force`、能绕过上面那个开关**的入口，
+      不屏蔽就等于开关形同虚设。备份 `~/.config/omarchy/extensions/omarchy-menu.jsonc.bak-20260920-prescreensaver`。
+    - **别去动 `idle.screensaver`**：计时是 `min(screensaver, lock)` + 差值的两段式，把它调成等于 `lock`
+      会让 screensaver 在锁屏那一刻抢跑（`screensaverDelay = 0`），比现在更糟。停掉的功能不需要改超时。
+    - 回退：`omarchy-toggle screensaver-off off` + 还原上面那个备份。触发点已全局扫过：没有 systemd 单元、
+      没有 niri 绑定（`Indicators` 里的 StayAwake 是手动「别睡」开关，与此无关）。
+    - 同一次还修掉这份 override 文件里 **5 处超长 `\u` 转义**（2 处历史遗留 + 3 处新增），规则见 §8.6
+      末尾那两条 override 注意。
+
+24. **按键表去重 + 应用启动键统一走 Omarchy 包装器（2026-09-19/20，用户要求）**：用户原话"好多都重复"，
+    并给定目标键位，于是按"**每个功能只留一个键**"重排 `~/.config/niri/binds.kdl`（清单已同步进 §5.3）：
+    - 锁屏 `Mod+L`（合并掉 `Super+Alt+L` 与 `Mod+Ctrl+L`）；终端 `Mod+Return` →`omarchy-launch-terminal`
+      （合并掉 `Mod+T`）；关窗口 `Mod+Q` + 新增 `Alt+F4`；系统菜单 `Ctrl+Alt+Delete`（该键原来是 `quit`，
+      而 `Mod+Escape` 也是系统菜单 → 让位给它）。
+    - 新增：`Mod+E` → nautilus、`Mod+Z` → `omarchy-launch-browser`、`Mod+Y` → yazi、
+      `Ctrl+Shift+Esc` → btop（后两个在新终端里跑：`omarchy-launch-terminal yazi|btop`）。
+    - **`Mod+Shift+E`（退 niri 会话）不是重复项**，保留——"关窗口"和"退会话"是两件事。
+    - 做法：被合并的旧键**就地注释成 `// dropped: …`**（不删行，要恢复取消注释即可），
+      备份 `~/.config/niri/binds.kdl.bak-dedup-*`；`niri validate` 通过、生效行无重复键。
+    - **终端类一律走 `omarchy-launch-terminal`**（与菜单同一条路、自带"跟随当前终端 cwd"），不裸调
+      `xdg-terminal-exec`——这条依赖垫片在位（§8 第 22 条）。`Mod+Z` 的实测恰好把垫片 v1.0 的 `setsid`
+      坑顶了出来（`systemd-run` 路径静默死，见 §8 第 22 条 v1.1），修完 3 秒出 Zen 窗口。
+    - 遗留未定：`Mod+O` 与 `Mod+Tab` 都绑 `toggle-overview`（用户未表态，暂留两个）。
+
+25. **桌面双击弹窗慢（壁纸/主题切换器"要等会"）（2026-09-20，用户要求）**：入口是 `shell/plugins/background/Background.qml`
+    末尾那个 `MouseArea` —— **左键双击**桌面 → `omarchy-theme-bg-switcher`（壁纸），**右键双击** → `omarchy-theme-switcher`
+    （主题）；两者都是 `omarchy-menu-images` + Quickshell 的 `omarchy.image-picker` 面板（IPC target `image-selector`）。
+    - **根因**：切片 delegate 里的 `Image` 写的是 `asynchronous: false` → **首帧同步解码**最多 33 张 1536×864
+      缩略图（`nearby` 半径 16），≈300ms 全压在 GUI 线程：选择器晚出 300ms，**bar 也跟着僵住**（同一线程）。
+    - **修法**：只把这一行改成 `asynchronous: true`（附 4 行说明注释），进 `niri.patch`（现 **18 文件 / 34 hunk**）。
+    - **实测**（`grim -o eDP-1 -t ppm` 每 ~75ms 采一帧定"画面何时出现"，脚本段用 QML `console.log` 时间戳对齐）：
+      壁纸路径（75 张）**550ms → 250ms**；主题路径（2 张预览）本来就 ~250ms。**~250ms 是下限**：脚本+IPC ~95ms
+      （其中 `qs ipc` 进程启动 ~50ms）+ QML ~68ms（建 75 个 delegate 占 15~25ms）+ 首帧合成 ~90ms。
+      异步不伤观感：开窗 320ms 与 1.5s 两张截图逐像素平均差 0.03（差 >8 的像素仅 0.1%），切片不缺图。
+    - **冷缓存不用管**：行缓存按**目录 mtime** 失效，换主题后首次双击本要 ~600ms 重建；上游 `omarchy-theme-set`
+      结尾已有 `omarchy-theme-switcher --preload` + `omarchy-theme-bg-cache &` 兜底（实测后台重建 553ms、
+      之后脚本段 30ms）。`omarchy-theme-bg-set`（换壁纸）不动主题背景目录，不会让缓存失效。
+    - 改完必须 `omarchy-restart-shell`：`omarchy-launch-shell` 用 `QS_DISABLE_FILE_WATCHER=1` 起 quickshell，
+      **QML 没有热重载**；QML 的 `console.log` 落在 `journalctl -t omarchy-shell`（查时序比截图准）。
+    - 回退：`git checkout -- shell/plugins/image-picker/ImagePicker.qml`，或先还原
+      `niri.patch.bak-20260920-prepickerperf` 再 `omarchy-niri-repatch`。
+
 ### 8.6 A 层：菜单指向 niri 真配置，Hyprland 层降级
 
 Omarchy 有两层配置，只有层1在 niri 上真正生效：
@@ -765,16 +871,27 @@ Omarchy 有两层配置，只有层1在 niri 上真正生效：
   实测合并后 label 正确、action 指向模块化文件、图标正常。Trigger 子菜单那 7 个 toast override 目前仍是
   action-only（同隐患，会显示成 `trigger.toggle.*` 之类 id），用户确认"别的都可以"故暂未动。
 
+- **Icon 转义：`\u` 只吃 4 位十六进制，>U+FFFF 必须写 UTF-16 代理对（2026-09-20 修）**：这份文件里
+  `\uf0379`／`\uf10ac`／`\uf1104` 这类**五位**写法会被 `JSON.parse` 读成 `U+F037` + 字符 `"9"`（默认项用的是
+  **字面量字符**，所以只有 override 会踩这个坑）。正确写法：`U+F0379` → `\udb80\udf79`、`U+F10AC` →
+  `\udb84\udcac`、`U+F1104`（screensaver 图标）→ `\udb84\udd04`。本轮共修 5 处（2 处历史遗留 + 3 处新增）。
+  校验法（不依赖壳层、可离线跑）：把 `MenuModel.js` 的 `stripJsonc` 两条正则原样搬过来剥注释/尾逗号 →
+  `json.loads` → 逐项比 user 与 default 同 id 的 `icon` 码点（2026-09-20 自查 13 项全等）。
+- **`stripJsonc` 只删「整行 `//` 注释」和「尾随逗号」**：正则分别是 `/^\s*\/\/[^\n]*(\n|$)/gm` 与
+  `/,(\s*[}\]])/g`。所以这份文件里**代码后面不能写行内注释**——`"a":1, // note` 会留下 `// note` 让
+  `JSON.parse` 抛错，而 `parseMenuJsonc` 出错时**静默返回 `[]`**，菜单会变成空卡片（成因见 §8.14）。
+
 ### 8.7 更新覆盖层：上游更新后自动重放
 
 - `omarchy update` = `git pull --ff-only`（`omarchy-update-dev`，在 `post-update` 钩子**之前**）+ 迁移。
 - **仓库外不碰**：`config.kdl` / `shell.json` / `~/bin/hyprctl` 都不在 omarchy 仓库内，`git pull` 动不到。
-- **仓库内会撞**：我们改了仓库内 **17 个文件**（`launch-tui`、`launch-editor`、
+- **仓库内会撞**：我们改了仓库内 **18 个文件**（`launch-tui`、`launch-editor`、
   `launch-floating-terminal-with-presentation`、`refresh-hyprland`、`theme-set`、`menu.jsonc`、
-  `qmldir`、`Background.qml`、`Bar.qml`、`Workspaces.qml`、`Menu.qml`、`KeyboardPanel.qml`、
+  `qmldir`、`Background.qml`、`ImagePicker.qml`、`Bar.qml`、`Workspaces.qml`、`Menu.qml`、`KeyboardPanel.qml`、
   `osd/Osd.qml`、`AppLibrary.qml`，以及 2026-08-25 加的 3 个 `omarchy-system-{logout,reboot,shutdown}`）
-  ——这 17 个文件正是 `niri.patch` 的内容（`17 个文件 / 33 个 hunk`；2026-09-18 合并上游时为 30，
-  2026-09-19 菜单自愈守卫 +2（§8.14）、Install/Remove 终端回退 +1（§8 第 21 条））。
+  ——这 18 个文件正是 `niri.patch` 的内容（`18 个文件 / 34 个 hunk`；2026-09-18 合并上游时为 30，
+  2026-09-19 菜单自愈守卫 +2（§8.14）、Install/Remove 终端回退 +1（§8 第 21 条）、
+  2026-09-20 选择器异步解码 +1（§8 第 25 条））。
   上游改到其中任何一个，`git pull --ff-only` 会因本地未提交改动而**失败中止**整个更新——这是需要
   手动合并的情况。
 - **不在 patch 里的新增文件**：`shell/Commons/Niri.qml`、`shell/plugins/blurwallpaper/` 是**未跟踪**
@@ -819,7 +936,7 @@ niri 26.04 的 `background-effect` + Quickshell 的 `ext_background_effect` 形�
 
 **仓库内改动（已进 `niri-port/niri.patch`；2026-09-18 合并上游 `d174d4a` 后整份 patch = 17 个文件 /
 30 个 hunk，2026-09-19 起 32 个 hunk（菜单自愈守卫，§8.14）、再 +1 到 33（Install/Remove 终端回退，
-§8 第 21 条）；`--reverse --check` 通过）**：
+§8 第 21 条）、2026-09-20 再 +1 到 34（选择器异步解码，§8 第 25 条）；`--reverse --check` 通过）**：
 - `shell/plugins/menu/Menu.qml`：加 `import Quickshell.Wayland._BackgroundEffect`，根 `PanelWindow`
   挂 `BackgroundEffect.blurRegion: Region { item: card; radius: root.cornerRadius }`。
 - `shell/Ui/KeyboardPanel.qml`：同上，根 `PanelWindow` 挂
@@ -1151,7 +1268,7 @@ laravel 从 `~/.config/composer/vendor/bin/laravel` 改成 `~/.local/bin/laravel
 - **238 条主题删除未受影响**：上游这 5 个提交没碰 `themes/`，`--ff-only` 因此不会被本地删除挡住；
   更新后 `git status` 仍是 17 M + 238 D + 3 未跟踪（`shell/Commons/Niri.qml`、`shell/plugins/blurwallpaper/`、
   `shell/test-debug.qml`）。
-- **下次更新的预期**：上游一旦改到我们那 17 个文件里的**同一函数**，`omarchy-niri-repatch` 会以退出码 2
+- **下次更新的预期**：上游一旦改到我们那 18 个文件（当时 17，2026-09-20 起 18，见 §8 第 25 条）里的**同一函数**，`omarchy-niri-repatch` 会以退出码 2
   明确报冲突且不动仓库（见 §8.7），那时才需要手工翻译合并。
 
 ---
@@ -1170,7 +1287,8 @@ laravel 从 `~/.config/composer/vendor/bin/laravel` 改成 `~/.local/bin/laravel
 | 恢复完整文件 | 6 个根项（**无需重启壳层**） |
 
 **成因链**：菜单模型 = 仓库 `default/omarchy/omarchy-menu.jsonc`（340 项）+ 用户
-`~/.config/omarchy/extensions/omarchy-menu.jsonc`（10 项）合并而来。用户那 10 项都是**覆盖项**，其
+`~/.config/omarchy/extensions/omarchy-menu.jsonc`（2026-09-19 时 10 项；2026-09-20 起 16 项，多了
+6 条 screensaver 屏蔽，§8 第 23 条）合并而来。用户那些都是**覆盖项**，其
 `parent` 都指向 default 里的条目；一旦 default 解析失败（读到半截/坏内容时 `parseMenuJsonc` 静默返回
 `[]`，而 FileView 是 `printErrors: false`），合并结果只剩这 10 个"孤儿"——根菜单 0 个子项，于是渲染成空
 卡片。要点：这是**一次性读取失败**，不是配置损坏；文件再变一次（watcher 触发重读）或重启壳层即可恢复。
@@ -1335,7 +1453,8 @@ A/B 实测：摘掉后 bar 只有逻辑 x 706..742（宽 36）这一块像素变
 **验证**：IPC `open` 后 OCR 到 `Rime` / `Show Emoji & Symbols` / `Show Input Source Name` /
 `Open Keyboard Settings…`；`omarchy-shell -q ronald.input-sources next` 在 `rime ⇄ keyboard-us` 间来回切
 （`fcitx5-remote -n` 核对）；壳层日志无 QML 报错。可用 IPC：`toggle` / `open` / `close` / `next` / `prev`。
-若要绑快捷键，`Mod+Space`（Omarchy 菜单）与 `Mod+Alt+Space`（Apps 菜单）已占用（§5.3），需另挑。
+若要绑快捷键，`Mod+Space`（Omarchy 菜单）与 `Mod+D`（Apps 菜单）已占用（§5.3；`Mod+Alt+Space` 那个重复键
+2026-09-19 已释放，见 §8 第 24 条），需另挑。
 fcitx5 自身由 `/etc/xdg/autostart/org.fcitx.Fcitx5.desktop` 在登录时拉起（非 systemd 用户单元）。
 
 ### 8.18 锁屏"不能锁"：PAM 门禁（手工部署漏了安装器步骤）（2026-09-19）
@@ -1399,6 +1518,71 @@ pkexec ~/.local/share/omarchy/bin/omarchy-apply-lock     # 或 sudo omarchy-appl
 
 ---
 
+### 8.19 全桌面字号 / DPI 一致性：一切向 bar 的 Display 面板看齐（2026-09-20）
+
+需求（原话「所有 APP DPI 和 Text size 都向 bar 上的 monitor 看齐」）：bar 右侧 `omarchy.monitor`
+面板（Display：BRIGHTNESS / **TEXT SIZE 12px** / SCALE 2x）是字号与缩放的**唯一基准**，所有应用层对齐它。
+用户确认了方向：**多数 app 比 bar 偏大**。
+
+**根因**：官方 `omarchy-display-text-size` 只驱动三处（shell `[font] base-size`、GTK
+`text-scaling-factor`、终端 `font-size`），**不管** GTK 的 `font-name` 点数、Qt、fcitx5、GTK2、XSETTINGS。
+于是同屏两套量纲：bar 12px vs GTK 应用的 `SF Pro 12` = **16px**（Pango 按 96dpi 折算，12pt=16px）。
+
+**改动全表**（每份配置都有 `.bak-20260920-consistency` 副本；dconf 原值 dump 在
+`~/.config/gsettings-interface.backup-20260920.ini`）：
+
+| 层 | 之前 | 之后 |
+|---|---|---|
+| shell / bar（基准）| `base-size = 12` | 12px（不动）|
+| GTK `font-name`（dconf）| `SF Pro 11`（与 settings.ini 的 12 分叉 → 双源不一致）| `SF Pro 9` |
+| GTK `settings.ini` ×2 | `SF Pro 12` | `SF Pro 9` |
+| GTK2 `.gtkrc-2.0` | `Adwaita Sans 11` + `BreezeX-…-24` | `SF Pro 9` + `Bibata-Modern-Amber 30` |
+| Qt（qt6ct）| `Noto Sans CJK SC,12` / `monospace,12` | `SF Pro,9` / `SFMono Nerd Font,9` |
+| fcitx5（classicui）| `SF Pro Text 10` / `… 12` | 候选 / 菜单 / 托盘全 `9` |
+| XSETTINGS | `~/.xsettingsd` 写死 `Xft/DPI 192`，与 xrdb 的 96 互相打脸 | 合并进 `~/.config/xsettingsd/xsettingsd.conf`（96 + `Gtk/FontName` + Bibata 光标），删掉 `~/.xsettingsd` |
+| fontconfig | 没有 `monospace` 别名 → `fc-match monospace` = Noto Sans Mono | 别名 → `SFMono Nerd Font` / `Noto Sans Mono CJK SC` |
+| 微信 wrapper | `QT_SCALE_FACTOR=1.25`（scale 2 下等效 0.625）| 删掉，跟随全局 scale 2 |
+
+XWayland 那层**只做减法**：`Xft.dpi` 保持 96（= scale 2 下的逻辑 dpi），不引入 xsettingsd 连动。
+（`xsettingsd` 服务在 Wayland 会话里本来也没连上 X root：`xprop -root _XSETTINGS_SETTINGS` 为空。）
+
+**统一入口**：`~/bin/omarchy-display-text-size` 垫片。bar 的 Display 面板滑块是
+`Process { command: ["omarchy-display-text-size", px] }`（`shell/plugins/panels/monitor/Panel.qml:336`，走 PATH），
+而会话 PATH 第一项就是 `~/bin` → 垫片先接管，写完全部层再 `exec` 官方脚本。
+垫片在 `~/bin`，官方包升级不覆盖。**局限**：CLI 路径 `omarchy display text size` 走
+`$OMARCHY_PATH/bin` 的绝对路径、绕过垫片，仍只动官方那三处。
+
+**关键坑（实测踩到，第一版垫片就栽在这）**：官方 `factor = round(f*px/12)/f` 里的 `f` 是它
+**从 dconf 读到的** `font-name` 的 pt。所以这一层必须**固定钉在基准 9pt**，缩放全部交给 factor。
+若把 `font-name` 写成"目标 pt"，`f`（进而量化基准）会跟着漂：滑块拖到 14px 时 GTK 应用会渲染成
+`round(11*14/12) = 13pt = 17px`，档位越高越离谱。正确分工：
+
+- **吃 factor 的层（恒 9pt）**：dconf `font-name`/`monospace-font-name`、`gtk-3.0/4.0 settings.ini`、
+  XSETTINGS `Gtk/FontName`
+- **没有 factor 机制的层（写目标 pt = `round(0.75*px)`）**：Qt、fcitx5、GTK2（`~/.gtkrc-2.0`）、终端（官方脚本）
+
+逐档实测（`12/14/16/20/9/12` 往返）：GTK 侧恒 `SF Pro 9`，Qt/fcitx5 随 px 走 `9/11/12/15/7/9`，
+终端 pt 与 shell `base-size` 同步；回到 12 时 `factor` 回到 1.0、终端回 9pt。
+
+**调用留痕**：垫片把每次调用的时间、argv、算出的 pt 追加到
+`$XDG_RUNTIME_DIR/omarchy-display-text-size-shim.log`。怀疑"拖了没反应"时先看它：
+**有记录** = 面板确实调到了垫片、问题在下游；**没记录** = "滑块 → Process" 那一跳没走通
+（面板的 keycatcher/`onReleased`、或 Process 的 PATH 解析）。
+
+**验证**：`~/bin/omarchy-display-text-size` 逐档往返（`12/14/16/20/9/12`）—— shell `base-size` 与终端 pt 同步、
+Qt/fcitx5 走目标 pt、GTK 侧恒 9pt 由 factor 承接；回 12 时 factor 1.0 / 终端 9pt。
+链路侧另有两处硬证据：① 用 bar 进程自己的 PATH 解析裸命令
+（`env -i PATH="$(tr '\0' '\n' < /proc/<qs-pid>/environ | sed -n 's/^PATH=//p')" sh -c 'command -v omarchy-display-text-size'`）
+→ 命中 `~/bin` 那份；② `fc-match monospace` = SFMono Nerd Font、`xrdb -query` = 96。
+GTK/Qt 应用**重启后才生效**（截图核对：Nautilus 与 bar 文字同档）。
+**未做**：真实鼠标拖动/面板键盘导航的端到端复现——`wtype` 在这套 niri 上送不进面板
+（发键后 shim 日志为空），面板的 IPC 又只暴露 brightness/state/open/close/toggle，所以"滑块 → Process"
+那一跳只能靠上面的日志留痕在真人拖动时核对。
+
+**回退**：恢复各 `.bak-20260920-consistency` + `dconf load /org/gnome/desktop/interface/ < ~/.config/gsettings-interface.backup-20260920.ini` + 删 `~/bin/omarchy-display-text-size`。
+
+---
+
 ## 9. 验证清单
 
 - [x] `niri validate` 通过。
@@ -1426,6 +1610,7 @@ pkexec ~/.local/share/omarchy/bin/omarchy-apply-lock     # 或 sudo omarchy-appl
   - 锁屏 `split-lock`：现在是单账户（只解当前会话）。要支持"切到别的账户"，除了头像选择器，还得把会话交回 greetd —— 锁的 PAM 服务 `/etc/pam.d/omarchy-lock-password` 只认当前登录用户，跨账户必然要重走一次登录会话。
   - 两处共用一个头像组件；配色/壁纸跟着选中账户走的那套逻辑（greeter 已实现）复用。
 - [ ] 真实跑一次 `omarchy update`，确认上游变更时覆盖层自动重放或明确报冲突。**2026-09-19 部分验证**：手动走了等价的 `git merge --ff-only` 路径（§8.13，上游只改到我们 patch 内文件的"其他区域"），重放幂等成立；官方脚本本身仍没跑过（它要 sudo + snapper 快照 + 包升级）。
+- [x] **全桌面字号 / DPI 一致性（2026-09-20）**：`~/bin/omarchy-display-text-size` 垫片逐档往返 `12/14/16/20/9/12` 实测 —— shell `base-size` 与终端 pt 同步、Qt/fcitx5 走目标 pt、GTK 侧恒 9pt 由 `text-scaling-factor` 承接（14px 档第一版曾把 GTK 算成 17px，已修）。bar 进程 PATH 解析裸命令命中 `~/bin` 垫片；`fc-match monospace` = SFMono Nerd Font、`xrdb -query` = 96。XWayland 只剩 xrdb 96 一处 DPI 来源（见 §8.19）。真人拖动待用户核对 shim 日志。
 - [x] **logout/reboot/shutdown** 统一标准化：`~/bin/omarchy-niri-system` 单一入口（logout→niri quit、reboot/shutdown→logind D-Bus `Manager.Reboot/PowerOff`；`loginctl` 无该 verb 是本 bug，已改；`pkcheck` 免密 exit 0 验证）。
 - [x] **电源 profile**：`~/bin/omarchy-powerprofiles-list` 返回 3 个 profile、active 标记正确；set 经 TLP D-Bus 生效（异步应用，恢复为 power-saver）。
 - [x] **Ghostty 磨砂模糊**：`window-rules.kdl` 给 `com.mitchellh.ghostty` 加 `background-effect {xray true; blur true}` + `draw-border-with-background false`；ghostty `background-opacity = 0.85`、`background-blur-radius = 0`；焦点环穿透"诡异"问题已解（§5.8）。
@@ -1433,6 +1618,9 @@ pkexec ~/.local/share/omarchy/bin/omarchy-apply-lock     # 或 sudo omarchy-appl
 - [ ] 运行实测：注销、关机、重启（会结束会话/重启，交给用户）。
 - [x] **overview 背景统一**：`shell/plugins/blurwallpaper/`，图层**常驻映射**、由 niri 只在 overview 内合成（见 §3.1、§6、§8.16）。
 - [x] **菜单 override label+icon 修复（2026-08-27）**：`extensions/omarchy-menu.jsonc` 的 3 个 setup 项补全 label+icon，合并后显示 "Monitors"/"Keybindings"/"Input" 且图标正常（不再显示 raw id `setup.monitors` 之类）；根因是 `normalizeItem` 的 `label: value.label || id` 把 action-only override 的 label 退化成 id 并覆盖默认项。
+- [x] **screensaver 禁用 + 屏蔽（2026-09-20，用户要求）**：官方 flag `~/.local/state/omarchy/toggles/screensaver-off`（`omarchy-launch-screensaver` 实测 exit 1、无窗口）+ 用户 override 6 条 `when:"false"` 盖住仅有的 `force` 入口；`idle.screensaver`（150s）超时值**未动**。同时修掉该文件 5 处超长 `\u` 转义（§8 第 23 条）。
+- [x] **按键去重 + 应用启动键（2026-09-19/20）**：`niri validate` 通过、生效行无重复键；`Mod+Return` / `Mod+Y` / `Ctrl+Shift+Esc`（终端类）、`Mod+E`（nautilus）、`Mod+Z`（浏览器）实测均开出窗口；过程中顶出并修掉垫片 v1.0 的 `setsid` 坑（§8 第 22、24 条）。
+- [ ] **等你肉眼确认**：开一次菜单看 System 里 Screensaver 是否已消失（`when:"false"` 的效果只能看渲染；文件本身已按 `stripJsonc` + `JSON.parse` 校验通过）。
 - [x] **视觉磨砂（frosted Quickshell）**：`Menu.qml` + `KeyboardPanel.qml` 挂 `BackgroundEffect.blurRegion`（只磨砂卡片，不全屏）；`effects.kdl` 给 `omarchy-keyboard-panel` 设 `xray false`（实时窗口毛玻璃）；`[popups]` alpha 0.8→0.65。面板开/关屏幕底部清晰度 on/off≈0.995 → 无全屏霜化。
 - [x] **浮栏磨砂（2026-09-19）**：`Bar.qml` 保住 `[bar] background-alpha`（不再强制 alpha=1）+ 挂**圆角** `blurRegion`，`effects.kdl` 给 `^omarchy-bar$` 设 `xray false`；实测栏内 `(25,17,20)→(97,95,109)`、四角像素与不磨砂时逐像素相同（无亮晕）、blur 开/关平均差 3.68 且连拍可复现（见 §8.8/§8.11）。
 - [x] **媒体键 OSD（2026-08-25）**：`XF86Audio*`/`XF86MicMute`→`omarchy-audio-output-volume`/`omarchy-audio-input-mute`、`XF86MonBrightness*`→`omarchy-brightness-display`，均带 `hotkey-overlay-title`；`omarchy-osd` 已在 niri 渲染确认。
@@ -1461,6 +1649,9 @@ pkexec ~/.local/share/omarchy/bin/omarchy-apply-lock     # 或 sudo omarchy-appl
   组默认源被 keyboard 条目钉死 → 用 `ShareInputState=All` 解决"新输入框变英文"；自带 `omarchy.keyboard-layout`
   （时钟右边的 `EN`）同日从 `layout.center` 摘掉，A/B 只差逻辑 x 706..742 那一块（见 §8.17）；徽章本地映射
   rime → `拼`（`badgeOverrides`，补丁 `plugin-patches/ronald.input-sources.patch`）。
+- [x] **桌面双击选择器弹窗速度（2026-09-20）**：切片 `Image` 改异步解码后，壁纸选择器首帧 550ms → 250ms，
+  且不再卡住 bar（原先是同线程同步解码 33 张缩略图）；主题选择器 ~250ms 已在下限；`niri.patch` 18 文件 /
+  34 hunk、`--reverse --check` 通过、`omarchy-niri-repatch` 幂等（见 §8 第 25 条）。
 
 ---
 
@@ -1566,7 +1757,7 @@ sudo pacman -Rns dms-shell dms-shell-niri dankcalendar-bin
 |---|---|---|
 | `~/.local/share/omarchy` | 520M | **必须整搬**（含 `.git`）。重装 + 重放补丁还要手工复现那 238 条删除，`install.sh` 不管这个 |
 | `~/.config/omarchy` | 40M | `shell.json` 布局、`shell.toml` 活旋钮、`extensions/omarchy-menu.jsonc`、`plugins/*`、`themes/*`、`hooks/post-update.d/10-niri-repatch`、`niri-port/` 覆盖层与 `plugin-patches/` |
-| `~/.local/state/omarchy` | 7.2M | **`migrations/` 里那 121 个标记**：缺了 `omarchy update` 会重放全部迁移（含危险项） |
+| `~/.local/state/omarchy` | 7.2M | **`migrations/` 里那 121 个标记**：缺了 `omarchy update` 会重放全部迁移（含危险项）；另有 `toggles/`（功能开关，如 `screensaver-off`，§8 第 23 条） |
 | `~/.config/niri` | 80K | 移植的模块化配置（基座另按 11.6 处理） |
 | `~/bin` | — | 垫片与包装脚本（仓库 `port-bin/` 是同一批；`__pycache__/*.pyc` 是缓存，删掉即可） |
 | `~/.config/systemd/user/materal-recolor.{path,service}` | 8K | 主题取色监听（§8.10）；用 `%h` 是便携的，但 `default.target.wants/` 里的绝对软链要重新 `enable` 生成 |
@@ -1596,8 +1787,8 @@ tar -C "$HOME" -xzf /var/tmp/yvonne-to-main.tar.gz --strip-components=1
 
 ```bash
 git -C ~/.local/share/omarchy status --short | grep -c '^ D'   # 238
-git -C ~/.local/share/omarchy status --short | grep -c '^ M'   # 17
-grep -c '^@@' ~/.config/omarchy/niri-port/niri.patch           # 32（17 文件）
+git -C ~/.local/share/omarchy status --short | grep -c '^ M'   # 18
+grep -c '^@@' ~/.config/omarchy/niri-port/niri.patch           # 34（18 文件）
 ls ~/.local/state/omarchy/migrations | wc -l                   # 121
 systemctl --user daemon-reload && systemctl --user enable --now materal-recolor.path
 ```
@@ -1819,9 +2010,11 @@ greetd 重拉 greeter 时，新实例的脸扫**命中**了 → greetd 立刻又
 卸 DMS 时记得 §11.5 那条：先 `sudo pacman -D --asexplicit quickshell`，否则 `-Rns` 会连 quickshell 一起删掉（登录界面就没了）。
 
 **2. 必须带走的东西**（不只是点文件）
-- `~/bin/` 里自写的：`hyprctl`（niri 的 shim，**必需**；`.bak-*` 可丢）、`materal-update`、`omarchy-niri-apply-theme`、
+- `~/bin/` 里自写的：`hyprctl`（niri 的 shim，**必需**；`.bak-*` 可丢）、`uwsm-app`（**必需**，§8 第 22 条）、
+  `materal-update`、`omarchy-niri-apply-theme`、
   `omarchy-niri-repatch`、`omarchy-niri-system`、`omarchy-powerprofiles-{list,set}`、`vantage`（分辨率 TUI，若在别处也一并带）。
-- `~/.config/omarchy/`：`themes/`（含 tonal-spot 等自定义）、`plugins/`、`shell.json`、hooks。
+- `~/.config/omarchy/`：`themes/`（含 tonal-spot 等自定义）、`plugins/`、`shell.json`、
+  `extensions/omarchy-menu.jsonc`（用户级菜单 override，含 screensaver 屏蔽与 icon 转义修复）、hooks。
 - `~/.config/systemd/user/materal-recolor.{path,service}` → 搬完 `systemctl --user daemon-reload && systemctl --user enable --now materal-recolor.path`。
 - `~/.local/share/omarchy`（shell 本体 + bin + 主题，git 检出，带 `.git` 一起）。
 - 壁纸库 `/data/Pictures/Wallpapers`（所有主题都软链到这里，**路径大小写敏感**）。
@@ -1926,7 +2119,7 @@ Omarchy 的锁层从 `hyprctl -j monitors` 读两个字段，shim 之前都在�
 
 真锁 → 真 PAM 密码 → 解锁，4 秒。随后 `io.github.sirjul1337.lock-explorer` **已移除**（先 `tar czf /var/tmp/lock-explorer-backup-20260919.tar.gz` 留底；设计代码与署名在本仓库 `split-lock/` + `THIRD-PARTY.md`，原插件随时可 `omarchy plugin add` 装回）。现在系统中唯一的锁提供者是 `yvonne.split-lock`。
 
-**遗留（未动用户配置）**：`binds.kdl:21` 仍是 niri 默认的 `Super+Alt+L { spawn "swaylock"; }`，而 swaylock **根本没装** —— 那个键是死的。想用的话改成 `spawn-sh "omarchy-system-lock"`，或直接删掉这行。
+**遗留（2026-09-19 已解决）**：`binds.kdl:21` 那行 niri 默认的 `Super+Alt+L { spawn "swaylock"; }`（swaylock **根本没装**，键是死的）已随按键去重**注释移除**；锁屏现在只有一条路：`Mod+L` → `omarchy-system-lock`（§8 第 24 条）。
 
 ### §11.21 打包决策：只给 `split-greeter` 做 PKGBUILD，且等迁移之后（2026-09-19）
 
@@ -2009,4 +2202,26 @@ Omarchy 的锁层从 `hyprctl -j monitors` 读两个字段，shim 之前都在�
 **验证**：`split-lock/tests/state.sh` 15/15；`split-greeter/tests/smoke.sh` 34 项全过（不被打扰连跑两次稳定），再用 `GREETER=/etc/greetd/split-greeter ./tests/smoke.sh` 对**装好的那份**跑过两轮（换行后、内边距后各一轮）同样全过；锁的两张截图（换行后两行、最右 x=2390）与 greeter 截图（两行、最右 x=2420，均 < 面板内右边界 2448）目视 + 像素量测确认；内边距前后对比截图 `/var/tmp/lock-inset.png`（文字段 1974..2119 → 1896..2041，右侧图标段不变）；greeter 右上原 chip 位置整片平坦（mean 87 / stddev 1）。`vendor.py` 的 designs 补丁**可复现性复测**：拿 `/tmp/le/...` 的原始第三方文件只跑 designs 补丁 → `Split.qml`/`DesignBase.qml`/`PasswordField.qml`/`Avatar.qml` 与仓库**逐字节一致**，且二次运行幂等。
 
 **待用户亲自确认**：锁屏真按一次回车（§11.20 的规矩，不主动锁他的屏）、greeter 上点一次头像（点击无法注入：本机没有 ydotool/dotool，wtype 只会打字）。
+
+### §11.25 tty1 登录被**永久**锁死：greetd 只有一格 `configuring`（2026-09-20，真机定位并修复）
+
+**现象**：用户在 tty1 输完密码「黑一下又回来」。greeter 自己的日志（`/var/lib/greeter/greeter.log`，`niri.kdl` 把壳的 stdout 重定向到那儿）末尾是 `event auth_fail error a session is already being configured`，而且**之后每一次**尝试都是这一句；同一时刻 `pgrep -af 'greetd --session-worker'` 里躺着一个从 15:21 起就再没退过的 `--session-worker 12`。
+
+**根因（读源码定的，不是猜）**：greetd 0.10.3 的 `context.rs` 里 `ContextInner` 只有 `current` / `scheduled` / **`configuring`** 三格，而 `configuring` 是**整个守护进程唯一一格**、不按连接也不按用户区分（`create_session()` 进门就是 `if inner.configuring.is_some() { return Err("a session is already being configured") }`，所以后面那段"换掉旧会话再 cancel"的分支**永远走不到**）。能清掉它的只有三条路：`cancel_session`、`start_session`、greetd 重启。**命门在 `server.rs` 的客户端循环**：读到 EOF 就 `return Ok(())` —— 直接返回，**不 cancel**（只有 `client_handler` 返回 `Err` 才会走到 `client_ctx.cancel()`）。于是"开了会话却没走完就断线"= **永久占格**，其后每次 `create_session` 全被拒。
+
+本机怎么踩上的：15:21:11 那次日志里，第一次 `create_session` 后 howdy 报 `Face detection timeout reached`、PAM 接着给 `Password:` 提示，**紧接着又冒出一次 `starting a passwordless (face) attempt`**（第二次 `create_session`，空框回车 = 再要一次人脸）→ 撞格 → 其后**连正确的密码也进不去**。注意 `Greetd.qml` 里 `restartHelper()` 的注释假设（"杀掉 helper → 连接断 → greetd 自己会取消"）**同样是错的**：断线不等于 cancel，那条路一样会留下占格。
+
+**修复（两层，都不需要常驻进程）**：
+1. `bridge/greetd-bridge.py`：`create_session` 之前先发一个 `cancel_session`（`clear_pending()`）。`Context::cancel()` 在"没有会话在配置"时也回 `Success`，作用域只可能是半途会话，永远碰不到正在跑的 greeter 或已登录会话 —— 幂等且便宜，等于每次尝试都先清场。
+2. `Greetd.qml::begin()`：`busy || faceAttempt || awaitingSecret` 时直接忽略回车（会话未完成时不许再开一个，顺带省掉一次无意义扫脸）。
+
+**没加守护进程**（用户提议后一起定的）：根因是"状态机格子没人 clean"，已在协议层堵死；再挂一个周期性"检测到 wedge 就清场"的 systemd timer 只是给已修的 bug 上保险，多一个常驻面 = 多一处会坏的地方。真要兜底，测试比 daemon 值（见下）。
+
+**踩到的两个环境坑**：① `/run/greetd-<pid>.sock` 是 `0755 greeter:greeter`，但 unix socket 的 `connect()` 要的是**写**权限 → **非 root 连不上**（本大小姐在 `greeter` 组里也照样 `PermissionError`），所以"顺手发个 cancel"这件事必须走 pkexec。② `/tmp/greeter-install.log` 这种**别人的**文件，root 用 `>` 重定向也会 `Permission denied`（`fs.protected_regular` + sticky 位），pkexec 里别往 `/tmp` 的既有文件写日志。
+
+**改动落点**：`split-greeter/bridge/greetd-bridge.py`（`clear_pending()` + `auth` 分支）、`split-greeter/Greetd.qml`（`begin()` 守卫）、`split-greeter/bridge/mock-greetd.py`（**mock 必须忠实**：新增 `Configuring` 单格——撞格回同一句错、EOF **不**清理、只有 `cancel_session`/`start_session` 放格；mock 不忠实就复现不出这个 wedge，这也是它以前一直绿着的原因）、`split-greeter/bridge/test-bridge.py`、`split-greeter/tests/smoke.sh`。已 `pkexec ./install.sh` 部署到 `/etc/greetd/split-greeter`（不碰 `config.toml`），装后 `md5sum` 与仓库**逐字节一致**。
+
+**验证**：`bridge/test-bridge.py` 12 用例全过；**改前**有 3 条断言专抓此 wedge 而红（`retry after a failure`、`fresh helper after an abandoned face`、`cancels the stale conversation first`）；`tests/smoke.sh` **34 → 39 项全过**，新增 `enter-twice-while-scanning`（扫脸中再按回车：第二次不许开新会话、不许出现 wedge 文案、最后仍要在那条已开的会话上登成功）。另外 15:30:57 那次 `systemctl restart greetd` 现场验证了恢复路径：`terminate()` 会把 `configuring` 一并 cancel，用户随后在 tty1 **一次就登进去了**（卡死期间同样的操作只会拿到 `already being configured`）。
+
+**注意**：重启 greetd 只带走它自己的子进程（greeter + 半途会话）。本机用户会话挂在 `login`/systemd 下（`login -- jianlongliu` → `niri --session`），因此安全；但若哪天用户会话是 greetd 起的，`systemctl restart greetd` 会把它一起带走。
 
