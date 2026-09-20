@@ -1,11 +1,11 @@
 # 功能调整 — Omarchy on niri 卷（behavior）
 
-> 正本：`~/Documents/omarchy-niri-behavior.md`（与仓库 `docs/behavior.md` 逐字节一致）。
-> 本卷 2026-09-20 从 `omarchy-on-niri.md` 抽出（模块化拆分），**编号一律沿用正本** ——
-> `§4`、`§8 第 N 条`、`§8.x`、`§11.x` 都是原号，正本对应位置留同名指针，所以仓库里既有的
+> 文档只有一份：本文件（`docs/behavior.md`）。`~/Documents/omarchy-niri-behavior.md` 是指向它的软链。
+> 本卷 2026-09-20 从 `docs/omarchy-on-niri-port.md` 抽出（模块化拆分），**编号一律沿用原号** ——
+> `§4`、`§8 第 N 条`、`§8.x`、`§11.x` 都是原号，原处留同名指针，所以仓库里既有的
 > "§8 第 22 条"、"§11.13" 之类引用继续解析得到。
-> 主文档（当前事实：约束 / 架构 / 文件清单 / niri 配置 / 部署 / 验证 / 环境）见 `omarchy-on-niri.md`。
-> 跨卷引用：看到 `§8.x` / `§8 第 N 条` / `§11.x` 不知在哪一卷时，查主文档 `omarchy-on-niri.md`
+> 主文档（当前事实：约束 / 架构 / 文件清单 / niri 配置 / 部署 / 验证 / 环境）见 `docs/omarchy-on-niri-port.md`。
+> 跨卷引用：看到 `§8.x` / `§8 第 N 条` / `§11.x` 不知在哪一卷时，查主文档 `docs/omarchy-on-niri-port.md`
 > 的 §0 文档地图与 §8 映射表（**编号全局唯一、永不改号**）。
 
 ## 本卷目录

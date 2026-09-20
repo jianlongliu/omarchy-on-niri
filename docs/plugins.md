@@ -1,9 +1,9 @@
 # Omarchy 插件层：现状与运维（主账户）
 
-> 核于 2026-09-20。姊妹卷：主文档 `omarchy-on-niri.md`（当前事实：约束/架构/文件清单/部署/验证）、
-> `omarchy-niri-shims.md`（垫片）、`omarchy-niri-visual.md`（磨砂全栈等视觉调整）、
-> `omarchy-niri-behavior.md`（`§8.17` 输入源徽章、菜单与按键行为）。
-> 本卷末尾附有原正本 `§8.11`（bar 插件层总览）。
+> 核于 2026-09-20。姊妹卷：主文档 `docs/omarchy-on-niri-port.md`（当前事实：约束/架构/文件清单/部署/验证）、
+> `docs/shims.md`（垫片）、`docs/visual.md`（磨砂全栈等视觉调整）、
+> `docs/behavior.md`（`§8.17` 输入源徽章、菜单与按键行为）。
+> 本卷末尾附有原文 `§8.11`（bar 插件层总览）。
 >
 > **分工**：
 > - **本文**：第三方 / 自研插件的**现状与日常运维** —— 装了哪些、怎么配、怎么验、怎么更新、踩过什么坑；
@@ -199,7 +199,7 @@ journalctl -t omarchy-shell --since "-10min" | tail -50
 - **本地魔改**：`Model.js` 的 `badgeOverrides`（rime 显示「拼」而不是 fcitx 的「ㄓ」）+
   `Panel.qml` 的 `startupSource`（默认 `"rime"`，开机/起壳层后把源回到 rime，防 fcitx5 重启后掉回
   `keyboard-us`）。patch：`plugin-patches/ronald.input-sources.patch`；
-  细节与两条走不通的路见功能调整卷 `omarchy-niri-behavior.md` §8.17。
+  细节与两条走不通的路见功能调整卷 `docs/behavior.md` §8.17。
 - **本机 shell.json 条目**：`{ "id": "ronald.input-sources", "showSourceName": false }`（只留徽章，不显示源名）。
 
 ### 5.3 `jrmmhm.pocket` —— bar 抽屉
@@ -218,7 +218,7 @@ journalctl -t omarchy-shell --since "-10min" | tail -50
   `centerAnchor: omarchy.clock`、`layout`（§1 那张布局表）。
   `position` / `transparent` 等键没写，走插件默认（双击 bar 空白处会切换透明，那是运行时状态）。
 - **本地魔改**：圆角 + `blurRegion`（毛玻璃跟着圆角走），patch 存档
-  `plugin-patches/charlieras262.floating-bar.patch`；五处缺一不可的 blur 全栈见 `omarchy-on-niri.md`。
+  `plugin-patches/charlieras262.floating-bar.patch`；五处缺一不可的 blur 全栈见 `docs/omarchy-on-niri-port.md`。
 - 它对 `hyprctl -j getoption general:gaps_out` 有依赖（在 niri 上由 `~/bin/hyprctl` 垫片兜住），
   `floatGap` 显式写在 shell.json 里所以不靠它。
 
@@ -233,7 +233,7 @@ journalctl -t omarchy-shell --since "-10min" | tail -50
 三者都**没有 `.git`**，所以 `omarchy plugin update` 不会碰它们（更新只收有 `.git` 的目录）。
 ⚠ 后两个的源码改动要**同时**同步到 `~/.config/omarchy/plugins/` 那份才生效（install.sh 负责拷贝）。
 锁屏相关的两个结构性缺口（howdy 没进 `omarchy-lock-password`、`faceConfigured` 写死 false）见
-`omarchy-on-niri.md`。
+`docs/omarchy-on-niri-port.md`。
 
 **`jianlongliu.workspaces` 点数改动态（2026-09-20，用户要的「1+1 → 有 app 就三个」）**
 
@@ -300,21 +300,21 @@ omarchy-restart-shell                               # QML 不热更，必须重�
 | `~/.config/omarchy/shell.json` | 插件开关 + bar 布局 + 内联设置 |
 | `~/.config/omarchy/niri-port/plugin-patches/` | 第三方插件的本地魔改存档 |
 | `~/omarchy-on-niri/split-lock/` | `jianlongliu.split-lock` 源码正本 |
-| `~/omarchy-on-niri/docs/plugins.md` | 本文档的仓库镜像（与 `~/Documents/omarchy-niri-plugins.md` 逐字节一致） |
-| `~/Documents/omarchy-on-niri.md` | 主文档（当前事实 + 模块映射表）；本卷末附 §8.11，§8.17 在 `omarchy-niri-behavior.md`，blur 全栈在 `omarchy-niri-visual.md` |
+| `docs/plugins.md` | 本文档正本（`~/Documents/omarchy-niri-plugins.md` 是指向它的软链） |
+| `docs/omarchy-on-niri-port.md` | 主文档（当前事实 + 模块映射表）；本卷末附 §8.11，§8.17 在 `docs/behavior.md`，blur 全栈在 `docs/visual.md` |
 | `$OMARCHY_PATH/shell/services/PluginRegistry.qml` | 壳层实际执行的插件注册与启用规则 |
 | `$OMARCHY_PATH/bin/omarchy-plugin-*` | §3 那些 CLI 的实现 |
 ---
 
-## 附：bar 插件层（胶囊工作区 / Arch logo / 浮栏）—— 原正本 `§8.11`
+## 附：bar 插件层（胶囊工作区 / Arch logo / 浮栏）—— 原文 `§8.11`
 
-> 2026-09-20 从 `omarchy-on-niri.md` 抽入本卷：bar 侧的插件层总览（部件来源、浮栏、与 `omarchy update` 的关系）归插件卷。
+> 2026-09-20 从 `docs/omarchy-on-niri-port.md` 抽入本卷：bar 侧的插件层总览（部件来源、浮栏、与 `omarchy update` 的关系）归插件卷。
 
 ### 8.11 bar 插件层（胶囊工作区 / Arch logo / 浮栏）
 
-> **插件层总览另见 `docs/plugins.md`**（正本 `~/Documents/omarchy-niri-plugins.md`）：那份写**第三方 / 自研
+> **插件层总览见本卷前部**（`docs/plugins.md`）：那份写**第三方 / 自研
 > 插件的现状与运维** —— 装了哪些、密钥与设置、验证命令、更新与本地补丁重放、坑清单；
-> 本节与 `omarchy-niri-behavior.md` §8.17 只讲**随 niri 移植产生的魔改**（patch 存档 `~/.config/omarchy/niri-port/plugin-patches/`）。
+> 本节与 `docs/behavior.md` §8.17 只讲**随 niri 移植产生的魔改**（patch 存档 `~/.config/omarchy/niri-port/plugin-patches/`）。
 
 三件事都是**用户层插件**，放在 `~/.config/omarchy/plugins/`（仓库外 → `omarchy update` 碰不到，
 `niri.patch` 也不必为它们加 hunk）。bar 结构仍由 `~/.config/omarchy/shell.json` 决定。
@@ -340,7 +340,7 @@ omarchy-restart-shell                               # QML 不热更，必须重�
   所以 `omarchy plugin list` 里它永远不显示 enabled，别据此判断没生效。
 - niri 适配 **6 处**：4 处是 Hyprland 独占调用 → 垫片/niri 等价物；2 处是磨砂相关（`Bar.qml` 不再把
   `Color.bar.background` 的 alpha 强制成 1、给 bar 的 `PanelWindow` 挂圆角 `BackgroundEffect.blurRegion`，
-  见视觉调整卷 `omarchy-niri-visual.md` §8.8）。存档在 `~/.config/omarchy/niri-port/plugin-patches/charlieras262.floating-bar.patch`，
+  见视觉调整卷 `docs/visual.md` §8.8）。存档在 `~/.config/omarchy/niri-port/plugin-patches/charlieras262.floating-bar.patch`，
   补丁基线是上游 `Bar.qml` HEAD，已用 `patch -p1` 从上游重建并 `cmp` 验证与实机文件逐字节一致
   （旧版留 `.bak-20260919-preblur`）。`omarchy plugin update` 会用上游版本覆盖工作树，覆盖后要重打这个 patch。
   该补丁**只存在实机**（插件本体仍从上游安装），未随移植仓库分发。
@@ -351,8 +351,8 @@ omarchy-restart-shell                               # QML 不热更，必须重�
   （= 800 − 32 bar − 8 floatGap − 2×8 gaps）；**niri 在自己的独占区之外又加了一次 gaps，两者不打架**
   （像素核对过；改法见 §8 第 29 条）。
 - 配套改动：`~/.config/niri/effects.kdl` 给 `^omarchy-bar$` 配 `background-effect { xray false }`（浮栏磨砂，
-  2026-09-19；模糊区域形状由插件下发的圆角 `blurRegion` 决定，原因与实测见视觉调整卷 `omarchy-niri-visual.md` §8.8）。
-- 第三方部件：`ryuhzk.ime` **2026-09-19 被 `ronald.input-sources` 取代**（macOS 式输入源徽章，见 `omarchy-niri-behavior.md` §8.17）；
+  2026-09-19；模糊区域形状由插件下发的圆角 `blurRegion` 决定，原因与实测见视觉调整卷 `docs/visual.md` §8.8）。
+- 第三方部件：`ryuhzk.ime` **2026-09-19 被 `ronald.input-sources` 取代**（macOS 式输入源徽章，见 `docs/behavior.md` §8.17）；
   `charlieras262.omablur` **已于 2026-09-19 从 `shell.json` 的 right 数组摘掉**
   （插件文件仍留在 `~/.config/omarchy/plugins/`，想加回就把它填回 right 数组；备份
   `~/.config/omarchy/niri-port/backups/shell.json.bak-20260919-032126-pre-omablur`）。

@@ -1,11 +1,11 @@
 # 账户迁移 — Omarchy on niri 卷（migration）
 
-> 正本：`~/Documents/omarchy-niri-migration.md`（与仓库 `docs/migration.md` 逐字节一致）。
-> 本卷 2026-09-20 从 `omarchy-on-niri.md` 抽出（模块化拆分），**编号一律沿用正本** ——
-> `§4`、`§8 第 N 条`、`§8.x`、`§11.x` 都是原号，正本对应位置留同名指针，所以仓库里既有的
+> 文档只有一份：本文件（`docs/migration.md`）。`~/Documents/omarchy-niri-migration.md` 是指向它的软链。
+> 本卷 2026-09-20 从 `docs/omarchy-on-niri-port.md` 抽出（模块化拆分），**编号一律沿用原号** ——
+> `§4`、`§8 第 N 条`、`§8.x`、`§11.x` 都是原号，原处留同名指针，所以仓库里既有的
 > "§8 第 22 条"、"§11.13" 之类引用继续解析得到。
-> 主文档（当前事实：约束 / 架构 / 文件清单 / niri 配置 / 部署 / 验证 / 环境）见 `omarchy-on-niri.md`。
-> 跨卷引用：看到 `§8.x` / `§8 第 N 条` / `§11.x` 不知在哪一卷时，查主文档 `omarchy-on-niri.md`
+> 主文档（当前事实：约束 / 架构 / 文件清单 / niri 配置 / 部署 / 验证 / 环境）见 `docs/omarchy-on-niri-port.md`。
+> 跨卷引用：看到 `§8.x` / `§8 第 N 条` / `§11.x` 不知在哪一卷时，查主文档 `docs/omarchy-on-niri-port.md`
 > 的 §0 文档地图与 §8 映射表（**编号全局唯一、永不改号**）。
 
 ## 本卷目录
@@ -21,7 +21,7 @@
 ### 11.0 背景与目标
 
 - 两个账户同属一人：主账户（uid 1000）是**日用账户**，实验账户（uid 1001）是**专门给本移植做实验**的账户。本节是把移植整体搬进主账户的 runbook。
-- **新 session 从哪读**：文档正本随仓库走 —— `git clone https://github.com/jianlongliu/omarchy-on-niri`（公开仓，主账户无需凭据），正文在 `docs/omarchy-on-niri-port.md`，§11 就是本节。`/home/<dev-user>/Documents/omarchy-on-niri.md` 是 0600，**主账户读不到**（§11.2）；`/var/tmp` 里的摘录重启就没了，不要当唯一来源。
+- **新 session 从哪读**：文档正本随仓库走 —— `git clone https://github.com/jianlongliu/omarchy-on-niri`（公开仓，主账户无需凭据），正文在 `docs/omarchy-on-niri-port.md`，§11 就是本节。正本随仓库走，权限 0644、**两个账户都读得到**（2026-09-20 文档归一：`~/Documents/omarchy-niri-*.md` 现在只是软链，0600 那件旧事见 §11.2）；`/var/tmp` 里的摘录重启就没了，不要当唯一来源。
 - 主账户现状：**原生 DMS**（打包的 `dms-shell 1.6.2` + `dms-shell-niri 1.6.2` + `dankcalendar-bin` + `greetd-dms-greeter-bin`，登录界面是 dms-greeter）。
 - 目标形态：主账户跑本移植（Omarchy 壳层 + niri），**卸掉 DMS**，niri 配置以**原版默认**为基座（不是从 DMS 那套改）。
 
@@ -178,7 +178,7 @@ omarchy plugin list | grep lock     # 应只有 jianlongliu.split-lock enabled
 **这份文档在哪**（主账户怎么拿到）：公开仓库
 <https://github.com/jianlongliu/omarchy-on-niri/blob/quattro/docs/omarchy-on-niri-port.md>（`git clone` 或浏览器都行，主账户可读）；
 §11 的纯摘录在 `/var/tmp/omarchy-migrate-to-main-account.md`（重启会被清，别当唯一副本）。
-本机的 `~/Documents/omarchy-on-niri.md` 是 0600，**主账户读不到**，不要指望它。
+（2026-09-20 前）本机的 `~/Documents/omarchy-on-niri.md` 曾是 0600，主账户读不到 —— **现在不必了**：文档正本在仓库里，`~/Documents` 那九个名字都是软链。
 
 **0. 前置**
 - 全程要 root 或 `sudo`：`$DEV_HOME` 是 0600，主账户自己读不到源。

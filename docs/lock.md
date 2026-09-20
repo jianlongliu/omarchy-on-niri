@@ -1,8 +1,8 @@
 # 锁屏与登录 — Omarchy on niri 卷 II
 
-> 正本：`~/Documents/omarchy-niri-lock.md`（与仓库 `docs/lock.md` 逐字节一致）。
-> 本卷 2026-09-20 从 `omarchy-on-niri.md` 抽出：**章节编号沿用正本**（`§8.18`、`§11.10–§11.14`、`§11.16–§11.25`），
-> 正本对应位置留有同名指针，所以 `docs/INSTALL.md`、`split-greeter/README.md`、`split-lock/` 里既有的
+> 文档只有一份：本文件（`docs/lock.md`）。`~/Documents/omarchy-niri-lock.md` 是指向它的软链。
+> 本卷 2026-09-20 从 `docs/omarchy-on-niri-port.md` 抽出：**章节编号沿用原号**（`§8.18`、`§11.10–§11.14`、`§11.16–§11.25`），
+> 原处留有同名指针，所以 `docs/INSTALL.md`、`split-greeter/README.md`、`split-lock/` 里既有的
 > "§11.13"、"§8.18" 之类引用继续解析得到。
 > 覆盖范围：登录界面（Split Greeter）、锁屏（`split-lock`）、PAM 门禁、人脸（howdy）与头像、greetd 的
 > 单格 `configuring` 陷阱。
@@ -28,7 +28,7 @@
 
 ## 另见（锁屏相关的东西分住哪几处）
 
-- 本卷卷末「附：两条锁屏路线并存与收敛」＝原正本 `§8 第 6 条`（2026-09-20 已抽入本卷）
+- 本卷卷末「附：两条锁屏路线并存与收敛」＝原文 `§8 第 6 条`（2026-09-20 已抽入本卷）
 - `docs/behavior.md` `§8 第 23 条`：screensaver 关掉并屏蔽（`idle.screensaver` 与锁屏计时的抢跑关系）
 - `docs/behavior.md` `§8 第 24 条`：按键表去重，锁屏统一为 `Mod+L`
 - 主文档 `§9 验证清单`：锁屏/登录相关的验收步骤
@@ -488,9 +488,9 @@ Omarchy 的锁层从 `hyprctl -j monitors` 读两个字段，shim 之前都在�
 **注意**：重启 greetd 只带走它自己的子进程（greeter + 半途会话）。本机用户会话挂在 `login`/systemd 下（`login -- $USER` → `niri --session`），因此安全；但若哪天用户会话是 greetd 起的，`systemctl restart greetd` 会把它一起带走。
 ---
 
-## 附：两条锁屏路线并存与收敛（原正本 `§8 第 6 条`，2026-08-24 前后）
+## 附：两条锁屏路线并存与收敛（原文 `§8 第 6 条`，2026-08-24 前后）
 
-> 2026-09-20 从 `omarchy-on-niri.md` 抽入本卷：锁屏主题的内容归锁屏卷，别再回正本找。
+> 2026-09-20 从 `docs/omarchy-on-niri-port.md` 抽入本卷：锁屏主题的内容归锁屏卷，别再回主文档找。
 
 6. **锁屏**：niri 侧 `Super+Alt+L`（swaylock）与 Omarchy `Mod+Ctrl+L`（`omarchy-system-lock`
    → `omarchy-shell lock lock`）两条路线并存（**2026-09-19 已收敛为单键 `Mod+L`，swaylock 那条删了**，

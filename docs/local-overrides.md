@@ -1,6 +1,6 @@
 # 本机改动总账（Omarchy on niri）
 
-> 正本：`~/Documents/omarchy-niri-overrides.md`（与仓库 `docs/local-overrides.md` 逐字节一致）。
+> 文档只有一份：本文件（`docs/local-overrides.md`）。`~/Documents/omarchy-niri-overrides.md` 是指向它的软链。
 > 目的：一眼看出**这台机器上相对上游 omarchy 到底动了什么、落在哪一层、怎么回退**，以及
 > **哪些东西只在机器上、仓库里没有**（= 换机不可复现的缺口）。
 > 最后核对：2026-09-20 深夜（仓库 `quattro`，覆盖层 21 文件 / 38 hunk）。
@@ -28,12 +28,12 @@
 | `port-bin/*`（8 个） | `hyprctl`、`uwsm-app`、`materal-update`、`omarchy-niri-system`、`omarchy-niri-apply-theme`、`omarchy-niri-repatch`、`omarchy-powerprofiles-{list,set}` | `install.sh` 拷进 `~/bin`（PATH-first） |
 | `niri-port/niri.patch` + `Niri.qml` + `plugins/blurwallpaper` | 覆盖层，挺过 `omarchy update` | `~/bin/omarchy-niri-repatch`（幂等） |
 | `niri-port/plugin-patches/` | 4 个第三方插件的本地魔改补丁（+ README 说明怎么生成/怎么重放） | 手工 `git apply`（无自动重放器） |
-| `scripts/check-doc-mirrors.sh` | 校验正本 ↔ 镜像**九对** md5（提交文档前跑） | `./scripts/check-doc-mirrors.sh` |
+| `scripts/check-doc-links.sh` | 校验 `~/Documents` 那九个软链仍指向 `docs/`（提交文档前跑） | `./scripts/check-doc-links.sh` |
 | `niri-config/omarchy.kdl.template` + `shell.json` 示例 | niri 侧接线 | `install.sh` 会渲染成 `~/.config/niri/omarchy.kdl` 并拷 `shell.json`（**仅当不存在**）；**本机没走这条** —— 用的是模块化拆分，`config.kdl` 直接 include `{input,monitor,layout,window-rules,effects,binds}.kdl`，`omarchy.kdl` 不存在 |
 | `hooks/post-update.d/10-niri-repatch`、`hooks/theme-set.d/{10-niri-border,20-materal}` | 更新后重放覆盖层；换主题写边框渐变 | Omarchy 钩子机制自动调 |
 | `split-greeter/`、`split-lock/` | 自研登录器与锁屏，各带 `install.sh` + `tests/` | `sudo ./install.sh`（split-greeter 不碰 `config.toml`，最后一步手工） |
 | `default/omarchy/omarchy-menu.jsonc` | `install.package`/`install.aur`/`remove.package` 的 `xdg-terminal-exec` 回退 | 随仓库/覆盖层 |
-| `docs/` | `INSTALL{,.zh}.md` + **主文档 `omarchy-on-niri-port.md`（当前事实 + 映射表）** + 模块卷 `visual/behavior/plugins/shims/upstream/migration/lock/local-overrides`（编号沿用原正本），正本都在 `~/Documents/omarchy-niri-*.md` | 双写：`cp -p` 正本 → 仓库，再跑 `scripts/check-doc-mirrors.sh` |
+| `docs/` | `INSTALL{,.zh}.md` + **主文档 `omarchy-on-niri-port.md`（当前事实 + 映射表）** + 模块卷 `visual/behavior/plugins/shims/upstream/migration/lock/local-overrides`（编号沿用原号），**正本就在 `docs/`**，`~/Documents/omarchy-niri-*.md` 是软链 | 改哪边都一样；跑 `scripts/check-doc-links.sh` 确认软链没被换成真副本 |
 
 - 覆盖层实际内容：**21 文件 / 38 hunk**（`--reverse --check` 通过、repatch 幂等）；
   **md5 `047e5866a03228e30ae6069e9b2b9dd9`**，与 `~/.config/omarchy/niri-port/niri.patch` 一致（2026-09-20 核）。
@@ -129,6 +129,9 @@ git apply --reverse --check niri.patch   # 必须通过
 ~/bin/omarchy-niri-repatch               # 应回 "already applied"
 ```
 
+- `~/Documents/omarchy-niri-*.md`（九个）= **指向仓库 `docs/` 的软链**（2026-09-20 文档归一，取消"母本 + 镜像"双写）。
+  改哪边都一样；被人换成真副本、或指错地方，`./scripts/check-doc-links.sh` 会报红。归一前的真副本备份在
+  `~/Documents/archive/doc-backups/pre-merge-20260920-232818/`（九个文件，逐字节等于当时的仓库版）。
 - 第三方插件的本地魔改：`cd ~/.config/omarchy/plugins/<id> && git diff > ~/.config/omarchy/niri-port/plugin-patches/<id>.patch`，
   改完核对 `git apply --reverse --check` 通过。
 - `plugin-patches/*.patch` **没有自动重放器**：`omarchy-niri-repatch` 只管 `$OVL/niri.patch` + `Niri.qml` + `$OVL/plugins/*`；

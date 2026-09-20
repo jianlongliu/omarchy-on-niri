@@ -35,7 +35,8 @@ Arch + niri 登录会话、并且**已经装好 Omarchy**（或者你会先装 O
   以及 greetd 只有一格 `configuring` 的陷阱。
 
 各卷**沿用原章节编号**（`§8 第 N 条`、`§8.x`、`§11.x`），主文档里有「原编号 → 卷」的映射表；
-`scripts/check-doc-mirrors.sh` 保证本机正本与仓库镜像逐字节一致。
+文档只有一份正本，就在 `docs/` 里；`~/Documents/omarchy-niri-*.md` 是指向它的软链，
+`scripts/check-doc-links.sh` 守这一点。
 
 ## 仓库结构
 
@@ -55,7 +56,7 @@ omarchy-on-niri/
 ├── docs/INSTALL.zh.md   <- 手动执行安装流程
 ├── docs/omarchy-on-niri-port.md <- 主文档（当前事实 + 模块映射表，中文）
 ├── docs/{visual,behavior,plugins,shims,upstream,migration,lock,local-overrides}.md <- 各模块卷（中文）
-├── scripts/             <- check-doc-mirrors.sh（九份正本与仓库镜像必须逐字节一致）
+├── scripts/             <- check-doc-links.sh（`~/Documents` 那九个软链必须仍指向 `docs/`）
 └── README.md / README.zh.md
 ```
 

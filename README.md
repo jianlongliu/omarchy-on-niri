@@ -42,8 +42,9 @@ standalone installer** — it assumes a working Arch + niri login session and an
   howdy and avatars, and greetd's single `configuring` slot.
 
 The volumes keep the original section numbering (`§8 第 N 条`, `§8.x`, `§11.x`); the main volume
-holds a map from every moved section to its volume, and `scripts/check-doc-mirrors.sh` keeps the
-machine-local originals and the repo mirrors byte-identical.
+holds a map from every moved section to its volume. The volumes have exactly one home — `docs/`
+itself; the `~/Documents/omarchy-niri-*.md` names are symlinks into it, and `scripts/check-doc-links.sh`
+makes sure nobody turns one back into a drifting copy.
 
 ## Repository layout
 
@@ -61,7 +62,7 @@ omarchy-on-niri/
 ├── docs/INSTALL.md  <- hand-run install procedure
 ├── docs/omarchy-on-niri-port.md <- main volume: current facts + module map
 ├── docs/{visual,behavior,plugins,shims,upstream,migration,lock,local-overrides}.md <- module volumes
-├── scripts/     <- check-doc-mirrors.sh (the nine originals and their repo mirrors stay byte-identical)
+├── scripts/     <- check-doc-links.sh (the nine ~/Documents convenience names still point into docs/)
 └── README.md
 ```
 

@@ -12,7 +12,9 @@
 > 另新增 `docs/local-overrides.md` 记本机全部改动落点与回退方式。
 > 2026-09-20 深夜**模块化拆分（第二刀）**：原 §8「已知缺口、待办与专题记录」是 1232 行的编号流水账
 > （32 条编号条目 + 14 个 `§8.x` 子节），现按模块拆成独立卷。**编号一个字都没改** —— `§8 第 N 条`、
-> `§8.x`、`§11.x` 都是原号，正本只留指针与映射表，仓库里既有的引用继续解析得到。
+> `§8.x`、`§11.x` 都是原号，原处只留指针与映射表，仓库里既有的引用继续解析得到。
+> 2026-09-20 深夜**文档归一**：取消「母本 + 仓库镜像」双写 —— `docs/` 就是唯一正本，
+> `~/Documents/omarchy-niri-*.md` 全部改成指向它的软链；校验器随之改名 `scripts/check-doc-links.sh`。
 
 ---
 
@@ -22,19 +24,21 @@
 > **各模块卷 = 专题记录**：当时怎么发现的、试过什么、为什么这么定、坑在哪。改动发生在哪一卷，
 > 就去哪一卷查；两边都有指针，不用猜。
 
-| 卷 | 正本 ↔ 仓库镜像 | 管什么 |
+| 卷 | 文件（正本） | 管什么 |
 |---|---|---|
-| 主文档（本文） | `~/Documents/omarchy-on-niri.md` ↔ `docs/omarchy-on-niri-port.md` | 当前事实：约束 / 架构 / 文件清单 / niri 配置 / 部署 / 验证 / 环境 |
-| 视觉调整 | `~/Documents/omarchy-niri-visual.md` ↔ `docs/visual.md` | 磨砂全栈、字号与 DPI、边框环、菜单底色、gaps、overview、主题取色、壁纸库、缩放、bar 内联排布 |
-| 功能调整 | `~/Documents/omarchy-niri-behavior.md` ↔ `docs/behavior.md` | 按键与去重、system 动作、电源与背光、screensaver、输入源、菜单行为、选择器性能与预热、耗电专项 |
-| 插件 | `~/Documents/omarchy-niri-plugins.md` ↔ `docs/plugins.md` | bar 插件层、逐插件魔改与运维（含原 §8.11） |
-| 垫片 | `~/Documents/omarchy-niri-shims.md` ↔ `docs/shims.md` | `hyprctl`（原 §4）、`uwsm-app`、`omarchy-update`、`display-text-size`、`picker-warmup` 等 PATH-first 覆盖脚本 |
-| 上游跟进 | `~/Documents/omarchy-niri-upstream.md` ↔ `docs/upstream.md` | 覆盖层重放、合并基线、上游小更新、发布流程 |
-| 账户迁移 | `~/Documents/omarchy-niri-migration.md` ↔ `docs/migration.md` | 实验账户 → 主账户的完整方案与执行清单（原 §11） |
-| 锁屏 / 登录 | `~/Documents/omarchy-niri-lock.md` ↔ `docs/lock.md` | 锁面、greeter、人脸、greetd wedge |
-| 本机改动总账 | `~/Documents/omarchy-niri-overrides.md` ↔ `docs/local-overrides.md` | 这台机器相对仓库**多出/改过**的一切与回退方式 |
+| 主文档（本文） | `docs/omarchy-on-niri-port.md` | 当前事实：约束 / 架构 / 文件清单 / niri 配置 / 部署 / 验证 / 环境 |
+| 视觉调整 | `docs/visual.md` | 磨砂全栈、字号与 DPI、边框环、菜单底色、gaps、overview、主题取色、壁纸库、缩放、bar 内联排布 |
+| 功能调整 | `docs/behavior.md` | 按键与去重、system 动作、电源与背光、screensaver、输入源、菜单行为、选择器性能与预热、耗电专项 |
+| 插件 | `docs/plugins.md` | bar 插件层、逐插件魔改与运维（含原 §8.11） |
+| 垫片 | `docs/shims.md` | `hyprctl`（原 §4）、`uwsm-app`、`omarchy-update`、`display-text-size`、`picker-warmup` 等 PATH-first 覆盖脚本 |
+| 上游跟进 | `docs/upstream.md` | 覆盖层重放、合并基线、上游小更新、发布流程 |
+| 账户迁移 | `docs/migration.md` | 实验账户 → 主账户的完整方案与执行清单（原 §11） |
+| 锁屏 / 登录 | `docs/lock.md` | 锁面、greeter、人脸、greetd wedge |
+| 本机改动总账 | `docs/local-overrides.md` | 这台机器相对仓库**多出/改过**的一切与回退方式 |
 
-镜像一致性：`~/omarchy-on-niri/scripts/check-doc-mirrors.sh`（缺正本的机器会 skip）。
+文档只有一份，就在仓库里（上表第三列）：`~/Documents/omarchy-niri-*.md` 都是指向它们的软链，
+改哪边都一样。`scripts/check-doc-links.sh` 守这个 —— 软链被人换成真副本、或指错地方就报红
+（本来就没有 `~/Documents` 副本的机器会 skip）。
 
 ---
 
@@ -176,7 +180,7 @@ hyprctl 调用面有界、可直接映射。
 ## 4. hyprctl 垫片（`~/bin/hyprctl`）
 
 > **已拆入垫片卷**：正文（子命令映射表、`cmd_binds` 的 `include` 递归展开、Hyprland-only 字段的
-> 占位处理）在 `~/Documents/omarchy-niri-shims.md` ↔ `docs/shims.md` 的 **§4**（编号保留）。
+> 占位处理）在 `docs/shims.md` 的 **§4**（编号保留）。
 
 ## 5. niri 配置（`~/.config/niri/config.kdl`）
 
@@ -531,7 +535,7 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
 ## 8. 专题记录（已按模块拆分）
 
 > 原来这里是 1232 行的编号流水账（32 条编号条目 + 14 个 `§8.x` 子节），2026-09-20 按模块拆成独立卷。
-> **编号未改**：下表左列就是原号，正文在对应卷里；正本与仓库镜像此处都只留这张表。
+> **编号未改**：下表左列就是原号，正文在对应卷里；此处只留这张表。
 
 | 原编号 | 主题 | 现所在 |
 |---|---|---|
@@ -707,5 +711,5 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
 ## 11. 账户迁移：实验账户 → 主账户（2026-09-19 方案）
 
 > **已拆入迁移卷**：正文（§11.0–§11.9 方案与小结、§11.15 执行清单，以及 §11.10–§11.14、
-> §11.16–§11.25 的指针）在 `~/Documents/omarchy-niri-migration.md` ↔ `docs/migration.md`。
+> §11.16–§11.25 的指针）在 `docs/migration.md`。
 > 其中锁屏/登录相关的 §11.10–§11.14、§11.16–§11.25 正文在 `docs/lock.md`。
