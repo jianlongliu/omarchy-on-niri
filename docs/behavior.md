@@ -156,11 +156,11 @@
     `brightnessctl` 调背光，但该工具**未装**（这是背光键不生效的根因，非权限问题）。
     已用户授权装系统级：`pkexec pacman -S brightnessctl` + 新建
     `/etc/udev/rules.d/90-backlight.rules`（`SUBSYSTEM=="backlight" GROUP="video" MODE="0664"`）+
-    `usermod -aG video yvonne` + 对既有 `intel_backlight` 节点手动 `chgrp video`/`chmod 0664`
+    `usermod -aG video <user>` + 对既有 `intel_backlight` 节点手动 `chgrp video`/`chmod 0664`
     （udev `trigger` 只发 `change`、不重挂 group/mode，故手动兜底直到下次冷插拔）。
     验证：`niri msg action spawn -- brightnessctl --class=backlight set +10%` 改变 76→126→恢复；
     无需重登即生效。**注意**：这条打破了 §1 的"不装系统包"约束，属用户明确授权的唯一例外；
-    `echo > $brightness` 对 yvonne 仍 EACCES，brightnessctl 走非 setuid 路径。回滚：
+    `echo > $brightness` 对实验账户仍 EACCES，brightnessctl 走非 setuid 路径。回滚：
     删 udev 规则 + `usermod -G` 挪出 video + 卸 brightnessctl。
 
 ---

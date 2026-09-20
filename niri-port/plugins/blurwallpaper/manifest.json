@@ -3,7 +3,7 @@
   "id": "omarchy.blurwallpaper",
   "name": "Blurred overview wallpaper",
   "version": "1.0.0",
-  "author": "yvonne",
+  "author": "jianlongliu",
   "description": "Strongly blurred wallpaper rendered behind the niri overview backdrop",
   "kinds": [
     "service"

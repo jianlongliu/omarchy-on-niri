@@ -410,7 +410,7 @@ ln -sfn /data/Pictures/Wallpapers ~/.config/omarchy/backgrounds/catppuccin    # 
 | `catppuccin` | 仓库层 `~/.local/share/omarchy/themes/` | 手工 `ln -s`（脚本只认用户层主题，其 README 亦注明） |
 
 - **库**：`/data/Pictures/Wallpapers`（71 张，全 png/jpg，无子目录）。路径**大小写敏感**
-  （`Pictures/Wallpapers`，不是 `pictures/wallpaper`）。该目录属 `jianlongliu`、位于共享数据卷
+  （`Pictures/Wallpapers`，不是 `pictures/wallpaper`）。该目录归主账户所有、位于共享数据卷
   `/data`，我们只**读**不写，故不触犯 §1。
 - **验证**：用上游同款 `find -L` 合并两个来源 → **75 = 71（库）+ 4（主题自带）**，且库与主题自带
   无同名文件（有重名会让轮换里出现重复项）。

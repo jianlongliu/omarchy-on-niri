@@ -18,7 +18,7 @@
 #   ./install.sh --dry-run    say what it would do, change nothing
 #
 # Rollback (the whole thing is one directory):
-#   rm -rf ~/.config/omarchy/plugins/yvonne.split-lock
+#   rm -rf ~/.config/omarchy/plugins/jianlongliu.split-lock
 #   omarchy plugin enable io.github.sirjul1337.lock-explorer
 #   omarchy-restart-shell
 # and, only if you want face auth gone too: sudo ./face-pam.sh --remove
@@ -30,7 +30,7 @@
 set -euo pipefail
 
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-PLUGIN_ID=yvonne.split-lock
+PLUGIN_ID=jianlongliu.split-lock
 THIRD_PARTY_LOCK=io.github.sirjul1337.lock-explorer
 DEST="$HOME/.config/omarchy/plugins/$PLUGIN_ID"
 OMARCHY=${OMARCHY_PATH:-"$HOME/.local/share/omarchy"}

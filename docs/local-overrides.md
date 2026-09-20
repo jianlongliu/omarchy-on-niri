@@ -67,11 +67,11 @@
 
 | 文件 | 关键内容 | 回退 |
 |---|---|---|
-| `shell.json` | bar 用 `charlieras262.floating-bar`（`centerAnchor: omarchy.clock`、`cornerRadius 10`、`floatGap 8`）；`omarchy.tray.hidden: ["Fcitx"]`（藏掉 fcitx5 的托盘图标）；`omarchy.power.showPercentage`；`ronald.input-sources.showSourceName=false`；`meviusisback.ai-subs`（`barDisplay: Data`、900s）；`idle.lock 300` / `idle.screensaver 150`（**screensaver 已由 flag 禁用**）；`disabledPlugins: ["omarchy.lock"]`；`plugins: [yvonne.split-lock, io.github.claudsondouglas.arcdock]` | `.bak-20260919-preaisubs`、`.bak-20260919-prehidetray`、`.bak-20260920-bar`、`.bak-20260920-bardisplay` |
+| `shell.json` | bar 用 `charlieras262.floating-bar`（`centerAnchor: omarchy.clock`、`cornerRadius 10`、`floatGap 8`）；`omarchy.tray.hidden: ["Fcitx"]`（藏掉 fcitx5 的托盘图标）；`omarchy.power.showPercentage`；`ronald.input-sources.showSourceName=false`；`meviusisback.ai-subs`（`barDisplay: Data`、900s）；`idle.lock 300` / `idle.screensaver 150`（**screensaver 已由 flag 禁用**）；`disabledPlugins: ["omarchy.lock"]`；`plugins: [jianlongliu.split-lock, io.github.claudsondouglas.arcdock]` | `.bak-20260919-preaisubs`、`.bak-20260919-prehidetray`、`.bak-20260920-bar`、`.bak-20260920-bardisplay` |
 | `shell.toml` | `[font] base-size 12`；`[bar]` 尺寸 + `background-alpha 0.45` + **`icon-font 12`**（要 `Style.qml` 的白名单，已进覆盖层）；`[popups]/[notifications]/[tooltip]` alpha；`[menu] background "#2a2a22"` + `background-alpha 0.7`（**写字面值就不再随主题走**） | `.bak-20260920-{consistency,iconfont,menu}` |
 | `extensions/omarchy-menu.jsonc` | 菜单用户层 override：`trigger.*` 屏蔽、`setup.input` 指 `niri/input.kdl`、screensaver 6 条 `when:"false"`。⚠ 同一 id 别写两遍；**别写行内注释**（`stripJsonc` 只删整行注释） | `.bak-20260919-{prehide,prelearn}`、`.bak-20260920-prescreensaver` |
 | `niri-port/` | `niri.patch`（与仓库同 md5）、`Niri.qml`、`plugin-patches/*.patch`（4 个，机器独有，见 §6） | 各自的 `.bak-*` |
-| `plugins/`（8 个） | 自研：`yvonne.arch-logo`、`yvonne.workspaces`、`yvonne.split-lock`（**没有 `.git`**，`omarchy plugin update` 不碰）；第三方：`charlieras262.floating-bar`、`ronald.input-sources`、`meviusisback.ai-subs`、`jrmmhm.pocket`、`io.github.claudsondouglas.arcdock`（**本身就是上游 git 克隆**，本地魔改用 `git diff` 就地生成 patch） | `plugin-patches/*.patch` 反向 `git apply -R` |
+| `plugins/`（8 个） | 自研：`jianlongliu.arch-logo`、`jianlongliu.workspaces`、`jianlongliu.split-lock`（**没有 `.git`**，`omarchy plugin update` 不碰）；第三方：`charlieras262.floating-bar`、`ronald.input-sources`、`meviusisback.ai-subs`、`jrmmhm.pocket`、`io.github.claudsondouglas.arcdock`（**本身就是上游 git 克隆**，本地魔改用 `git diff` 就地生成 patch） | `plugin-patches/*.patch` 反向 `git apply -R` |
 | `hooks/` | 与仓库同（`post-update.d/10-niri-repatch` 的 `omarchy-restart-shell` 那 8 行 2026-09-20 已并回仓库，两侧 md5 `b077156959bc9cfb4c37941a4ffb3a5e` 一致） | 从仓库重拷 |
 
 ---
@@ -99,7 +99,7 @@
 | `/usr/local/bin/{split-greeter,split-greeter-sync,ir-light}` | 登录器入口、主题/壁纸同步、IR 补光 | — |
 | `/usr/local/bin/omarchy-greeter`、`omarchy-greeter-sync` | 兼容软链 → `split-*` | — |
 
-- 换主题/壁纸后同步到登录页：`sudo split-greeter-sync jianlongliu`（还有 `yvonne` 时要一起列）。
+- 换主题/壁纸后同步到登录页：`sudo split-greeter-sync "$USER"`（还有实验账户时要一起列）。
 - 登录页切换是唯一会把自己锁在外面的步骤，所以 `split-greeter/install.sh` **故意不碰 `config.toml`**。
 
 ---
@@ -140,7 +140,7 @@ git apply --reverse --check niri.patch   # 必须通过
 
 1. ~~三个 `~/bin` 垫片~~ **已收进仓库（2026-09-20）**：`port-bin/{omarchy-update,omarchy-picker-warmup,omarchy-display-text-size}`
 2. ~~`omarchy-picker-warmup.service`~~ **已收进仓库**：`default/systemd/user/omarchy-picker-warmup.service`
-   （写成 `%h` 模板；本机那份是写死 `/home/jianlongliu` 的等价物）
+   （写成 `%h` 模板；本机那份是写死 `~` 的等价物）
 3. ~~`plugin-patches`~~ **已收进仓库（2026-09-20）**：`niri-port/plugin-patches/`（4 个 patch + README，
    说明怎么 `git diff` 生成、怎么 `git apply` 重放）；机器上同目录的 `.bak-*` 是历史，仍只在本地。
 4. `~/.config/omarchy/{shell.json,shell.toml,extensions/omarchy-menu.jsonc}` 的实际取值

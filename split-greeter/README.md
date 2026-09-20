@@ -73,12 +73,16 @@ python3 bridge/test-bridge.py     # 协议层（纯 python，不需要显示）
 卡住的扫脸、换账户、错密码这些路径（`StateTest.qml` 只加载 `Greetd.qml`，不碰设计层，
 所以没有 `PanelWindow`，offscreen 平台就够）。
 
+两个脚本用的账户名**从 `/etc/passwd` 现取**（本机前两个 uid≥1000 的账户，落到 `MAINUSER`/`DEVUSER`）——
+选择器（`Users.qml`）只列真人账户，写死或编造的名字在「换账户」用例里选不出来。要测别的账户就
+`MAINUSER=… DEVUSER=… ./tests/smoke.sh`。
+
 ## 装与回滚
 
 ```sh
 sudo ./install.sh        # 拷到 /etc/greetd/split-greeter + /usr/local/bin/split-greeter
 sudo split-greeter-sync                    # 每个真实账户的配色/壁纸都同步一遍
-sudo split-greeter-sync jianlongliu yvonne # 只同步这两个（第一个同时作为共享缺省）
+sudo split-greeter-sync "$USER" <dev-user> # 只同步这两个（第一个同时作为共享缺省）
 ```
 
 `install.sh` **不动** `/etc/greetd/config.toml`——切 greetd 到本 greeter 是唯一能把人锁在门外的
@@ -119,10 +123,10 @@ greetd 是否收到 `start_session`、greeter 是否干净退出、有无 QML �
 单跑一次（要截界面时用）：
 
 ```sh
-python3 bridge/mock-greetd.py --socket /tmp/m.sock --user jianlongliu --password hunter2 \
+python3 bridge/mock-greetd.py --socket /tmp/m.sock --user "$USER" --password hunter2 \
   --log /tmp/start.log --howdy --delay 5 &
 GREETD_SOCK=/tmp/m.sock GREETER_BRIDGE=$PWD/bridge/greetd-bridge.py \
-GREETER_USER=jianlongliu GREETER_ACCOUNTS_DIR=/var/lib/greeter/users GREETER_CORNER_RADIUS=10 \
+GREETER_USER=$USER GREETER_ACCOUNTS_DIR=/var/lib/greeter/users GREETER_CORNER_RADIUS=10 \
 GREETER_SELFTEST_PASSWORD=x GREETER_SELFTEST_OPEN_PICKER=1 qs -n -p .
 ```
 

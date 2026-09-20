@@ -18,7 +18,7 @@
 - §11.22 登录界面"第一次输密码没反应"的真因（2026-09-19，真机发现并修复）
 - §11.16 自研锁屏 `split-lock/`：桥已跑通（2026-09-19）
 - §11.17 niri 上补 `dpmsStatus` / `solitaryBlockedBy`（2026-09-19）
-- §11.18 自研锁屏装成插件：`yvonne.split-lock`（2026-09-19）
+- §11.18 自研锁屏装成插件：`jianlongliu.split-lock`（2026-09-19）
 - §11.19 换锁**必须重启 shell**（keepLoaded 的 handler 竞争，2026-09-19）
 - §11.20 真机实测通过 + 退役 explorer（2026-09-19）
 - §11.21 打包决策：只给 `split-greeter` 做 PKGBUILD，且等迁移之后（2026-09-19）
@@ -83,7 +83,7 @@ pkexec ~/.local/share/omarchy/bin/omarchy-apply-lock     # 或 sudo omarchy-appl
 | 锁屏 | 会话锁 | `/etc/pam.d/omarchy-lock-password` | `omarchy-apply-lock`（安装器/升级） |
 
 - greeter 跑**自己的 niri 实例与配置**（`/etc/greetd/niri/config.kdl`：`DMS_RUN_GREETER=1`、黑底、
-  **没有** `spawn-at-startup quickshell`），不加载我们的壳层；`/etc/greetd/config.toml` 是 `jianlongliu`
+  **没有** `spawn-at-startup quickshell`），不加载我们的壳层；`/etc/greetd/config.toml` 是主账户
   的 0600 文件（读不到，也没碰）。
 - 时序也对不上：`passwordPam:false` 在**发起锁屏之前**就成立，装插件前即如此。
 
@@ -157,7 +157,7 @@ fprint 只挂在 `/etc/pam.d/sudo` 与 `polkit-1` 上，greetd 这条栈没有�
 3. 先开着 TTY（Ctrl+Alt+F2）→ 把 `[default_session]` 改成 `command = "/usr/local/bin/split-greeter"`、`user = "greeter"` → 登出实测 → 起不来就在 TTY 改回原值（dms-greeter 留的备份在 `/etc/greetd/config.toml.backup-*`）。
 4. **实测能进之后**，才谈 `sudo pacman -D --asexplicit quickshell` 与卸 `greetd-dms-greeter-bin`（§11.1：不先 asexplict，`-Rns` 会顺手带走 quickshell，本 greeter 和 Omarchy shell 一起瘫）。
 
-**2026-09-19 装机状态（`pkexec` 已执行）**：`/etc/greetd/split-greeter`（root:root，文件世界可读）+ `/usr/local/bin/split-greeter{,-sync}` 已就位；`split-greeter-sync` 已跑过一遍（`yvonne` = `tonal-spot` 主题 + 当前壁纸；`jianlongliu` 因为**还没迁移**、`~/.local/state/omarchy/current` 根本不存在 → 该账户目前软链到共享缺省）。**`/etc/greetd/config.toml` 的改动是用户自己做的**：15:09 他把 `[default_session].command` 切成 `/usr/local/bin/split-greeter`（备份 `/etc/greetd/config.toml.split-greeter-backup`，168B = 旧的 dms 命令），15:15 登出后 tty1 起的就是本 greeter。装机校验实测：greeter 身份下 `/etc/greetd/split-greeter` 下**所有文件可读**、桥可执行、状态目录可写；`niri validate -c /etc/greetd/split-greeter/niri.kdl` 通过；壁纸 sha256 与源文件一致。
+**2026-09-19 装机状态（`pkexec` 已执行）**：`/etc/greetd/split-greeter`（root:root，文件世界可读）+ `/usr/local/bin/split-greeter{,-sync}` 已就位；`split-greeter-sync` 已跑过一遍（实验账户 = `tonal-spot` 主题 + 当前壁纸；主账户因为**还没迁移**、`~/.local/state/omarchy/current` 根本不存在 → 该账户目前软链到共享缺省）。**`/etc/greetd/config.toml` 的改动是用户自己做的**：15:09 他把 `[default_session].command` 切成 `/usr/local/bin/split-greeter`（备份 `/etc/greetd/config.toml.split-greeter-backup`，168B = 旧的 dms 命令），15:15 登出后 tty1 起的就是本 greeter。装机校验实测：greeter 身份下 `/etc/greetd/split-greeter` 下**所有文件可读**、桥可执行、状态目录可写；`niri validate -c /etc/greetd/split-greeter/niri.kdl` 通过；壁纸 sha256 与源文件一致。
 
 **注意**：`greeter` 账户的 passwd home 是 **`/`**（`greeter:x:964:964:...:/:/bin/bash`），所以 `niri.kdl` 里那行 `HOME "/var/lib/greeter"` 是**关键行**，缺了它主题/状态目录全找不到。
 
@@ -166,7 +166,7 @@ fprint 只挂在 `/etc/pam.d/sudo` 与 `polkit-1` 上，greetd 这条栈没有�
 - `python3 split-greeter/bridge/test-bridge.py` —— **24 项协议断言全过**：错密码、成功、失败后重试、交互式 secret、人脸命中、人脸未命中转密码、未知用户、epoch 回显、cancel、socket 不可用（不崩）。
 - `split-greeter/tests/smoke.sh` —— 7 场景**全过**（人脸命中直通 / 人脸未命中回落密码 / 错密码**不产生**会话 / 切账户后登录 /
   **回车触发扫脸**（先断言"没按回车绝不扫脸"再按回车）/ 真按键注入的输密码 / 真按键注入的切账户），断言「greetd 是否收到 `start_session`」+「greeter 是否干净退出」+「无 QML 报错」。（前 4 个用例显式带 `GREETER_AUTOBEGIN=1` 复现旧行为，后 3 个走新的默认路径。）加 `GREETER=/etc/greetd/split-greeter` 就是**验装好的那份**（含它自己 `bridge/` 下的桥）——实测也是 4/4，并真拿到了 `start_session`。
-- 视觉证据：Split 正常渲染（左壁纸 + 时钟、右半透明面板、错误态红框、选择器头像/首字母）；**壁纸跟账户**（实测背景均值 `2.5 → 195.5`）；**配色跟账户**（切到测试账户后 `Color.background` 由 `#111318` 变 `#7f0000`，来源 `users/yvonne/theme`）。
+- 视觉证据：Split 正常渲染（左壁纸 + 时钟、右半透明面板、错误态红框、选择器头像/首字母）；**壁纸跟账户**（实测背景均值 `2.5 → 195.5`）；**配色跟账户**（切到测试账户后 `Color.background` 由 `#111318` 变 `#7f0000`，来源 `users/<dev-user>/theme`）。
 - 单跑一次（要截界面时）：`--delay` 调大，再用 `GREETER_SELFTEST_OPEN_PICKER=1` / `GREETER_SELFTEST_PICK=<user>` 驱动；`SelfTest.qml` 只在 `GREETER_SELFTEST_PASSWORD` 非空时经 `Loader` 加载，生产路径不经过它。
 
 **边界**：单输出（只配 `eDP-1`）；指纹 / FIDO2 没有专门 UI，作为 PAM 消息出现；`start_session` 固定 `niri-session`（`GREETER_SESSION` 可改），没有会话选择器；字体/间距不随账户切换；**不动 Plymouth / 启动链**（§11.10 的结论）。vendored 的 `designs/ Commons/ Ui/` 由 `split-greeter/vendor.py` 按组件闭包重拷并重放 4 处补丁（`Color.qml` 的 `themeOverride`、`DesignBase.qml` 的 `loginUser`/`hintOverride`、`Split.qml` 的提示行、`Style.qml` 的 `cornerRadius`），插件或 Omarchy 升级后重跑一次即可。
@@ -181,11 +181,11 @@ fprint 只挂在 `/etc/pam.d/sudo` 与 `polkit-1` 上，greetd 这条栈没有�
 > `activeFocus/enabled/readOnly` 全正常，也不能说明回车能提交。
 
 **现象**：切到自研 greeter 后**登不进去**——输密码毫无反应、连错误都不报；同机 TTY2 用文本登录能进
-`yvonne`（1001，有密码），**`jianlongliu` 的文本登录却失败**（那个账户实际靠 howdy 进）。
+实验账户（1001，有密码），**主账户的文本登录却失败**（那个账户实际靠 howdy 进）。
 
-**根因**：greeter 一启动就对**默认账户 jianlongliu** 发起不带密码的 `create_session` → PAM 进
+**根因**：greeter 一启动就对**默认账户主账户** 发起不带密码的 `create_session` → PAM 进
 `howdy`（sufficient）→ 人脸没命中/相机没就绪时 howdy **永远不返回**；而 **greetd 一条连接上同时只允许
-一个会话** → 之后所有请求（包括"切到 yvonne 再输密码"）全排在门外 → 界面既不动也不报错。epoch 守卫只
+一个会话** → 之后所有请求（包括"切到实验账户再输密码"）全排在门外 → 界面既不动也不报错。epoch 守卫只
 丢弃过期**事件**，救不了这条被占住的连接。**这不是密码错，所以没有任何失败可显示。**
 
 **修法（`split-greeter/`，已装机）**：给"一次尝试"设期限 `GREETER_ATTEMPT_TIMEOUT_MS`（默认 12s），到点**整条换掉
@@ -241,9 +241,9 @@ TTY 里自动拿到 root**。15:34 重新 `pkexec install.sh` + `pkexec systemct
   **只在指针真移动时跟随**。
 
 **端到端证据（真实按键注入，不是直接调 API）**：`wtype 'hunter2'` + `wtype -k Return` →
-`password field received input` → `password submitted for jianlongliu (7 chars)` → `auth_ok` → `started`
+`password field received input` → `password submitted for 主账户 (7 chars)` → `auth_ok` → `started`
 → mock 收到 `start_session ["niri-session"]`；切账户：`Tab` → `↓↓↓` → `Return` →
-`the account picker chose yvonne` → `account switched to yvonne from jianlongliu` → 输密码 → `auth_ok`。
+`the account picker chose 实验账户` → `account switched to 实验账户 from 主账户` → 输密码 → `auth_ok`。
 
 **测试为什么没拦住（核心教训）**：`SelfTest.qml` 之前直接调 `design.submitPassword(pw)`（宿主公开 API）和
 `picker.picked(name)`，**恰好跳过了出问题的两段宿主接线**。已改成走**设计自己的路径**：
@@ -256,7 +256,7 @@ TTY 里自动拿到 root**。15:34 重新 `pkexec install.sh` + `pkexec systemct
 日志里不会出现密码。
 
 **⚠️ 现存副作用（待定）**：greeter 一启动就对默认账户自动发起 howdy 尝试。15:5x 我 `pkill -u greeter` 让
-greetd 重拉 greeter 时，新实例的脸扫**命中**了 → greetd 立刻又开了一个 **jianlongliu 的 niri 会话**（VT1）。
+greetd 重拉 greeter 时，新实例的脸扫**命中**了 → greetd 立刻又开了一个 **主账户的 niri 会话**（VT1）。
 **2026-09-19 已改：人脸改成"回车触发"，不再开机就扫（§11.14）。** 启动时**一次认证都不发起**，
 `LockInput.onAccepted` 在空输入上回车 = `faceRequested` → 开扫（这是设计原本的语义）；**直接打字就是纯密码**
 （`authenticate()` 空闲时会自己开一个带密码的会话）。代价是失去"人脸优先"——走过来的瞬间不再自动登录，
@@ -343,15 +343,15 @@ Omarchy 的锁层从 `hyprctl -j monitors` 读两个字段，shim 之前都在�
 
 ---
 
-### §11.18 自研锁屏装成插件：`yvonne.split-lock`（2026-09-19）
+### §11.18 自研锁屏装成插件：`jianlongliu.split-lock`（2026-09-19）
 
-**形态**：不魔改 omarchy 的任何文件，而是把锁做成 `~/.config/omarchy/plugins/yvonne.split-lock/`，manifest 里声明 `"omarchy": {"clonedFrom": "omarchy.lock"}`（与第三方 explorer 插件同款机制）。锁是 `service` 类插件，shell **按文件名**从插件自己的目录实例化 `LockView { }` —— 所以插件目录里放 `Service.qml`（上游锁服务 + 我们的人脸/头像增量，每个块都标 `PORT (split-lock)`；§11.23 起**不再是逐字节副本**）+ 我们的 `LockView.qml` + 平铺的 Split 设计文件，**这就是全部改动**。stock 插件目录本来也只有三个文件（`manifest.json`/`Service.qml`/`LockView.qml`），换掉 `LockView` 就等于换锁。`install.sh` 现在拿**两个** md5 把关：`UPSTREAM_SERVICE_MD5`（上游漂移检测，上游一改就提醒把我们的增量重新落一遍）与 `EXPECTED_SERVICE_MD5`（我们自己那份，防手滑改坏）。
+**形态**：不魔改 omarchy 的任何文件，而是把锁做成 `~/.config/omarchy/plugins/jianlongliu.split-lock/`，manifest 里声明 `"omarchy": {"clonedFrom": "omarchy.lock"}`（与第三方 explorer 插件同款机制）。锁是 `service` 类插件，shell **按文件名**从插件自己的目录实例化 `LockView { }` —— 所以插件目录里放 `Service.qml`（上游锁服务 + 我们的人脸/头像增量，每个块都标 `PORT (split-lock)`；§11.23 起**不再是逐字节副本**）+ 我们的 `LockView.qml` + 平铺的 Split 设计文件，**这就是全部改动**。stock 插件目录本来也只有三个文件（`manifest.json`/`Service.qml`/`LockView.qml`），换掉 `LockView` 就等于换锁。`install.sh` 现在拿**两个** md5 把关：`UPSTREAM_SERVICE_MD5`（上游漂移检测，上游一改就提醒把我们的增量重新落一遍）与 `EXPECTED_SERVICE_MD5`（我们自己那份，防手滑改坏）。
 
 **装法**（`split-lock/install.sh`）：
 
 - `./install.sh --stage`：装好但**禁用** —— 当前锁屏不变，explorer 继续在用；
-- 启用：`omarchy plugin disable io.github.sirjul1337.lock-explorer` + `omarchy plugin enable yvonne.split-lock`；
-- 回滚 = 删掉那一个目录（`rm -rf ~/.config/omarchy/plugins/yvonne.split-lock`）再把 explorer 启回来；
+- 启用：`omarchy plugin disable io.github.sirjul1337.lock-explorer` + `omarchy plugin enable jianlongliu.split-lock`；
+- 回滚 = 删掉那一个目录（`rm -rf ~/.config/omarchy/plugins/jianlongliu.split-lock`）再把 explorer 启回来；
 - `omarchy plugin validate` 通过（它是**静默成功型**，只有 rc≠0 才说话）。
 
 **互斥**：锁是单例 —— `PluginRegistry.activeCloneFor()` 挑的是**第一个** entry 找得到的克隆，两个克隆并存等于掷骰子，所以必须"先禁 explorer 再启 split-lock"。
@@ -365,7 +365,7 @@ Omarchy 的锁层从 `hyprctl -j monitors` 读两个字段，shim 之前都在�
 
 ### §11.19 换锁**必须重启 shell**（keepLoaded 的 handler 竞争，2026-09-19）
 
-实测：把 explorer 禁用、把 `yvonne.split-lock` 启用之后，**活着的锁仍然是 explorer 的**。两层原因：
+实测：把 explorer 禁用、把 `jianlongliu.split-lock` 启用之后，**活着的锁仍然是 explorer 的**。两层原因：
 
 1. `service` 类插件是 `keepLoaded: true` —— 禁用/启用只改配置，**不会卸载已在跑的实例**；
 2. 每个锁 Service 都注册 `IpcHandler { target: "lock" }`，Quickshell 只让**先到的那个**生效；后到的会打印 `Handler was registered but will not be used because another handler is registered for target lock`（行里带完整文件路径）。**赢家什么都不打印** —— 所以"新实例日志里没有 `target lock` 落选行 + `omarchy-shell lock isLocked` 能应答"就是"我们的 handler 赢了"的正向证据。
@@ -385,7 +385,7 @@ Omarchy 的锁层从 `hyprctl -j monitors` 读两个字段，shim 之前都在�
 09:10:38 lock-requested → lock-pending: screen-stabilizing → 09:10:39 secure=true → 09:10:43 unlocked
 ```
 
-真锁 → 真 PAM 密码 → 解锁，4 秒。随后 `io.github.sirjul1337.lock-explorer` **已移除**（先 `tar czf /var/tmp/lock-explorer-backup-20260919.tar.gz` 留底；设计代码与署名在本仓库 `split-lock/` + `THIRD-PARTY.md`，原插件随时可 `omarchy plugin add` 装回）。现在系统中唯一的锁提供者是 `yvonne.split-lock`。
+真锁 → 真 PAM 密码 → 解锁，4 秒。随后 `io.github.sirjul1337.lock-explorer` **已移除**（先 `tar czf /var/tmp/lock-explorer-backup-20260919.tar.gz` 留底；设计代码与署名在本仓库 `split-lock/` + `THIRD-PARTY.md`，原插件随时可 `omarchy plugin add` 装回）。现在系统中唯一的锁提供者是 `jianlongliu.split-lock`。
 
 **遗留（2026-09-19 已解决）**：`binds.kdl:21` 那行 niri 默认的 `Super+Alt+L { spawn "swaylock"; }`（swaylock **根本没装**，键是死的）已随按键去重**注释移除**；锁屏现在只有一条路：`Mod+L` → `omarchy-system-lock`（§8 第 24 条）。
 
@@ -419,15 +419,15 @@ Omarchy 的锁层从 `hyprctl -j monitors` 读两个字段，shim 之前都在�
 
 **验证（全部不锁会话，2026-09-20 实测通过）**
 
-- **PAM 栈（最强证据）**：`pamtester omarchy-lock-face $USER authenticate` → `successfully authenticated`，howdy 回 `Identified face as jianlongliu`。这条绕开 UI 与锁面，直接证明 `ir-light` → `pam_python`/howdy → 成功这条链是通的。
+- **PAM 栈（最强证据）**：`pamtester omarchy-lock-face $USER authenticate` → `successfully authenticated`，howdy 回 `Identified face as 主账户`。这条绕开 UI 与锁面，直接证明 `ir-light` → `pam_python`/howdy → 成功这条链是通的。
   ⚠ `pamtester` **不在官方仓库**（`pacman -S extra/pamtester` → target not found），在 **AUR**：`paru -G pamtester` → `makepkg -f` → `pkexec pacman -U pamtester-0.1.2-4-x86_64.pkg.tar.zst`（本机已装）。
 - `cd split-lock && ./tests/state.sh` → 15 项全过（新增：人脸开关到视图、头像 URL 与版本击穿、**空回车走设计自己的分支**发出 `faceRequested`、提示行文案、`hintOverride` 覆盖）。
-- `omarchy-shell lock preview` + `grim` 截图：右侧面板从上到下 头像（165px 实高）→ 问候 → 用户名 → 密码框 → 提示行全部画出；头像区与 `/var/lib/AccountsService/icons/jianlongliu`（缩到 168×168）**平均像素差 5.6/255**、stddev 66.0 vs 68.9 —— 就是那张账户图片，不是首字母圆牌。
+- `omarchy-shell lock preview` + `grim` 截图：右侧面板从上到下 头像（165px 实高）→ 问候 → 用户名 → 密码框 → 提示行全部画出；头像区与 `/var/lib/AccountsService/icons/$USER`（缩到 168×168）**平均像素差 5.6/255**、stddev 66.0 vs 68.9 —— 就是那张账户图片，不是首字母圆牌。
   （面板内容是 `anchors.verticalCenter` 居中，头像在 `y≈512` 而不是顶部；找头像别按顶部算。）
-- `omarchy-shell lock status` 多报 `face: true` / `faceAuthenticating` / `avatar: /var/lib/AccountsService/icons/jianlongliu`。
+- `omarchy-shell lock status` 多报 `face: true` / `faceAuthenticating` / `avatar: /var/lib/AccountsService/icons/$USER`。
 - 真机锁屏按一次回车：**用户自己做**（§11.20 的规矩，不主动锁他的屏）。
 
-**改动落点**：`split-lock/{Service,LockView,Split}.qml`（仓库 → `./install.sh` 装进 `~/.config/omarchy/plugins/yvonne.split-lock/`）、`split-lock/face-pam.sh`、`tests/mockhost/shell.qml` + `tests/state.sh`。`Service.qml` 里所有增量都标了 `PORT (split-lock)`，`install.sh` 用两个 md5 把关（见 §11.18）。**回滚**：`sudo split-lock/face-pam.sh --remove`（人脸入口下次起壳层消失）或整目录删掉。改动前的三个文件备份在 `/var/tmp/lock-pre-face-20260920/`。
+**改动落点**：`split-lock/{Service,LockView,Split}.qml`（仓库 → `./install.sh` 装进 `~/.config/omarchy/plugins/jianlongliu.split-lock/`）、`split-lock/face-pam.sh`、`tests/mockhost/shell.qml` + `tests/state.sh`。`Service.qml` 里所有增量都标了 `PORT (split-lock)`，`install.sh` 用两个 md5 把关（见 §11.18）。**回滚**：`sudo split-lock/face-pam.sh --remove`（人脸入口下次起壳层消失）或整目录删掉。改动前的三个文件备份在 `/var/tmp/lock-pre-face-20260920/`。
 
 **证据边界**：离屏契约测试证明接线；`pamtester` 证明**这条 PAM 栈真能刷脸成功**；`lock status` + 截图证明探针与渲染。**唯一还差的是"在真锁屏上按回车"那一下**——那要用户自己锁（顺带一提：`shell.json` 的 `idle.lock = 300` 会让屏幕 5 分钟自己锁上）。
 
@@ -485,7 +485,7 @@ Omarchy 的锁层从 `hyprctl -j monitors` 读两个字段，shim 之前都在�
 
 **验证**：`bridge/test-bridge.py` 12 用例全过；**改前**有 3 条断言专抓此 wedge 而红（`retry after a failure`、`fresh helper after an abandoned face`、`cancels the stale conversation first`）；`tests/smoke.sh` **34 → 39 项全过**，新增 `enter-twice-while-scanning`（扫脸中再按回车：第二次不许开新会话、不许出现 wedge 文案、最后仍要在那条已开的会话上登成功）。另外 15:30:57 那次 `systemctl restart greetd` 现场验证了恢复路径：`terminate()` 会把 `configuring` 一并 cancel，用户随后在 tty1 **一次就登进去了**（卡死期间同样的操作只会拿到 `already being configured`）。
 
-**注意**：重启 greetd 只带走它自己的子进程（greeter + 半途会话）。本机用户会话挂在 `login`/systemd 下（`login -- jianlongliu` → `niri --session`），因此安全；但若哪天用户会话是 greetd 起的，`systemctl restart greetd` 会把它一起带走。
+**注意**：重启 greetd 只带走它自己的子进程（greeter + 半途会话）。本机用户会话挂在 `login`/systemd 下（`login -- $USER` → `niri --session`），因此安全；但若哪天用户会话是 greetd 起的，`systemctl restart greetd` 会把它一起带走。
 ---
 
 ## 附：两条锁屏路线并存与收敛（原正本 `§8 第 6 条`，2026-08-24 前后）

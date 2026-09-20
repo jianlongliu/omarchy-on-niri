@@ -3,7 +3,7 @@
 # omarchy:summary=Returns a list of all the available power profiles on the system.
 # omarchy:args=[--active-state]
 #
-# yvonne port: prefers power-profiles-daemon's `powerprofilesctl`, and falls back
+# omarchy-on-niri port: prefers power-profiles-daemon's `powerprofilesctl`, and falls back
 # to the TLP backend (tlp-pd) via D-Bus net.hadess.PowerProfiles when
 # powerprofilesctl is absent. Lives in ~/bin so it survives `omarchy update`.
 

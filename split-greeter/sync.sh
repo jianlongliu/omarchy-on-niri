@@ -4,7 +4,7 @@
 # logged in).
 #
 #   sudo split-greeter-sync                    # every human account, default = $SUDO_USER
-#   sudo split-greeter-sync jianlongliu yvonne # just these, first one is also the default
+#   sudo split-greeter-sync <主账户> <实验账户> # just these, first one is also the default
 #
 # Layout under /var/lib/greeter:
 #

@@ -17,12 +17,18 @@ MOCK=$HERE/../bridge/mock-greetd.py
 BRIDGE=$GREETER/bridge/greetd-bridge.py
 WALLPAPER=${WALLPAPER:-$HOME/.local/state/omarchy/current/theme/backgrounds/1-totoro.webp}
 
+# The picker lists the machine's real human accounts (Users.qml reads /etc/passwd),
+# so the fixtures must be accounts that exist here: the first two, overridable.
+MAINUSER=${MAINUSER:-$(getent passwd | awk -F: '$3 >= 1000 && $3 < 65534 {print $1; exit}')}
+DEVUSER=${DEVUSER:-$(getent passwd | awk -F: '$3 >= 1000 && $3 < 65534 {print $1}' | sed -n 2p)}
+: "${MAINUSER:?no human account on this machine to test with}"
+
 # The greeter looks in /var/lib/greeter/users/<account> for the selected
 # account's palette and wallpaper. The test cannot write there, so point it at
 # a scratch copy of this account's real artwork.
 STATE=$HOME/.local/state/omarchy/current
 ACCOUNTS=$(mktemp -d)
-for account in jianlongliu yvonne; do
+for account in "$MAINUSER" "$DEVUSER"; do
   install -d "$ACCOUNTS/$account"
   ln -sfn "$STATE/theme" "$ACCOUNTS/$account/theme"
   ln -sfn "$(readlink -f "$STATE/background" 2>/dev/null || echo "$WALLPAPER")" \
@@ -66,13 +72,13 @@ run_case() { # name, mock user, mock flags, selftest env, want started, expect t
   # shellcheck disable=SC2086
   if [ "$use_timeout" = yes ]; then
     set +e
-      env HOME="$dir/home" GREETD_SOCK="$dir/mock.sock" GREETER_BRIDGE="$BRIDGE" GREETER_USER=jianlongliu \
+      env HOME="$dir/home" GREETD_SOCK="$dir/mock.sock" GREETER_BRIDGE="$BRIDGE" GREETER_USER=$MAINUSER \
       GREETER_ACCOUNTS_DIR="$ACCOUNTS" GREETER_CORNER_RADIUS=10 GREETER_FACE=1 $selftest \
       timeout 8 qs -n -p "$GREETER" >"$dir/run.log" 2>&1
     code=$?
     set -e
   else
-    env HOME="$dir/home" GREETD_SOCK="$dir/mock.sock" GREETER_BRIDGE="$BRIDGE" GREETER_USER=jianlongliu \
+    env HOME="$dir/home" GREETD_SOCK="$dir/mock.sock" GREETER_BRIDGE="$BRIDGE" GREETER_USER=$MAINUSER \
       GREETER_ACCOUNTS_DIR="$ACCOUNTS" GREETER_CORNER_RADIUS=10 GREETER_FACE=1 $selftest \
       timeout 40 qs -n -p "$GREETER" >"$dir/run.log" 2>&1
     code=$?
@@ -113,12 +119,12 @@ run_key_case() { # name, mode (password | switch)
   fi
   dir=$(mktemp -d)
   mkdir -p "$dir/home"
-  python3 "$MOCK" --socket "$dir/mock.sock" --user jianlongliu --password hunter2 \
+  python3 "$MOCK" --socket "$dir/mock.sock" --user "$MAINUSER" --password hunter2 \
     --log "$dir/start.log" --pidfile "$dir/mock.pid" --howdy-fail >"$dir/mock.out" 2>&1 &
   mock=$!
   trap 'kill "$mock" 2>/dev/null || true' EXIT
   while [ ! -S "$dir/mock.sock" ]; do sleep 0.1; done
-  env HOME="$dir/home" GREETD_SOCK="$dir/mock.sock" GREETER_BRIDGE="$BRIDGE" GREETER_USER=jianlongliu \
+  env HOME="$dir/home" GREETD_SOCK="$dir/mock.sock" GREETER_BRIDGE="$BRIDGE" GREETER_USER=$MAINUSER \
     GREETER_ACCOUNTS_DIR="$ACCOUNTS" GREETER_CORNER_RADIUS=10 GREETER_FACE=1 \
     timeout 40 qs -n -p "$GREETER" >"$dir/run.log" 2>&1 &
   greeter=$!
@@ -138,10 +144,10 @@ run_key_case() { # name, mode (password | switch)
   note "-- $name" ""
   check "keys reached the password field" "$(grep -c 'password field received input' "$dir/run.log")" 1
   if [ "$mode" = switch ]; then
-    check "picker chose the other account" "$(grep -c 'account picker chose yvonne' "$dir/run.log")" 1
-    check "submitted for the picked account" "$(grep -c 'password submitted for yvonne' "$dir/run.log")" 1
+    check "picker chose the other account" "$(grep -c "account picker chose $DEVUSER" "$dir/run.log")" 1
+    check "submitted for the picked account" "$(grep -c "password submitted for $DEVUSER" "$dir/run.log")" 1
   else
-    check "submitted for the greeter user" "$(grep -c 'password submitted for jianlongliu' "$dir/run.log")" 1
+    check "submitted for the greeter user" "$(grep -c "password submitted for $MAINUSER" "$dir/run.log")" 1
   fi
   check "session handed to greetd" "$started" 1
   if grep -q ' ERROR' "$dir/run.log"; then
@@ -153,11 +159,11 @@ run_key_case() { # name, mode (password | switch)
   rm -rf "$dir"
 }
 
-run_case "howdy-match"      jianlongliu "--howdy"    "GREETER_AUTOBEGIN=1"        yes
-run_case "howdy-miss+pass"  jianlongliu "--howdy-fail --delay 2" "GREETER_AUTOBEGIN=1 GREETER_SELFTEST_PASSWORD=hunter2" yes
-run_case "wrong-password"   jianlongliu ""           "GREETER_AUTOBEGIN=1 GREETER_SELFTEST_PASSWORD=wrong"    no yes
-run_case "typed-before-prompt" jianlongliu "--howdy-fail" "GREETER_SELFTEST_PASSWORD=hunter2" yes
-run_case "switch-account"   yvonne      "--howdy"    "GREETER_AUTOBEGIN=1 GREETER_SELFTEST_PASSWORD=x GREETER_SELFTEST_PICK=yvonne" yes
+run_case "howdy-match"      "$MAINUSER" "--howdy"    "GREETER_AUTOBEGIN=1"        yes
+run_case "howdy-miss+pass"  "$MAINUSER" "--howdy-fail --delay 2" "GREETER_AUTOBEGIN=1 GREETER_SELFTEST_PASSWORD=hunter2" yes
+run_case "wrong-password"   "$MAINUSER" ""           "GREETER_AUTOBEGIN=1 GREETER_SELFTEST_PASSWORD=wrong"    no yes
+run_case "typed-before-prompt" "$MAINUSER" "--howdy-fail" "GREETER_SELFTEST_PASSWORD=hunter2" yes
+run_case "switch-account"   "$DEVUSER"      "--howdy"    "GREETER_AUTOBEGIN=1 GREETER_SELFTEST_PASSWORD=x GREETER_SELFTEST_PICK=$DEVUSER" yes
 
 # Enter on an empty field is what asks for a face now. Run with the default
 # (no GREETER_AUTOBEGIN), so a pass proves nothing scans until asked.
@@ -165,12 +171,12 @@ run_enter_face_case() {
   if ! command -v wtype >/dev/null 2>&1; then note "-- enter-triggers-face" "skipped (no wtype)"; return; fi
   dir=$(mktemp -d)
   mkdir -p "$dir/home"
-  python3 "$MOCK" --socket "$dir/mock.sock" --user jianlongliu --password hunter2 \
+  python3 "$MOCK" --socket "$dir/mock.sock" --user "$MAINUSER" --password hunter2 \
     --log "$dir/start.log" --pidfile "$dir/mock.pid" --howdy >"$dir/mock.out" 2>&1 &
   mock=$!
   trap 'kill "$mock" 2>/dev/null || true' EXIT
   while [ ! -S "$dir/mock.sock" ]; do sleep 0.1; done
-  env HOME="$dir/home" GREETD_SOCK="$dir/mock.sock" GREETER_BRIDGE="$BRIDGE" GREETER_USER=jianlongliu \
+  env HOME="$dir/home" GREETD_SOCK="$dir/mock.sock" GREETER_BRIDGE="$BRIDGE" GREETER_USER=$MAINUSER \
     GREETER_ACCOUNTS_DIR="$ACCOUNTS" GREETER_CORNER_RADIUS=10 GREETER_FACE=1 GREETER_DEBUG_FOCUS=1 \
     timeout 40 qs -n -p "$GREETER" >"$dir/run.log" 2>&1 &
   greeter=$!
@@ -235,12 +241,12 @@ run_double_enter_case() {
   mkdir -p "$dir/home"
   # --delay holds the first create_session unanswered, which is the window the
   # second Enter has to land in.
-  python3 "$MOCK" --socket "$dir/mock.sock" --user jianlongliu --password hunter2 \
+  python3 "$MOCK" --socket "$dir/mock.sock" --user "$MAINUSER" --password hunter2 \
     --log "$dir/start.log" --pidfile "$dir/mock.pid" --howdy-fail --delay 3 >"$dir/mock.out" 2>&1 &
   mock=$!
   trap 'kill "$mock" 2>/dev/null || true' EXIT
   while [ ! -S "$dir/mock.sock" ]; do sleep 0.1; done
-  env HOME="$dir/home" GREETD_SOCK="$dir/mock.sock" GREETER_BRIDGE="$BRIDGE" GREETER_USER=jianlongliu \
+  env HOME="$dir/home" GREETD_SOCK="$dir/mock.sock" GREETER_BRIDGE="$BRIDGE" GREETER_USER=$MAINUSER \
     GREETER_ACCOUNTS_DIR="$ACCOUNTS" GREETER_CORNER_RADIUS=10 GREETER_FACE=1 GREETER_DEBUG_FOCUS=1 \
     timeout 40 qs -n -p "$GREETER" >"$dir/run.log" 2>&1 &
   greeter=$!
@@ -295,13 +301,13 @@ run_double_enter_case
 run_avatar_click_case() {
   dir=$(mktemp -d)
   mkdir -p "$dir/home"
-  python3 "$MOCK" --socket "$dir/mock.sock" --user jianlongliu --password hunter2 \
+  python3 "$MOCK" --socket "$dir/mock.sock" --user "$MAINUSER" --password hunter2 \
     --log "$dir/start.log" --pidfile "$dir/mock.pid" --howdy >"$dir/mock.out" 2>&1 &
   mock=$!
   trap 'kill "$mock" 2>/dev/null || true' EXIT
   while [ ! -S "$dir/mock.sock" ]; do sleep 0.1; done
   set +e
-    env HOME="$dir/home" GREETD_SOCK="$dir/mock.sock" GREETER_BRIDGE="$BRIDGE" GREETER_USER=jianlongliu \
+    env HOME="$dir/home" GREETD_SOCK="$dir/mock.sock" GREETER_BRIDGE="$BRIDGE" GREETER_USER=$MAINUSER \
       GREETER_ACCOUNTS_DIR="$ACCOUNTS" GREETER_CORNER_RADIUS=10 GREETER_FACE=1 \
       GREETER_DEBUG_FOCUS=1 GREETER_SELFTEST_CLICK_AVATAR=1 \
       timeout 14 qs -n -p "$GREETER" >"$dir/run.log" 2>&1

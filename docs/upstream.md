@@ -204,11 +204,11 @@ laravel 从 `~/.config/composer/vendor/bin/laravel` 改成 `~/.local/bin/laravel
 
 16. **GitHub 发布流程（2026-08-25 建立）**：移植差分推到 pub 仓库
     `github.com/jianlongliu/omarchy-on-niri`（PUBLIC，默认分支 `quattro`）。要点：
-    - 本地 working clone 在 `/home/yvonne/omarchy-on-niri`（独立的临时构建仓库，
+    - 本地 working clone 在 `/home/<dev-user>/omarchy-on-niri`（独立的临时构建仓库，
       **不是** LIVE 的 `~/.local/share/omarchy`——后者保留未提交工作树改动，避免破坏
       `git pull --ff-only`）。
     - push 走 **SSH**（`gh auth git-credential` 走 https 会弹密码，不可用）。
-    - gh 以 **jianlongliu** 身份操作（hosts/config 已拷进 `~/.config/gh`）；ed25519 密钥 +
+    - gh 以 **GitHub 账户**的身份操作（hosts/config 已拷进 `~/.config/gh`）；ed25519 密钥 +
       known_hosts 在 `~/.ssh`。
     - 重推流程：`git clone git@github.com:jianlongliu/omarchy-on-niri.git`（分支 `quattro`）→
       改 → `git commit` → `GIT_SSH_COMMAND="ssh -o BatchMode=yes" git push origin quattro`。

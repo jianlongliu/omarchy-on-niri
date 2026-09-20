@@ -1,7 +1,7 @@
 # Omarchy on niri — 移植方案与运维文档
 
 > 目的：把 DHH 的 Omarchy v4（原本 Arch + Hyprland + QuickShell）移植到 niri
-> 滚动平铺 Wayland 合成器上，运行在 `jianlongliu` 主账户（原 `yvonne` 实验账户已回迁），并保持 niri 原生体验。
+> 滚动平铺 Wayland 合成器上，运行在主账户（原实验账户已回迁），并保持 niri 原生体验。
 > 本文档是"上下文丢失也能重建"的持久记录。最后更新：2026-09-19（文档合并：`~/Documents` 母本与
 > 仓库 `docs/omarchy-on-niri-port.md` 归并为一，两份逐字节一致；补回仓库版缺的 §5.7/§5.8、媒体键 OSD、
 > `binds` 递归展开、发布流程等块，并补入仓库版今天的 §8.9 上游合并基线与 §9/§10 新条目；新增
@@ -40,9 +40,9 @@
 
 ## 1. 硬性约束（不可违背）
 
-1. **不破坏隔壁 `jianlongliu` 账户（uid 1000）**，用户仍在使用。
-   - 所有改动只落在 `/home/yvonne/`（`~/.config`, `~/.local`, `~/bin`）。
-   - 不写 `/home/jianlongliu`，不运行影响全系统的安装。
+1. **不破坏隔壁主账户（uid 1000）**，用户仍在使用。
+   - 所有改动只落在 `/home/<dev-user>/`（`~/.config`, `~/.local`, `~/bin`）。
+   - 不写 `~`，不运行影响全系统的安装。
 2. **系统底层不做变动**：
    - 保持 systemd-boot 引导加载器不变。
    - 保持 greetd / dms-greeter 显示管理器不变。
@@ -96,7 +96,7 @@ hyprctl 调用面有界、可直接映射。
 | `~/.config/omarchy/themes/tonal-spot/` | 用户级主题（`matugen.toml` + 自生成 `backgrounds/` + 静态 ANSI 16 色），`omarchy theme set Tonal-Spot` 选用（§8.10） |
 | `~/.config/omarchy/hooks/theme-set.d/20-materal` | 换 theme 时重新取色（与 `10-niri-border` 并列，§8.10；仓库副本 `hooks/theme-set.d/20-materal`） |
 | `~/.config/systemd/user/materal-recolor.{path,service}` | 盯 `current/` 与 `current/background` 的 path/service 单元：换壁纸即自动重取色（§8.10） |
-| `~/.config/omarchy/plugins/yvonne.arch-logo/`、`~/.config/omarchy/plugins/yvonne.workspaces/` | 用户级 bar 部件（仓库外、抗 `omarchy update`）：Arch logo、胶囊式工作区指示（§8.11） |
+| `~/.config/omarchy/plugins/jianlongliu.arch-logo/`、`~/.config/omarchy/plugins/jianlongliu.workspaces/` | 用户级 bar 部件（仓库外、抗 `omarchy update`）：Arch logo、胶囊式工作区指示（§8.11） |
 | `~/.config/omarchy/plugins/ronald.input-sources/` | 第三方 bar 部件：fcitx5 输入源徽章/切换菜单（`omarchy plugin add … --enable` 装的 git 克隆；仓库外、抗更新，§8.17） |
 | `~/.config/omarchy/backgrounds/{tonal-spot,catppuccin}` | 共享壁纸库软链 → `/data/Pictures/Wallpapers`（所有主题翻同一套图，§8.12） |
 | `~/omarchy-wallpaper-aio/` | 参考仓库 `jianlongliu/omarchy-wallpaper-aio` 的克隆：只含 `setup.sh`（把主题背景目录软链到壁纸库，§8.12） |
@@ -110,7 +110,7 @@ hyprctl 调用面有界、可直接映射。
 | `~/.config/omarchy/hooks/theme-set.d/10-niri-border` | 换 style 时自动 `omarchy-niri-apply-theme`（只写不重载，保护 SCALE）|
 | `~/.config/omarchy/hooks/post-update.d/10-niri-repatch` | `omarchy update` 后自动重放覆盖层 |
 | `~/.config/omarchy/niri-port/`（`niri.patch` + `Niri.qml` + `plugins/` + `plugin-patches/` + `backups/`）| 移植覆盖层产物（仓库外，重放用）。**当前：`niri.patch` 21 文件 / 38 hunk**，`--reverse --check` 通过、repatch 幂等，md5 `047e5866a03228e30ae6069e9b2b9dd9`（2026-09-20 深夜核，与仓库 `niri-port/niri.patch` 一致）|
-| `~/.ante/projects/-home-jianlongliu/memory/`（`omarchy-niri-migration.md` 等） | 项目记忆（旧 yvonne 侧那份已废弃） |
+| `~/.ante/projects/-home-<user>/memory/`（`omarchy-niri-migration.md` 等） | 项目记忆（旧实验账户侧那份已废弃） |
 
 ### 3.2 修改
 
@@ -138,7 +138,7 @@ hyprctl 调用面有界、可直接映射。
 | `~/.config/niri/config.kdl` | 编排器：`environment`/`spawn`/`animations`/`screenshot-path` + 6 个 `include`（§5.7）；`focus-ring` 在 `layout.kdl`，颜色由主题驱动（§5.6）|
 | `~/.config/niri/{input,monitor,layout,window-rules,effects,binds}.kdl` | 模块化拆分出的子配置（§5.7）：输入/显示器/布局/窗口规则(含圆角)/磨砂(effects)/按键 |
 | `~/.config/niri/effects.kdl` | 2026-09-19 给 `^omarchy-bar$` 配 `background-effect { xray false }`（浮栏磨砂；圆角模糊区域由插件端下发，§8.8）|
-| `~/.config/omarchy/shell.json` | bar：`id` = `charlieras262.floating-bar`、`floatGap` 8、`cornerRadius` 10；`layout.left` = `yvonne.arch-logo` + `yvonne.workspaces`；`layout.right` 2026-09-19 摘掉空转的 `charlieras262.omablur`、并由 `ronald.input-sources` 取代 `ryuhzk.ime`；`layout.center` 同日摘掉 `omarchy.keyboard-layout`（与插件徽章重复，§8.11、§8.17）；2026-09-20 `layout.right` 的 `omarchy.power` 加 `"showPercentage": true`、`layout.center` 摘掉 `omarchy.system-update`（§8 第 28 条）|
+| `~/.config/omarchy/shell.json` | bar：`id` = `charlieras262.floating-bar`、`floatGap` 8、`cornerRadius` 10；`layout.left` = `jianlongliu.arch-logo` + `jianlongliu.workspaces`；`layout.right` 2026-09-19 摘掉空转的 `charlieras262.omablur`、并由 `ronald.input-sources` 取代 `ryuhzk.ime`；`layout.center` 同日摘掉 `omarchy.keyboard-layout`（与插件徽章重复，§8.11、§8.17）；2026-09-20 `layout.right` 的 `omarchy.power` 加 `"showPercentage": true`、`layout.center` 摘掉 `omarchy.system-update`（§8 第 28 条）|
 | `~/.config/ghostty/config` | 半透明 (`background-opacity = 0.85`) + 关自带模糊 (`background-blur-radius = 0`)，blur 交给 niri（§5.8） |
 
 ### 3.3 备份（重要，可回滚）
@@ -184,8 +184,8 @@ hyprctl 调用面有界、可直接映射。
 
 ```kdl
 environment {
-    OMARCHY_PATH "/home/yvonne/.local/share/omarchy"
-    PATH "/home/yvonne/bin:/home/yvonne/.local/share/omarchy/bin:/home/yvonne/.local/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin"
+    OMARCHY_PATH "/home/<dev-user>/.local/share/omarchy"
+    PATH "/home/<dev-user>/bin:/home/<dev-user>/.local/share/omarchy/bin:/home/<dev-user>/.local/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin"
 }
 ```
 
@@ -194,7 +194,7 @@ niri 语法要点：**不能写 `=`，不能写 `$PATH`**（不会展开），�
 ### 5.2 启动 QuickShell（替换 niri 自带的 waybar）
 
 ```kdl
-spawn-sh-at-startup "quickshell -n -p /home/yvonne/.local/share/omarchy/shell"
+spawn-sh-at-startup "quickshell -n -p /home/<dev-user>/.local/share/omarchy/shell"
 ```
 
 ### 5.3 Omarchy 绑定（不冲突子集）
@@ -371,7 +371,7 @@ output "eDP-1" {
   fallback 回 4K 并报 `GL_INVALID_VALUE`，也更耗电。
 - `scale 2.0` 是整数缩放 → X11 应用锐利，且比 1.5/1.6 更大更舒适；逻辑分辨率
   = 2560/2 × 1600/2 = 1280×800。
-- 参考邻居 `jianlongliu` 的 `~/Documents/README-vantage.md`（pkexec 可读）：vantage `res`
+- 参考邻居主账户的 `~/Documents/README-vantage.md`（pkexec 可读）：vantage `res`
   三档为 **原生 4K/2.25、均衡 2560×1600/1.5、省电 1920×1200/1.25**。本机最终用
   「均衡模式 + scale 2.0」。
 
@@ -517,7 +517,7 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
       `~/.config/omarchy/hooks/post-update.d/10-niri-repatch`。
     - 每次 `omarchy update` 之后钩子自动重放；若冲突（上游改了同一函数）则手动合并（找 Ante）。
 11. bar 部件与主题取色（**用户级，抗更新**）：
-    - 拷 `~/.config/omarchy/plugins/{yvonne.arch-logo,yvonne.workspaces}/`；装第三方浮栏
+    - 拷 `~/.config/omarchy/plugins/{jianlongliu.arch-logo,jianlongliu.workspaces}/`；装第三方浮栏
       `omarchy plugin add https://github.com/Charlieras262/omarchy-floating-bar.git --yes`，
       再按 `niri-port/plugin-patches/charlieras262.floating-bar.patch` 打 niri 适配（见 §8.11）。
     - 拷 `~/bin/materal-update`、主题 `~/.config/omarchy/themes/tonal-spot/`、钩子
@@ -552,7 +552,7 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
 | `§8 第 14 条` | 菜单 Apps 列表启动全部失灵 | `docs/behavior.md` |
 | `§8 第 15 条` | brightnessctl 授权安装 + 背光权限 | `docs/behavior.md` |
 | `§8 第 16 条` | GitHub 发布流程 | `docs/upstream.md` |
-| `§8 第 17 条` | 迁移到主账户 jianlongliu 系统级 vs 用户级 | `docs/migration.md` |
+| `§8 第 17 条` | 迁移到主账户系统级 vs 用户级 | `docs/migration.md` |
 | `§8 第 18 条` | 弹窗未给浮栏让位 | `docs/visual.md` |
 | `§8 第 19 条` | 耗电/续航专项 | `docs/behavior.md` |
 | `§8 第 20 条` | 换主题时 omarchy-theme-set-browser-pol… | `docs/behavior.md` |
@@ -605,7 +605,7 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
 - [x] hyprctl 垫片查询与 dispatch 均工作。
 - [x] `jq` / `satty` / `inotify-tools` 安装（pkexec）。
 - [x] `omarchy-capture-region` / `omarchy-capture-screenshot` 无 jq 报错（monitors 补 activeWorkspace 后）。
-- [x] `jianlongliu` 未被触碰（mtime 未变）。
+- [x] 主账户未被触碰（mtime 未变）。
 - [x] 键位重映射：方向键方案 + `Mod+K`/`Mod+Ctrl+L` 让给 Omarchy（`load-config-file` 重载后）。
 - [x] 背景壁纸显示：`qt6-imageformats` + QML/theme-set 修复后，`grim` 见波纹像素。
 - [x] A 层：菜单项全部指向 `config.kdl`（不再出空文件），`omarchy-refresh-hyprland` niri no-op。
@@ -617,7 +617,7 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
   `/etc/pam.d/omarchy-lock-password` 不存在，`lock()` 直接返回 `missing-pam`（stock 与第三方插件同款门禁）；
   `pkexec omarchy-apply-lock` 补上后 `lock status` 的 `passwordPam` = `true`；顺带删掉被上游 `grep -qi finger`
   误判生成的 `omarchy-lock-fingerprint`，并排除 dms-greeter（它只写 `/etc/pam.d/greetd`）（见 §8.18）。
-- [x] Omarchy 锁屏（`Mod+Ctrl+L`）在 niri 上**真人**实测（2026-09-19）：按下即锁、输密码即解锁；且此时锁屏已经换成自研 `yvonne.split-lock`（§11.18–§11.20），日志 `lock-requested → screen-stabilizing → secure=true → unlocked`。
+- [x] Omarchy 锁屏（`Mod+Ctrl+L`）在 niri 上**真人**实测（2026-09-19）：按下即锁、输密码即解锁；且此时锁屏已经换成自研 `jianlongliu.split-lock`（§11.18–§11.20），日志 `lock-requested → screen-stabilizing → secure=true → unlocked`。
 - [ ] **锁屏与登录界面的账户切换统一用头像**（2026-09-19 用户提出）：
   - 登录界面 `split-greeter`：账户选择器以**头像为主体**（一行头像、选中高亮），用户名降为次要信息；头像沿用 `/var/lib/AccountsService/icons/<user>`，缺省首字母圆牌。
   - 锁屏 `split-lock`：现在是单账户（只解当前会话）。要支持"切到别的账户"，除了头像选择器，还得把会话交回 greetd —— 锁的 PAM 服务 `/etc/pam.d/omarchy-lock-password` 只认当前登录用户，跨账户必然要重走一次登录会话。
@@ -688,7 +688,7 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
 
 ## 10. 关键环境信息
 
-- 两个账户**同属用户本人**：`jianlongliu`（uid 1000）是**日用主账户**（当前跑**原生 DMS**：`dms-shell` / `dms-shell-niri` / `dankcalendar-bin` / `greetd-dms-greeter-bin`），`yvonne`（uid 1001, gid 1003, groups `wheel` / `video`）是**专门给本移植做实验**的账户。`/home/yvonne` 是 `drwx------`、`/home/jianlongliu` 是 `drwxr-x---` → 两边户目录互不可读，跨账户操作只能在各自账户内执行（迁移见 §11）。
+- 两个账户**同属用户本人**：主账户（uid 1000）是**日用账户**（当前跑**原生 DMS**：`dms-shell` / `dms-shell-niri` / `dankcalendar-bin` / `greetd-dms-greeter-bin`），实验账户（uid 1001, gid 1003, groups `wheel` / `video`）是**专门给本移植做实验**的账户。`$DEV_HOME` 是 `drwx------`、`~` 是 `drwxr-x---` → 两边户目录互不可读，跨账户操作只能在各自账户内执行（迁移见 §11）。
 - niri 26.04 (8ed0da4) 位于 `/usr/bin/niri`。
 - 显示管理器：greetd / dms-greeter（DMS 自家 greeter，`/etc/greetd/config.toml` / `niri/dms.kdl` 归主账户所有）。包管理器 paru。
 - 电源后端：**TLP**（`tlp` + `tlp-pd` 1.10.2，D-Bus `net.hadess.PowerProfiles`），**无** power-profiles-daemon（`powerprofilesctl` 缺失）。

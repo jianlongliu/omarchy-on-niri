@@ -1,4 +1,4 @@
-# Omarchy 插件层：现状与运维（主账户 jianlongliu）
+# Omarchy 插件层：现状与运维（主账户）
 
 > 核于 2026-09-20。姊妹卷：主文档 `omarchy-on-niri.md`（当前事实：约束/架构/文件清单/部署/验证）、
 > `omarchy-niri-shims.md`（垫片）、`omarchy-niri-visual.md`（磨砂全栈等视觉调整）、
@@ -21,13 +21,13 @@
 | `meviusisback.ai-subs` | 1.4.2 | bar-widget | meviusisback/omarchy-ai-subs | 各家 AI 订阅的用量 / 余额 | 有 · §5.1 |
 | `ronald.input-sources` | 0.1.0 | bar-widget | ronaldlangeveld/omarchy-input-sources | fcitx5 输入源徽章 + 菜单 | 有 · §5.2 |
 | `jrmmhm.pocket` | 0.4.1 | bar-widget | jrmmhm/omarchy-pocket | 把不常用的 bar 部件收进抽屉 | 无 |
-| `yvonne.arch-logo` | 1.0.0 | bar-widget | 自研（无 git） | Arch logo + 菜单 | 自研 · §5.5 |
-| `yvonne.workspaces` | 1.0.0 | bar-widget | 自研（clone of `omarchy.workspaces`） | 胶囊工作区 | 自研 · §5.5 |
-| `yvonne.split-lock` | 0.1.0 | service | 自研（clone of `omarchy.lock`） | 分屏锁屏 | 自研 · §5.5 |
+| `jianlongliu.arch-logo` | 1.0.0 | bar-widget | 自研（无 git） | Arch logo + 菜单 | 自研 · §5.5 |
+| `jianlongliu.workspaces` | 1.0.0 | bar-widget | 自研（clone of `omarchy.workspaces`） | 胶囊工作区 | 自研 · §5.5 |
+| `jianlongliu.split-lock` | 0.1.0 | service | 自研（clone of `omarchy.lock`） | 分屏锁屏 | 自研 · §5.5 |
 
 当前 bar 布局（`~/.config/omarchy/shell.json` → `bar.layout`）：
 
-- 左：`yvonne.arch-logo` · `yvonne.workspaces` · `meviusisback.ai-subs`（Data 模式，默认显示 Command Code）
+- 左：`jianlongliu.arch-logo` · `jianlongliu.workspaces` · `meviusisback.ai-subs`（Data 模式，默认显示 Command Code）
 - 中：`omarchy.indicators` · `omarchy.clock` · `omarchy.weather` · `omarchy.system-update`
 - 右：`omarchy.tray`（hidden: `Fcitx`）· `jrmmhm.pocket` · `ronald.input-sources` · `omarchy.agents` ·
   `omarchy.bluetooth` · `omarchy.network` · `omarchy.audio` · `omarchy.monitor` · `omarchy.power`
@@ -40,15 +40,15 @@
   `service` / `panel` / `overlay` / `menu`）、`entryPoints`、`activation`；
   bar 部件还要有 `barWidget`（`displayName` / `category` / `defaults` / `schema` —— `schema` 就是面板里
   那几行设置 UI）。`omarchy plugin validate <dir>` 复刻了壳层 `PluginRegistry.qml` 的校验。
-- **`omarchy:` 兼容字段**：`clonedFrom` 标出它是从哪个第一方插件 clone 来的（`yvonne.workspaces` ←
-  `omarchy.workspaces`，`yvonne.split-lock` ← `omarchy.lock`，`charlieras262.floating-bar` ← `omarchy.bar`）。
+- **`omarchy:` 兼容字段**：`clonedFrom` 标出它是从哪个第一方插件 clone 来的（`jianlongliu.workspaces` ←
+  `omarchy.workspaces`，`jianlongliu.split-lock` ← `omarchy.lock`，`charlieras262.floating-bar` ← `omarchy.bar`）。
 - **启用状态写在 `~/.config/omarchy/shell.json`**：
   - bar 部件：**在 `bar.layout.{left,center,right}[]` 里出现就是启用**（关掉 = 从数组里删掉）；
   - 非 bar 插件（service / panel …）：**默认启用**，关掉才写进顶层 `disabledPlugins[]`
-    （本机 `omarchy.lock` 在那里，因为锁屏换成了 clone `yvonne.split-lock`）；显式列进顶层
-    `plugins[]` 的是必须常驻的（本机 `yvonne.split-lock`）；
+    （本机 `omarchy.lock` 在那里，因为锁屏换成了 clone `jianlongliu.split-lock`）；显式列进顶层
+    `plugins[]` 的是必须常驻的（本机 `jianlongliu.split-lock`）；
   - `cloneSourceRestores[]`：**禁用这个 clone 时，把它的上游源插件恢复启用**
-    （本机 `yvonne.split-lock` → 关掉它，`omarchy.lock` 自动回来）。
+    （本机 `jianlongliu.split-lock` → 关掉它，`omarchy.lock` 自动回来）。
 - **部件的设置是平铺在该 bar 条目里的**（没有单独的设置文件）：
 
   ```json
@@ -222,20 +222,20 @@ journalctl -t omarchy-shell --since "-10min" | tail -50
 - 它对 `hyprctl -j getoption general:gaps_out` 有依赖（在 niri 上由 `~/bin/hyprctl` 垫片兜住），
   `floatGap` 显式写在 shell.json 里所以不靠它。
 
-### 5.5 自研三件（`yvonne.*`）
+### 5.5 自研三件（`jianlongliu.*`）
 
 | 插件 | 源码 | 说明 |
 |---|---|---|
-| `yvonne.arch-logo` | 只在 `~/.config/omarchy/plugins/`（无 git、仓库里没有） | Arch logo 按钮 + 菜单 |
-| `yvonne.workspaces` | 同上 | 胶囊工作区（`clonedFrom: omarchy.workspaces`），第一方 `omarchy.workspaces` 已停用；**点数动态**（§5.5 末） |
-| `yvonne.split-lock` | 正本在 `~/omarchy-on-niri/split-lock/`（含 `install.sh`、测试、`face-pam.sh`） | 分屏锁屏，`clonedFrom: omarchy.lock`；在 `shell.json` 的 `plugins[]` 里常驻 |
+| `jianlongliu.arch-logo` | 只在 `~/.config/omarchy/plugins/`（无 git、仓库里没有） | Arch logo 按钮 + 菜单 |
+| `jianlongliu.workspaces` | 同上 | 胶囊工作区（`clonedFrom: omarchy.workspaces`），第一方 `omarchy.workspaces` 已停用；**点数动态**（§5.5 末） |
+| `jianlongliu.split-lock` | 正本在 `~/omarchy-on-niri/split-lock/`（含 `install.sh`、测试、`face-pam.sh`） | 分屏锁屏，`clonedFrom: omarchy.lock`；在 `shell.json` 的 `plugins[]` 里常驻 |
 
 三者都**没有 `.git`**，所以 `omarchy plugin update` 不会碰它们（更新只收有 `.git` 的目录）。
 ⚠ 后两个的源码改动要**同时**同步到 `~/.config/omarchy/plugins/` 那份才生效（install.sh 负责拷贝）。
 锁屏相关的两个结构性缺口（howdy 没进 `omarchy-lock-password`、`faceConfigured` 写死 false）见
 `omarchy-on-niri.md`。
 
-**`yvonne.workspaces` 点数改动态（2026-09-20，用户要的「1+1 → 有 app 就三个」）**
+**`jianlongliu.workspaces` 点数改动态（2026-09-20，用户要的「1+1 → 有 app 就三个」）**
 
 - 旧行为：`workspaceIds()` 写死 `[1, 2, 3, 4, 5]` + 补 6–10 的实际 id，**永远 5 个点**。
 - 新行为：显示 `1..N`，`N = 最靠右的「有窗口 **或** 正在聚焦」的工作区 + 1`，**最少 2 个、封顶 10**。
@@ -244,11 +244,11 @@ journalctl -t omarchy-shell --since "-10min" | tail -50
 - ⚠ 关键是**按「占用」算、不按「工作区是否存在」算**：niri 会长期留着空工作区（实测去 ws2 转一圈回来，
   空 ws3 还挂在 `niri msg workspaces` 里），胶囊照样只画 2 个点 —— 否则一逛工作区就永远回不去 2 个点。
 - 聚焦空工作区时也把它算进 `N`（`w.focused` 那半边），不然跳过去的瞬间胶囊会把自己藏掉。
-- 改法：`~/.config/omarchy/plugins/yvonne.workspaces/Workspaces.qml` 的 `workspaceIds()`；
+- 改法：`~/.config/omarchy/plugins/jianlongliu.workspaces/Workspaces.qml` 的 `workspaceIds()`；
   备份 `Workspaces.qml.bak-20260920-capsuledots`（原地），patch 存档
-  `plugin-patches/yvonne.workspaces.patch`（**该目录没有 git**，用 `diff -u --label a/… --label b/…` 生成，
+  `plugin-patches/jianlongliu.workspaces.patch`（**该目录没有 git**，用 `diff -u --label a/… --label b/…` 生成，
   `git apply --reverse --check` 通过 = 与工作树一致）。它**不进 `omarchy plugin update` 那条流程**（§6 只管有 `.git` 的）。
-- 生效/验收：QML 不热更 → `omarchy-restart-shell`；`debugBarGeometry` 里 `yvonne.workspaces` 宽度
+- 生效/验收：QML 不热更 → `omarchy-restart-shell`；`debugBarGeometry` 里 `jianlongliu.workspaces` 宽度
   只有 ws1 时 **~104 → 52**；肉眼数点子用 `grim -g "0,0 200x40" /tmp/bar.png`。
 - 回退：`cp Workspaces.qml.bak-20260920-capsuledots Workspaces.qml && omarchy-restart-shell`。
 
@@ -299,7 +299,7 @@ omarchy-restart-shell                               # QML 不热更，必须重�
 | `~/.config/omarchy/plugins/` | 第三方 / 自研插件 |
 | `~/.config/omarchy/shell.json` | 插件开关 + bar 布局 + 内联设置 |
 | `~/.config/omarchy/niri-port/plugin-patches/` | 第三方插件的本地魔改存档 |
-| `~/omarchy-on-niri/split-lock/` | `yvonne.split-lock` 源码正本 |
+| `~/omarchy-on-niri/split-lock/` | `jianlongliu.split-lock` 源码正本 |
 | `~/omarchy-on-niri/docs/plugins.md` | 本文档的仓库镜像（与 `~/Documents/omarchy-niri-plugins.md` 逐字节一致） |
 | `~/Documents/omarchy-on-niri.md` | 主文档（当前事实 + 模块映射表）；本卷末附 §8.11，§8.17 在 `omarchy-niri-behavior.md`，blur 全栈在 `omarchy-niri-visual.md` |
 | `$OMARCHY_PATH/shell/services/PluginRegistry.qml` | 壳层实际执行的插件注册与启用规则 |
@@ -319,7 +319,7 @@ omarchy-restart-shell                               # QML 不热更，必须重�
 三件事都是**用户层插件**，放在 `~/.config/omarchy/plugins/`（仓库外 → `omarchy update` 碰不到，
 `niri.patch` 也不必为它们加 hunk）。bar 结构仍由 `~/.config/omarchy/shell.json` 决定。
 
-**1. 胶囊式工作区指示 —— `yvonne.workspaces`**（manifest 记 `omarchy.clonedFrom: omarchy.workspaces`）
+**1. 胶囊式工作区指示 —— `jianlongliu.workspaces`**（manifest 记 `omarchy.clonedFrom: omarchy.workspaces`）
 
 - 数据：`Niri.workspaces.values[]`（`id` 是 niri 的 `idx`），占用判定 `toplevels.values.length > 0`。
 - 样式：GNOME 式——每个 workspace 一个圆点，**聚焦的点横向拉伸 2.6×**；四级 alpha 全部取自
@@ -327,7 +327,7 @@ omarchy-restart-shell                               # QML 不热更，必须重�
 - 点击：走 `hyprctl` 垫片的 `hl.dsp.focus({ workspace = "N" })`。
 - 坑：`implicitHeight: barSize` 必须写，否则该 slot 会顶到 bar 上沿。
 
-**2. Arch logo —— `yvonne.arch-logo`**（普通 bar-widget）
+**2. Arch logo —— `jianlongliu.arch-logo`**（普通 bar-widget）
 
 - 左键 `omarchy-shell shell toggle omarchy.menu '{"menu":"root"}'`；右键 `xdg-terminal-exec`。
 - SVG 必须是纯 `#ffffff`：`MultiEffect.colorization` 是**按源图亮度相乘**着色，带灰度的 logo 会发暗。

@@ -3,7 +3,7 @@
 # omarchy:summary=Set and remember the power profile for AC or battery use
 # omarchy:args=[autodetect|ac|battery] [power-saver|balanced|performance]
 #
-# yvonne port: prefers power-profiles-daemon's `powerprofilesctl`, and falls back
+# omarchy-on-niri port: prefers power-profiles-daemon's `powerprofilesctl`, and falls back
 # to the TLP backend (tlp-pd) via D-Bus net.hadess.PowerProfiles when
 # powerprofilesctl is absent. Lives in ~/bin so it survives `omarchy update`.
 
