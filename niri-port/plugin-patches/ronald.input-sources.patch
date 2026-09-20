@@ -1,0 +1,72 @@
+diff --git a/Model.js b/Model.js
+index ced7ef7..768c872 100644
+--- a/Model.js
++++ b/Model.js
+@@ -52,8 +52,13 @@ function prettyName(im) {
+ // reads "A" like the ABC source on macOS; several plain layouts fall back to
+ // their language codes so they stay distinguishable; engines use the native
+ // label fcitx ships (한, あ, 拼, …).
++// Local override (2026-09-19): show 拼 for fcitx's rime source instead of its ㄓ label.
++var badgeOverrides = { rime: "拼" }
++
+ function badgeText(im, ims) {
+   if (!im) return ""
++  var override = badgeOverrides[String(im.id || "").toLowerCase()]
++  if (override) return override
+   if (isPlainKeyboard(im)) {
+     var keyboards = (ims || []).filter(isPlainKeyboard)
+     if (keyboards.length > 1) {
+diff --git a/Panel.qml b/Panel.qml
+index 3a5b813..787f43a 100644
+--- a/Panel.qml
++++ b/Panel.qml
+@@ -31,6 +31,14 @@ Panel {
+ 
+   readonly property bool showSourceName: setting("showSourceName", false) === true
+   readonly property real pollInterval: Number(setting("pollInterval", 0.5)) || 0.5
++  // Local override (2026-09-19): fcitx pins a group's default source to the
++  // plain keyboard layout, so after login the first input context is English
++  // even though this seat types with rime. Writing DefaultIM or clearing the
++  // group layout doesn't survive fcitx's own profile rewrite (see §8.17), so
++  // the widget re-applies the preferred source once per shell start instead —
++  // through exactly the same path a menu click takes. "" disables it.
++  readonly property string startupSource: String(setting("startupSource", "rime") || "")
++  property bool startupApplied: false
+   // What the badge and check describe. While no input context is focused
+   // (empty desktop, this menu itself) fcitx names no active source, so the
+   // last known one keeps speaking; before any is known, the group's first
+@@ -67,6 +75,18 @@ Panel {
+     groupProc.running = true
+   }
+ 
++  // Enforce the preferred startup source once, as soon as fcitx names a real
++  // active source (the watcher's first "im …" line) and the group list is
++  // known. startupApplied makes it one-shot, so it never fights a later
++  // switch — and a missing preferred source just turns the override off.
++  function applyStartupSource() {
++    if (startupApplied || startupSource === "") return
++    if (!fcitxAvailable || currentIm === "" || ims.length === 0) return
++    if (!Model.findIm(ims, startupSource)) { startupApplied = true; return }
++    startupApplied = true
++    if (currentIm !== startupSource) selectIm(startupSource)
++  }
++
+   function selectIm(id) {
+     if (!id) return
+     // Optimistic: the badge and check move the moment the row is clicked.
+@@ -172,6 +192,7 @@ Panel {
+         // A source the group list doesn't know means the list is stale —
+         // fcitx restarted or the user edited the group in fcitx5-configtool.
+         if (!Model.findIm(root.ims, im)) root.refresh()
++        root.applyStartupSource()
+       }
+     }
+   }
+@@ -201,6 +222,7 @@ Panel {
+         // Keep the last known list across a transient empty reply so the
+         // widget doesn't blink out while fcitx restarts.
+         if (parsed.length > 0) root.ims = parsed
++        root.applyStartupSource()
+       }
+     }
+   }

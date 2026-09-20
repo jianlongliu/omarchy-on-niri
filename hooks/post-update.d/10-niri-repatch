@@ -9,3 +9,11 @@
 if [[ ${XDG_CURRENT_DESKTOP:-} == niri ]] && [[ -x "$HOME/bin/omarchy-niri-repatch" ]]; then
   "$HOME/bin/omarchy-niri-repatch" || true
 fi
+
+# An update replaces QML under a running shell, so the shell keeps serving the
+# old widgets until it is restarted (a menu jsonc left mid-write can also parse
+# to nothing, which used to show up as an empty menu).  Upstream's
+# omarchy-update-restart only offers a reboot, so restart the shell here.
+if [[ ${XDG_CURRENT_DESKTOP:-} == niri ]] && command -v omarchy-restart-shell >/dev/null 2>&1; then
+  omarchy-restart-shell >/dev/null 2>&1 || true
+fi

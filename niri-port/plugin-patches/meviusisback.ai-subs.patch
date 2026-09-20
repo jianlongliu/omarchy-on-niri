@@ -1,0 +1,101 @@
+diff --git a/Panel.qml b/Panel.qml
+index f0dcff3..fe0090b 100644
+--- a/Panel.qml
++++ b/Panel.qml
+@@ -235,7 +235,12 @@ Panel {
+       else root.toggle()
+     }
+ 
+-    implicitWidth: (chipLogo.visible ? chipLogo.width + Style.space(6) : 0)
++    // Leading pad, matching the ~8px side padding Omarchy's built-in widgets
++    // use: without it the logo sits flush against the previous bar module.
++    readonly property real leadingPad: Style.space(8)
++
++    implicitWidth: dataButton.leadingPad
++      + (chipLogo.visible ? chipLogo.width + Style.space(6) : 0)
+       + (dataButton.hasWindows ? chipWindowsRow.implicitWidth : chipLabel.implicitWidth)
+       + Style.space(17)
+     implicitHeight: Math.max(chipLogo.height, dataButton.hasWindows ? chipWindowsRow.implicitHeight : chipLabel.implicitHeight)
+@@ -243,6 +248,7 @@ Panel {
+     Image {
+       id: chipLogo
+       anchors.left: parent.left
++      anchors.leftMargin: dataButton.leadingPad
+       anchors.verticalCenter: parent.verticalCenter
+       width: Style.font.body * 1.15
+       height: width
+@@ -258,10 +264,10 @@ Panel {
+     Row {
+       id: chipWindowsRow
+       anchors.left: chipLogo.visible ? chipLogo.right : parent.left
+-      anchors.leftMargin: chipLogo.visible ? Style.space(6) : 0
++      anchors.leftMargin: chipLogo.visible ? Style.space(6) : dataButton.leadingPad
+       anchors.verticalCenter: parent.verticalCenter
+       visible: dataButton.hasWindows
+-      spacing: Style.space(6)
++      spacing: Style.space(10)
+ 
+       Repeater {
+         model: dataButton.hasWindows ? dataButton.sub.windows : []
+@@ -271,7 +277,7 @@ Panel {
+           required property var modelData
+           required property int index
+           anchors.verticalCenter: parent.verticalCenter
+-          spacing: Style.space(4)
++          spacing: Style.space(6)
+ 
+           // Dot separator before subsequent windows
+           Text {
+@@ -281,7 +287,7 @@ Panel {
+             textFormat: Text.PlainText
+             color: root.dim
+             font.family: root.fontFamily
+-            font.pixelSize: Style.font.caption
++            font.pixelSize: Style.font.body
+           }
+ 
+           // Window label (5h, W, M)
+@@ -291,7 +297,7 @@ Panel {
+             textFormat: Text.PlainText
+             color: root.dim
+             font.family: root.fontFamily
+-            font.pixelSize: Style.font.caption
++            font.pixelSize: Style.font.body
+           }
+ 
+           // Percentage text
+@@ -302,7 +308,7 @@ Panel {
+             textFormat: Text.PlainText
+             color: dataButton.chipColor
+             font.family: root.fontFamily
+-            font.pixelSize: Style.font.caption
++            font.pixelSize: Style.font.body
+           }
+ 
+           // Real graphical mini progress bar beside the %
+@@ -342,7 +348,7 @@ Panel {
+             textFormat: Text.PlainText
+             color: root.dim
+             font.family: root.fontFamily
+-            font.pixelSize: Style.font.caption
++            font.pixelSize: Style.font.body
+           }
+         }
+       }
+@@ -352,14 +358,14 @@ Panel {
+     Text {
+       id: chipLabel
+       anchors.left: chipLogo.visible ? chipLogo.right : parent.left
+-      anchors.leftMargin: chipLogo.visible ? Style.space(6) : 0
++      anchors.leftMargin: chipLogo.visible ? Style.space(6) : dataButton.leadingPad
+       anchors.verticalCenter: parent.verticalCenter
+       visible: !dataButton.hasWindows
+       text: dataButton.chipText
+       textFormat: Text.PlainText
+       color: dataButton.chipColor
+       font.family: root.fontFamily
+-      font.pixelSize: Style.font.caption
++      font.pixelSize: Style.font.body
+     }
+ 
+     MouseArea {

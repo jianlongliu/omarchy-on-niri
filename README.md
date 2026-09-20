@@ -14,7 +14,8 @@ standalone installer** — it assumes a working Arch + niri login session and an
 - `port-bin/` — the PATH-first override scripts that translate the Hyprland-coupled bits to niri
   (the `hyprctl` shim is the critical one; `uwsm-app` rescues every `uwsm-app -- <cmd>` call site
   in Omarchy's `bin/`, which is a uwsm-session facility a niri session does not have).
-- `niri-port/` — the idempotent overlay patch (`niri.patch` + `Niri.qml`) that survives `omarchy update`.
+- `niri-port/` — the idempotent overlay patch (`niri.patch` + `Niri.qml`) that survives `omarchy update`,
+  plus `plugin-patches/` (local edits to third-party bar plugins, applied by hand — nothing replays them).
 - `niri-config/` — the niri-side wiring (`omarchy.kdl.template` to merge into `config.kdl`, plus a
   `shell.json` sample).
 - `hooks/` — Omarchy update/theme hooks that reapply the port.
@@ -41,6 +42,7 @@ omarchy-on-niri/
 ├── docs/INSTALL.md  <- hand-run install procedure
 ├── docs/omarchy-on-niri-port.md <- full port notes
 ├── docs/lock.md <- lock screen + login volume
+├── scripts/     <- check-doc-mirrors.sh (the notes and their repo mirror stay byte-identical)
 └── README.md
 ```
 

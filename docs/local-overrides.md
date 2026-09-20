@@ -27,6 +27,8 @@
 | `shell/` | 移植后的 Omarchy Quickshell 源码（层 1） | `install.sh` 把覆盖层 `git apply` 进 `$OMARCHY_PATH`（幂等），或手工 `~/bin/omarchy-niri-repatch` |
 | `port-bin/*`（8 个） | `hyprctl`、`uwsm-app`、`materal-update`、`omarchy-niri-system`、`omarchy-niri-apply-theme`、`omarchy-niri-repatch`、`omarchy-powerprofiles-{list,set}` | `install.sh` 拷进 `~/bin`（PATH-first） |
 | `niri-port/niri.patch` + `Niri.qml` + `plugins/blurwallpaper` | 覆盖层，挺过 `omarchy update` | `~/bin/omarchy-niri-repatch`（幂等） |
+| `niri-port/plugin-patches/` | 4 个第三方插件的本地魔改补丁（+ README 说明怎么生成/怎么重放） | 手工 `git apply`（无自动重放器） |
+| `scripts/check-doc-mirrors.sh` | 校验正本 ↔ 镜像四对 md5（提交文档前跑） | `./scripts/check-doc-mirrors.sh` |
 | `niri-config/omarchy.kdl.template` + `shell.json` 示例 | niri 侧接线 | `install.sh` 会渲染成 `~/.config/niri/omarchy.kdl` 并拷 `shell.json`（**仅当不存在**）；**本机没走这条** —— 用的是模块化拆分，`config.kdl` 直接 include `{input,monitor,layout,window-rules,effects,binds}.kdl`，`omarchy.kdl` 不存在 |
 | `hooks/post-update.d/10-niri-repatch`、`hooks/theme-set.d/{10-niri-border,20-materal}` | 更新后重放覆盖层；换主题写边框渐变 | Omarchy 钩子机制自动调 |
 | `split-greeter/`、`split-lock/` | 自研登录器与锁屏，各带 `install.sh` + `tests/` | `sudo ./install.sh`（split-greeter 不碰 `config.toml`，最后一步手工） |
@@ -68,7 +70,7 @@
 | `extensions/omarchy-menu.jsonc` | 菜单用户层 override：`trigger.*` 屏蔽、`setup.input` 指 `niri/input.kdl`、screensaver 6 条 `when:"false"`。⚠ 同一 id 别写两遍；**别写行内注释**（`stripJsonc` 只删整行注释） | `.bak-20260919-{prehide,prelearn}`、`.bak-20260920-prescreensaver` |
 | `niri-port/` | `niri.patch`（与仓库同 md5）、`Niri.qml`、`plugin-patches/*.patch`（4 个，机器独有，见 §6） | 各自的 `.bak-*` |
 | `plugins/`（8 个） | 自研：`yvonne.arch-logo`、`yvonne.workspaces`、`yvonne.split-lock`（**没有 `.git`**，`omarchy plugin update` 不碰）；第三方：`charlieras262.floating-bar`、`ronald.input-sources`、`meviusisback.ai-subs`、`jrmmhm.pocket`、`io.github.claudsondouglas.arcdock`（**本身就是上游 git 克隆**，本地魔改用 `git diff` 就地生成 patch） | `plugin-patches/*.patch` 反向 `git apply -R` |
-| `hooks/` | 与仓库同（`post-update.d/10-niri-repatch` 本机多 8 行 → 见 §6 缺口） | 从仓库重拷 |
+| `hooks/` | 与仓库同（`post-update.d/10-niri-repatch` 的 `omarchy-restart-shell` 那 8 行 2026-09-20 已并回仓库，两侧 md5 `b077156959bc9cfb4c37941a4ffb3a5e` 一致） | 从仓库重拷 |
 
 ---
 
@@ -136,13 +138,13 @@ git apply --reverse --check niri.patch   # 必须通过
 
 1. `~/bin/omarchy-update`、`~/bin/omarchy-picker-warmup`、`~/bin/omarchy-display-text-size`
 2. `~/.config/systemd/user/omarchy-picker-warmup.service`（+ `graphical-session.target.wants/` 软链）
-3. `~/.config/omarchy/niri-port/plugin-patches/*.patch`（4 个：`charlieras262.floating-bar`、
-   `ronald.input-sources`、`meviusisback.ai-subs`、`yvonne.workspaces`）
+3. ~~`plugin-patches`~~ **已收进仓库（2026-09-20）**：`niri-port/plugin-patches/`（4 个 patch + README，
+   说明怎么 `git diff` 生成、怎么 `git apply` 重放）；机器上同目录的 `.bak-*` 是历史，仍只在本地。
 4. `~/.config/omarchy/{shell.json,shell.toml,extensions/omarchy-menu.jsonc}` 的实际取值
    （仓库只有 `niri-config/shell.json` 示例）
-5. **钩子漂移**：`~/.config/omarchy/hooks/post-update.d/10-niri-repatch` 比仓库那份多 8 行 ——
-   更新后额外 `omarchy-restart-shell`（上游 `omarchy-update-restart` 只给"重启"选项，而 QML 换了不重启
-   等于旧部件继续跑、菜单 jsonc 写到一半还会解析成空菜单）。**仓库那份应补上**。
+5. ~~钩子漂移~~ **已修（2026-09-20）**：本机那份多出的 8 行（更新后 `omarchy-restart-shell` ——
+   上游 `omarchy-update-restart` 只给"重启"选项，而 QML 换了不重启等于旧部件继续跑、菜单 jsonc 写到一半
+   还会解析成空菜单）已并回仓库，两侧一致。
 6. `/etc/pam.d/omarchy-lock-face`、`/etc/greetd/*` 是 `split-*/install.sh` 装的（脚本在仓库），
    但**已装好的机器状态**没有版本记录。
 

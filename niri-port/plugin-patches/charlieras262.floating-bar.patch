@@ -1,0 +1,86 @@
+diff --git a/Bar.qml b/Bar.qml
+index 6839594..a5d0408 100644
+--- a/Bar.qml
++++ b/Bar.qml
+@@ -1,7 +1,7 @@
+ import Quickshell
+-import Quickshell.Hyprland
+ import Quickshell.Io
+ import Quickshell.Wayland
++import Quickshell.Wayland._BackgroundEffect
+ import QtQuick
+ import QtQuick.Layouts
+ import qs.Commons
+@@ -119,13 +119,8 @@ Item {
+     gapsOutProbe.running = true
+   }
+ 
+-  Connections {
+-    target: Hyprland
+-    function onRawEvent(event) {
+-      if (event && event.name === "configreloaded") root.refreshGapsOut()
+-    }
+-  }
+-
++  // niri port: no Hyprland configreloaded event here. The probe runs once at
++  // startup and the float gap comes from shell.json's explicit `floatGap`.
+   Process {
+     id: gapsOutProbe
+     command: ["hyprctl", "-j", "getoption", "general:gaps_out"]
+@@ -565,11 +560,11 @@ Item {
+     return window && window.screen ? String(window.screen.name || "") : ""
+   }
+ 
+-  // The output Hyprland has focused, which is where a keyboard-summoned panel
+-  // belongs. Empty until Hyprland reports one, which leaves panel routing on
++  // The output the compositor has focused, which is where a keyboard-summoned
++  // panel belongs. Empty until there is one, which leaves panel routing on
+   // its per-monitor fallback rather than guessing at an output.
+   function focusedScreenName() {
+-    var monitor = Hyprland.focusedMonitor
++    var monitor = Niri.focusedMonitor
+     return monitor ? String(monitor.name || "") : ""
+   }
+ 
+@@ -1135,6 +1130,13 @@ Item {
+     WlrLayershell.namespace: "omarchy-bar"
+     WlrLayershell.layer: WlrLayer.Top
+ 
++    // niri port: hand niri the bar's own rounded rect as the blur region, so the
++    // frost follows the rounded shape instead of the full surface rectangle --
++    // blurring that rectangle smears the bar's fill out through its transparent
++    // corners into a halo (niri samples the composited scene; Hyprland fixes the
++    // same thing with `ignore_alpha` and niri has no equivalent).
++    BackgroundEffect.blurRegion: Region { item: barBackground; radius: root.effectiveCornerRadius }
++
+     Rectangle {
+       id: barBackground
+       anchors.fill: parent
+@@ -1144,13 +1146,21 @@ Item {
+       // means Style.shellOpacity below is an absolute result, not a
+       // multiplier on top of an already-translucent color -- shellOpacity a
+       // plugin never touches still reaching exactly opaque.
+-      color: root.transparent ? "transparent" : Qt.rgba(root.background.r, root.background.g, root.background.b, 1)
++      //
++      // niri port: keep that alpha instead. niri only blurs behind a surface
++      // that is not fully opaque, so with the alpha forced to 1 the bar had
++      // nothing to show through and the frost stayed invisible.
++      color: root.transparent ? "transparent"
++        : Qt.rgba(root.background.r, root.background.g, root.background.b,
++                  root.background.a > 0 ? root.background.a : 1)
+       // Style.shellOpacity is a shared token a plugin like Omablur sets when
+-      // it turns Hyprland blur on/off (see Commons/Style.qml) -- blur only
+-      // renders behind a surface that isn't fully opaque. Only applies when
+-      // the background is actually drawn: `transparent` already means
+-      // "nothing to see here" and takes priority over it.
+-      opacity: root.transparent ? 1 : Style.shellOpacity
++      // it turns blur on/off -- blur only renders behind a surface that isn't
++      // fully opaque. Only applies when the background is actually drawn:
++      // `transparent` already means "nothing to see here" and takes priority.
++      // niri port: this Omarchy version has no shellOpacity token, so fall
++      // back to fully opaque instead of assigning undefined to a double.
++      opacity: root.transparent ? 1
++        : (typeof Style.shellOpacity === "number" ? Style.shellOpacity : 1)
+       Behavior on radius { NumberAnimation { duration: 420; easing.type: Easing.InOutCubic } }
+       Behavior on color { ColorAnimation { duration: 420; easing.type: Easing.InOutCubic } }
+       Behavior on opacity { NumberAnimation { duration: 420; easing.type: Easing.InOutCubic } }

@@ -30,6 +30,7 @@ omarchy-on-niri/
 ├── port-bin/     <- 移植胶水：hyprctl 垫片 + uwsm-app 垫片 + niri 的 system/power/theme/repatch 脚本
 │                     install.sh 会把这些拷进 ~/bin（PATH 最前、挺过 `omarchy update`）
 ├── niri-port/    <- 覆盖层：niri.patch + Niri.qml（每次更新后重放）
+│                     + plugin-patches/（第三方 bar 插件的本地魔改补丁，只能手工重放）
 ├── niri-config/  <- omarchy.kdl.template（合并进 ~/.config/niri/config.kdl）
 │                     + shell.json 示例（Omarchy 配置层1）
 ├── hooks/        <- post-update.d/10-niri-repatch, theme-set.d/10-niri-border
@@ -37,6 +38,7 @@ omarchy-on-niri/
 ├── docs/INSTALL.zh.md   <- 手动执行安装流程
 ├── docs/omarchy-on-niri-port.md <- 完整移植笔记（中文）
 ├── docs/lock.md         <- 锁屏与登录专卷（中文）
+├── scripts/             <- check-doc-mirrors.sh（正本与仓库镜像必须逐字节一致）
 └── README.md / README.zh.md
 ```
 

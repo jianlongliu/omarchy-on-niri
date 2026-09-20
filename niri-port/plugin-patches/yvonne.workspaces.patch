@@ -1,0 +1,31 @@
+--- a/Workspaces.qml
++++ b/Workspaces.qml
+@@ -19,16 +19,24 @@
+     return null
+   }
+ 
++  // Dots are not a fixed 1..5 strip: show 1..N where N is one past the last
++  // workspace that holds a window (or the focused one, so a jump to an empty
++  // workspace never hides the capsule). Empty desktop = two dots: "1 + 1".
+   function workspaceIds() {
+-    var ids = [1, 2, 3, 4, 5]
+     var values = Niri.workspaces.values
++    var highest = 1
+ 
+     for (var i = 0; i < values.length; i++) {
+-      var id = values[i].id
+-      if (id > 0 && id <= 10 && ids.indexOf(id) === -1) ids.push(id)
++      var w = values[i]
++      var id = w.id
++      if (id <= 0 || id > 10) continue
++      var occupied = w.toplevels && w.toplevels.values.length > 0
++      if ((occupied || w.focused) && id > highest) highest = id
+     }
+ 
+-    ids.sort(function(left, right) { return left - right })
++    var ids = []
++    var last = Math.min(highest + 1, 10)
++    for (var n = 1; n <= last; n++) ids.push(n)
+     return ids
+   }
+ 
