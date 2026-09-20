@@ -22,6 +22,8 @@ standalone installer** — it assumes a working Arch + niri login session and an
   `docs/INSTALL.md` and should be followed by hand.
 - `docs/INSTALL.md` — the hand-run install procedure (deps, file placement, config merge, overlay, backlight).
 - `docs/omarchy-on-niri-port.md` — the full port decision log / notes.
+- `docs/lock.md` — the lock screen and login volume: the Split Greeter, `split-lock`, the PAM gate,
+  howdy and avatars, and greetd's single `configuring` slot.
 
 ## Repository layout
 
@@ -38,6 +40,7 @@ omarchy-on-niri/
 ├── install.sh    <- optional convenience wrapper (prefer the manual steps in docs/INSTALL.md)
 ├── docs/INSTALL.md  <- hand-run install procedure
 ├── docs/omarchy-on-niri-port.md <- full port notes
+├── docs/lock.md <- lock screen + login volume
 └── README.md
 ```
 

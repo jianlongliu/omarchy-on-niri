@@ -18,6 +18,8 @@ Arch + niri 登录会话、并且**已经装好 Omarchy**（或者你会先装 O
 - `install.sh` — 可选的一套便捷包装脚本。**不是推荐的路径**：手动步骤在 `docs/INSTALL.zh.md`，应按它逐条来做。
 - `docs/INSTALL.zh.md` — 手动执行安装流程（依赖、文件放位、配置合并、覆盖层、背光）。
 - `docs/omarchy-on-niri-port.md` — 完整的移植决策日志 / 笔记（**中文**）。
+- `docs/lock.md` — 锁屏与登录专卷：Split Greeter、`split-lock`、PAM 门禁、howdy 与头像，
+  以及 greetd 只有一格 `configuring` 的陷阱（章节编号沿用移植笔记，原处留指针）。
 
 ## 仓库结构
 
@@ -34,6 +36,7 @@ omarchy-on-niri/
 ├── install.sh    <- 可选便捷包装脚本（推荐按 docs/INSTALL.zh.md 手动来）
 ├── docs/INSTALL.zh.md   <- 手动执行安装流程
 ├── docs/omarchy-on-niri-port.md <- 完整移植笔记（中文）
+├── docs/lock.md         <- 锁屏与登录专卷（中文）
 └── README.md / README.zh.md
 ```
 

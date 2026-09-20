@@ -189,7 +189,7 @@ python3 vendor.py     # 插件升级或 omarchy update 之后重跑
 `readOnly`, `visible`, `activeFocus`, size), the text **length**, and whether the
 account picker owns the keyboard. Lengths only, never the password itself.
 
-Two rules that came out of the "Enter does nothing" bug (docs §11.13):
+Two rules that came out of the "Enter does nothing" bug (docs/lock.md §11.13):
 
 - The design owns nothing: `DesignBase` declares `passwordText` and
   `passwordTextEdited` but never assigns `passwordText`. The **host** has to

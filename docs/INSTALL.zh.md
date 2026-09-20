@@ -169,7 +169,7 @@ omarchy-shell lock status | grep passwordPam             # 期望 "passwordPam":
 它是**全机共享**的，一台机器跑一次就覆盖所有账户。另外上游探测指纹时用 `grep` 在 `fprintd-list` 输出里
 找 `finger`，而"未注册"时的输出 `no finger**s** enrolled` 同样命中，于是可能写出一条无用的
 `/etc/pam.d/omarchy-lock-fingerprint`；若 `fprintd-list "$USER"` 显示没有注册指纹，就 `sudo rm` 掉它。
-（完整分析——含"为什么与 dms-greeter 无关"——见移植笔记 §8.18。）
+（完整分析——含"为什么与 dms-greeter 无关"——见 `docs/lock.md` §8.18。）
 
 ---
 

@@ -179,7 +179,7 @@ omarchy-shell lock status | grep passwordPam             # want: "passwordPam":t
 It is machine-wide, so one run covers every account on the box. Upstream's fingerprint probe greps
 `fprintd-list` output for `finger`, which also matches "no fingers enrolled" — so it may write a useless
 `/etc/pam.d/omarchy-lock-fingerprint`. If `fprintd-list "$USER"` reports no enrolled finger, `sudo rm` that
-file. (Port notes §8.18 has the full analysis, including why dms-greeter is not involved.)
+file. (`docs/lock.md` §8.18 has the full analysis, including why dms-greeter is not involved.)
 
 ---
 
