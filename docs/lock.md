@@ -26,12 +26,12 @@
 - §11.24 提示行换行 + 头像改成账户入口（2026-09-20，用户指定）
 - §11.25 tty1 登录被**永久**锁死：greetd 只有一格 `configuring`（2026-09-20，真机定位并修复）
 
-## 另见（仍留在正本的锁屏相关条目）
+## 另见（锁屏相关的东西分住哪几处）
 
-- 正本 `§8 第 6 条`：niri `Super+Alt+L`（swaylock）与 Omarchy `Mod+Ctrl+L` 两条路线并存与收敛（历史）
-- 正本 `§8 第 23 条`：screensaver 关掉并屏蔽（`idle.screensaver` 与锁屏计时的抢跑关系）
-- 正本 `§8 第 24 条`：按键表去重，锁屏统一为 `Mod+L`
-- 正本 `§9 验证清单`：锁屏/登录相关的验收步骤
+- 本卷卷末「附：两条锁屏路线并存与收敛」＝原正本 `§8 第 6 条`（2026-09-20 已抽入本卷）
+- `docs/behavior.md` `§8 第 23 条`：screensaver 关掉并屏蔽（`idle.screensaver` 与锁屏计时的抢跑关系）
+- `docs/behavior.md` `§8 第 24 条`：按键表去重，锁屏统一为 `Mod+L`
+- 主文档 `§9 验证清单`：锁屏/登录相关的验收步骤
 
 
 ---
@@ -486,3 +486,13 @@ Omarchy 的锁层从 `hyprctl -j monitors` 读两个字段，shim 之前都在�
 **验证**：`bridge/test-bridge.py` 12 用例全过；**改前**有 3 条断言专抓此 wedge 而红（`retry after a failure`、`fresh helper after an abandoned face`、`cancels the stale conversation first`）；`tests/smoke.sh` **34 → 39 项全过**，新增 `enter-twice-while-scanning`（扫脸中再按回车：第二次不许开新会话、不许出现 wedge 文案、最后仍要在那条已开的会话上登成功）。另外 15:30:57 那次 `systemctl restart greetd` 现场验证了恢复路径：`terminate()` 会把 `configuring` 一并 cancel，用户随后在 tty1 **一次就登进去了**（卡死期间同样的操作只会拿到 `already being configured`）。
 
 **注意**：重启 greetd 只带走它自己的子进程（greeter + 半途会话）。本机用户会话挂在 `login`/systemd 下（`login -- jianlongliu` → `niri --session`），因此安全；但若哪天用户会话是 greetd 起的，`systemctl restart greetd` 会把它一起带走。
+---
+
+## 附：两条锁屏路线并存与收敛（原正本 `§8 第 6 条`，2026-08-24 前后）
+
+> 2026-09-20 从 `omarchy-on-niri.md` 抽入本卷：锁屏主题的内容归锁屏卷，别再回正本找。
+
+6. **锁屏**：niri 侧 `Super+Alt+L`（swaylock）与 Omarchy `Mod+Ctrl+L`（`omarchy-system-lock`
+   → `omarchy-shell lock lock`）两条路线并存（**2026-09-19 已收敛为单键 `Mod+L`，swaylock 那条删了**，
+   见 §8 第 24 条）；后者依赖 QuickShell 的 `omarchy.lock` 插件，
+   在 niri 上是否真正锁住待实测。

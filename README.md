@@ -26,9 +26,24 @@ standalone installer** — it assumes a working Arch + niri login session and an
 - `install.sh` — optional convenience wrapper. **Not the supported path**: the manual steps are in
   `docs/INSTALL.md` and should be followed by hand.
 - `docs/INSTALL.md` — the hand-run install procedure (deps, file placement, config merge, overlay, backlight).
-- `docs/omarchy-on-niri-port.md` — the full port decision log / notes.
+- `docs/omarchy-on-niri-port.md` — the main volume (current facts: constraints, architecture, file
+  inventory, niri config, deployment, verification, environment) plus the module map.
+- `docs/visual.md` — visual adjustments volume (frosted blur stack, text size/DPI, focus ring
+  gradient, menu backdrop, gaps, overview, theming, wallpaper library, scaling).
+- `docs/behavior.md` — behavior volume (keys and dedup, system actions, power/backlight,
+  screensaver, input sources, menu behavior, picker performance and warm-up, battery work).
+- `docs/plugins.md` — the plugin volume (bar plugin layer, per-plugin local patches and ops).
+- `docs/shims.md` — the shim volume (`hyprctl`, `uwsm-app`, `omarchy-update`, `display-text-size`,
+  `picker-warmup`, … the PATH-first overrides).
+- `docs/upstream.md` — keeping up with upstream (overlay replay, merge baselines, release flow).
+- `docs/migration.md` — the account migration volume (experiment account → main account, 2026-09-19).
+- `docs/local-overrides.md` — what this machine has beyond the repo, and how to roll it back.
 - `docs/lock.md` — the lock screen and login volume: the Split Greeter, `split-lock`, the PAM gate,
   howdy and avatars, and greetd's single `configuring` slot.
+
+The volumes keep the original section numbering (`§8 第 N 条`, `§8.x`, `§11.x`); the main volume
+holds a map from every moved section to its volume, and `scripts/check-doc-mirrors.sh` keeps the
+machine-local originals and the repo mirrors byte-identical.
 
 ## Repository layout
 
@@ -44,9 +59,9 @@ omarchy-on-niri/
 ├── hooks/        <- post-update.d/10-niri-repatch, theme-set.d/10-niri-border
 ├── install.sh    <- optional convenience wrapper (prefer the manual steps in docs/INSTALL.md)
 ├── docs/INSTALL.md  <- hand-run install procedure
-├── docs/omarchy-on-niri-port.md <- full port notes
-├── docs/lock.md <- lock screen + login volume
-├── scripts/     <- check-doc-mirrors.sh (the notes and their repo mirror stay byte-identical)
+├── docs/omarchy-on-niri-port.md <- main volume: current facts + module map
+├── docs/{visual,behavior,plugins,shims,upstream,migration,lock,local-overrides}.md <- module volumes
+├── scripts/     <- check-doc-mirrors.sh (the nine originals and their repo mirrors stay byte-identical)
 └── README.md
 ```
 

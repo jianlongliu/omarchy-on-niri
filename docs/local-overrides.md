@@ -28,12 +28,12 @@
 | `port-bin/*`（8 个） | `hyprctl`、`uwsm-app`、`materal-update`、`omarchy-niri-system`、`omarchy-niri-apply-theme`、`omarchy-niri-repatch`、`omarchy-powerprofiles-{list,set}` | `install.sh` 拷进 `~/bin`（PATH-first） |
 | `niri-port/niri.patch` + `Niri.qml` + `plugins/blurwallpaper` | 覆盖层，挺过 `omarchy update` | `~/bin/omarchy-niri-repatch`（幂等） |
 | `niri-port/plugin-patches/` | 4 个第三方插件的本地魔改补丁（+ README 说明怎么生成/怎么重放） | 手工 `git apply`（无自动重放器） |
-| `scripts/check-doc-mirrors.sh` | 校验正本 ↔ 镜像四对 md5（提交文档前跑） | `./scripts/check-doc-mirrors.sh` |
+| `scripts/check-doc-mirrors.sh` | 校验正本 ↔ 镜像**九对** md5（提交文档前跑） | `./scripts/check-doc-mirrors.sh` |
 | `niri-config/omarchy.kdl.template` + `shell.json` 示例 | niri 侧接线 | `install.sh` 会渲染成 `~/.config/niri/omarchy.kdl` 并拷 `shell.json`（**仅当不存在**）；**本机没走这条** —— 用的是模块化拆分，`config.kdl` 直接 include `{input,monitor,layout,window-rules,effects,binds}.kdl`，`omarchy.kdl` 不存在 |
 | `hooks/post-update.d/10-niri-repatch`、`hooks/theme-set.d/{10-niri-border,20-materal}` | 更新后重放覆盖层；换主题写边框渐变 | Omarchy 钩子机制自动调 |
 | `split-greeter/`、`split-lock/` | 自研登录器与锁屏，各带 `install.sh` + `tests/` | `sudo ./install.sh`（split-greeter 不碰 `config.toml`，最后一步手工） |
 | `default/omarchy/omarchy-menu.jsonc` | `install.package`/`install.aur`/`remove.package` 的 `xdg-terminal-exec` 回退 | 随仓库/覆盖层 |
-| `docs/` | `INSTALL{,.zh}.md`、`omarchy-on-niri-port.md`（移植笔记）、`lock.md`（锁屏登录卷）、`plugins.md`、本文件 | — |
+| `docs/` | `INSTALL{,.zh}.md` + **主文档 `omarchy-on-niri-port.md`（当前事实 + 映射表）** + 模块卷 `visual/behavior/plugins/shims/upstream/migration/lock/local-overrides`（编号沿用原正本），正本都在 `~/Documents/omarchy-niri-*.md` | 双写：`cp -p` 正本 → 仓库，再跑 `scripts/check-doc-mirrors.sh` |
 
 - 覆盖层实际内容：**21 文件 / 38 hunk**（`--reverse --check` 通过、repatch 幂等）；
   **md5 `047e5866a03228e30ae6069e9b2b9dd9`**，与 `~/.config/omarchy/niri-port/niri.patch` 一致（2026-09-20 核）。

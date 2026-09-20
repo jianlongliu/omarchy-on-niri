@@ -19,9 +19,23 @@ Arch + niri 登录会话、并且**已经装好 Omarchy**（或者你会先装 O
 - `hooks/` — Omarchy update/theme 钩子，负责重放移植覆盖层。
 - `install.sh` — 可选的一套便捷包装脚本。**不是推荐的路径**：手动步骤在 `docs/INSTALL.zh.md`，应按它逐条来做。
 - `docs/INSTALL.zh.md` — 手动执行安装流程（依赖、文件放位、配置合并、覆盖层、背光）。
-- `docs/omarchy-on-niri-port.md` — 完整的移植决策日志 / 笔记（**中文**）。
+- `docs/omarchy-on-niri-port.md` — **主文档**（当前事实：硬性约束、架构、文件清单、niri 配置、
+  部署、验证清单、环境信息）+ 模块映射表（**中文**）。
+- `docs/visual.md` — 视觉调整卷：磨砂全栈、字号与 DPI、边框环、菜单底色、gaps、overview、
+  主题取色、壁纸库、显示器缩放。
+- `docs/behavior.md` — 功能调整卷：按键与去重、system 动作、电源与背光、screensaver、输入源、
+  菜单行为、选择器性能与预热、耗电专项。
+- `docs/plugins.md` — 插件卷：bar 插件层总览、逐插件魔改与运维。
+- `docs/shims.md` — 垫片卷：`hyprctl`、`uwsm-app`、`omarchy-update`、`display-text-size`、
+  `picker-warmup` 等 PATH-first 覆盖脚本。
+- `docs/upstream.md` — 上游跟进卷：覆盖层重放、合并基线、上游小更新、发布流程。
+- `docs/migration.md` — 账户迁移卷：实验账户 → 主账户的方案与执行清单（2026-09-19）。
+- `docs/local-overrides.md` — 本机改动总账：相对仓库多出/改过的一切与回退方式。
 - `docs/lock.md` — 锁屏与登录专卷：Split Greeter、`split-lock`、PAM 门禁、howdy 与头像，
-  以及 greetd 只有一格 `configuring` 的陷阱（章节编号沿用移植笔记，原处留指针）。
+  以及 greetd 只有一格 `configuring` 的陷阱。
+
+各卷**沿用原章节编号**（`§8 第 N 条`、`§8.x`、`§11.x`），主文档里有「原编号 → 卷」的映射表；
+`scripts/check-doc-mirrors.sh` 保证本机正本与仓库镜像逐字节一致。
 
 ## 仓库结构
 
@@ -39,9 +53,9 @@ omarchy-on-niri/
 ├── hooks/        <- post-update.d/10-niri-repatch, theme-set.d/10-niri-border
 ├── install.sh    <- 可选便捷包装脚本（推荐按 docs/INSTALL.zh.md 手动来）
 ├── docs/INSTALL.zh.md   <- 手动执行安装流程
-├── docs/omarchy-on-niri-port.md <- 完整移植笔记（中文）
-├── docs/lock.md         <- 锁屏与登录专卷（中文）
-├── scripts/             <- check-doc-mirrors.sh（正本与仓库镜像必须逐字节一致）
+├── docs/omarchy-on-niri-port.md <- 主文档（当前事实 + 模块映射表，中文）
+├── docs/{visual,behavior,plugins,shims,upstream,migration,lock,local-overrides}.md <- 各模块卷（中文）
+├── scripts/             <- check-doc-mirrors.sh（九份正本与仓库镜像必须逐字节一致）
 └── README.md / README.zh.md
 ```
 

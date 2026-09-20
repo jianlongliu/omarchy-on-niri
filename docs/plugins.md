@@ -1,7 +1,9 @@
 # Omarchy 插件层：现状与运维（主账户 jianlongliu）
 
-> 核于 2026-09-20。姊妹文档 `omarchy-on-niri.md` 讲这套壳层怎么随 niri 移植，以及
-> §8.11 / §8.17 那些**对插件源码的本地魔改**。
+> 核于 2026-09-20。姊妹卷：主文档 `omarchy-on-niri.md`（当前事实：约束/架构/文件清单/部署/验证）、
+> `omarchy-niri-shims.md`（垫片）、`omarchy-niri-visual.md`（磨砂全栈等视觉调整）、
+> `omarchy-niri-behavior.md`（`§8.17` 输入源徽章、菜单与按键行为）。
+> 本卷末尾附有原正本 `§8.11`（bar 插件层总览）。
 >
 > **分工**：
 > - **本文**：第三方 / 自研插件的**现状与日常运维** —— 装了哪些、怎么配、怎么验、怎么更新、踩过什么坑；
@@ -197,7 +199,7 @@ journalctl -t omarchy-shell --since "-10min" | tail -50
 - **本地魔改**：`Model.js` 的 `badgeOverrides`（rime 显示「拼」而不是 fcitx 的「ㄓ」）+
   `Panel.qml` 的 `startupSource`（默认 `"rime"`，开机/起壳层后把源回到 rime，防 fcitx5 重启后掉回
   `keyboard-us`）。patch：`plugin-patches/ronald.input-sources.patch`；
-  细节与两条走不通的路见 `omarchy-on-niri.md` §8.17。
+  细节与两条走不通的路见功能调整卷 `omarchy-niri-behavior.md` §8.17。
 - **本机 shell.json 条目**：`{ "id": "ronald.input-sources", "showSourceName": false }`（只留徽章，不显示源名）。
 
 ### 5.3 `jrmmhm.pocket` —— bar 抽屉
@@ -299,6 +301,64 @@ omarchy-restart-shell                               # QML 不热更，必须重�
 | `~/.config/omarchy/niri-port/plugin-patches/` | 第三方插件的本地魔改存档 |
 | `~/omarchy-on-niri/split-lock/` | `yvonne.split-lock` 源码正本 |
 | `~/omarchy-on-niri/docs/plugins.md` | 本文档的仓库镜像（与 `~/Documents/omarchy-niri-plugins.md` 逐字节一致） |
-| `~/Documents/omarchy-on-niri.md` | 移植正本（§8.11 bar 插件层 / §8.17 输入源 / blur 全栈） |
+| `~/Documents/omarchy-on-niri.md` | 主文档（当前事实 + 模块映射表）；本卷末附 §8.11，§8.17 在 `omarchy-niri-behavior.md`，blur 全栈在 `omarchy-niri-visual.md` |
 | `$OMARCHY_PATH/shell/services/PluginRegistry.qml` | 壳层实际执行的插件注册与启用规则 |
 | `$OMARCHY_PATH/bin/omarchy-plugin-*` | §3 那些 CLI 的实现 |
+---
+
+## 附：bar 插件层（胶囊工作区 / Arch logo / 浮栏）—— 原正本 `§8.11`
+
+> 2026-09-20 从 `omarchy-on-niri.md` 抽入本卷：bar 侧的插件层总览（部件来源、浮栏、与 `omarchy update` 的关系）归插件卷。
+
+### 8.11 bar 插件层（胶囊工作区 / Arch logo / 浮栏）
+
+> **插件层总览另见 `docs/plugins.md`**（正本 `~/Documents/omarchy-niri-plugins.md`）：那份写**第三方 / 自研
+> 插件的现状与运维** —— 装了哪些、密钥与设置、验证命令、更新与本地补丁重放、坑清单；
+> 本节与 `omarchy-niri-behavior.md` §8.17 只讲**随 niri 移植产生的魔改**（patch 存档 `~/.config/omarchy/niri-port/plugin-patches/`）。
+
+三件事都是**用户层插件**，放在 `~/.config/omarchy/plugins/`（仓库外 → `omarchy update` 碰不到，
+`niri.patch` 也不必为它们加 hunk）。bar 结构仍由 `~/.config/omarchy/shell.json` 决定。
+
+**1. 胶囊式工作区指示 —— `yvonne.workspaces`**（manifest 记 `omarchy.clonedFrom: omarchy.workspaces`）
+
+- 数据：`Niri.workspaces.values[]`（`id` 是 niri 的 `idx`），占用判定 `toplevels.values.length > 0`。
+- 样式：GNOME 式——每个 workspace 一个圆点，**聚焦的点横向拉伸 2.6×**；四级 alpha 全部取自
+  `barForeground`（空 0.15 / 有窗 0.62 / 聚焦 0.9 / 悬停 0.85–1.0），所以是**单色**而不是 accent 色。
+- 点击：走 `hyprctl` 垫片的 `hl.dsp.focus({ workspace = "N" })`。
+- 坑：`implicitHeight: barSize` 必须写，否则该 slot 会顶到 bar 上沿。
+
+**2. Arch logo —— `yvonne.arch-logo`**（普通 bar-widget）
+
+- 左键 `omarchy-shell shell toggle omarchy.menu '{"menu":"root"}'`；右键 `xdg-terminal-exec`。
+- SVG 必须是纯 `#ffffff`：`MultiEffect.colorization` 是**按源图亮度相乘**着色，带灰度的 logo 会发暗。
+- 菜单面板仍能挂载，是因为 `omarchy.menu` 带 `keepLoaded: true`——按钮不在 bar 上，面板也活着。
+
+**3. 浮动 bar —— 第三方 `charlieras262.floating-bar`**
+
+- 来源 `https://github.com/Charlieras262/omarchy-floating-bar.git`，`omarchy plugin add <url> --yes` 安装。
+- **启用方式是 `shell.json` 的 `bar.id = "charlieras262.floating-bar"`**，不是 enable/disable 开关——
+  所以 `omarchy plugin list` 里它永远不显示 enabled，别据此判断没生效。
+- niri 适配 **6 处**：4 处是 Hyprland 独占调用 → 垫片/niri 等价物；2 处是磨砂相关（`Bar.qml` 不再把
+  `Color.bar.background` 的 alpha 强制成 1、给 bar 的 `PanelWindow` 挂圆角 `BackgroundEffect.blurRegion`，
+  见视觉调整卷 `omarchy-niri-visual.md` §8.8）。存档在 `~/.config/omarchy/niri-port/plugin-patches/charlieras262.floating-bar.patch`，
+  补丁基线是上游 `Bar.qml` HEAD，已用 `patch -p1` 从上游重建并 `cmp` 验证与实机文件逐字节一致
+  （旧版留 `.bak-20260919-preblur`）。`omarchy plugin update` 会用上游版本覆盖工作树，覆盖后要重打这个 patch。
+  该补丁**只存在实机**（插件本体仍从上游安装），未随移植仓库分发。
+- 参数：`floatGap = 8`（逻辑）、`cornerRadius = 10`、`transparent: false`。
+- 几何实测（scale 2.0，物理 px）：bar 占 y 16..79、左缘 x = 16（= 8 逻辑 floatGap，bar 高 32 逻辑）；
+  平铺窗口上缘从 112 收到 **96**（2026-09-20，`gaps` 16 → 8 后：逻辑 48 = 32 bar + 8 floatGap + 8 gaps；
+  旧值 112 = 逻辑 56 见 §9 的 2026-09-19 条目）——`tile_size` 628×744、`window_size` 624×740
+  （= 800 − 32 bar − 8 floatGap − 2×8 gaps）；**niri 在自己的独占区之外又加了一次 gaps，两者不打架**
+  （像素核对过；改法见 §8 第 29 条）。
+- 配套改动：`~/.config/niri/effects.kdl` 给 `^omarchy-bar$` 配 `background-effect { xray false }`（浮栏磨砂，
+  2026-09-19；模糊区域形状由插件下发的圆角 `blurRegion` 决定，原因与实测见视觉调整卷 `omarchy-niri-visual.md` §8.8）。
+- 第三方部件：`ryuhzk.ime` **2026-09-19 被 `ronald.input-sources` 取代**（macOS 式输入源徽章，见 `omarchy-niri-behavior.md` §8.17）；
+  `charlieras262.omablur` **已于 2026-09-19 从 `shell.json` 的 right 数组摘掉**
+  （插件文件仍留在 `~/.config/omarchy/plugins/`，想加回就把它填回 right 数组；备份
+  `~/.config/omarchy/niri-port/backups/shell.json.bak-20260919-032126-pre-omablur`）。
+  **它在 niri 上是空转**（2026-09-19 核）：滑块读的是垫子写死的 `hyprctl -j getoption decoration:*`
+  （`{"int":12,...}`），应用走 `hyprctl eval 'hl.config({...})'`——垫子对 `hl.config` 是**空操作**（exit 0、不改
+  任何东西），持久化还写 `~/.config/hypr/looknfeel.lua`（niri 上已被降级的 Layer-2）。niri 的真值在
+  `~/.config/niri/window-rules.kdl` 的 `geometry-corner-radius` 与 `effects.kdl` 的 `blur { passes/offset/... }`，
+  改它们 + `niri msg action load-config-file` 才生效。
+- 已知待修：toast 与 `KeyboardPanel` 家族弹窗没给浮栏让位（§8 第 18 条）。

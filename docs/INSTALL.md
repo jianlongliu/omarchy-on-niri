@@ -123,7 +123,7 @@ install -m 0755 "$REPO"/hooks/theme-set.d/*    ~/.config/omarchy/hooks/theme-set
 `theme-set.d/20-materal` re-derives the palette of a theme that carries a `matugen.toml` from the wallpaper
 Omarchy currently has selected (needs `matugen`; themes without that file are untouched). The systemd pair
 that also re-colours when the wallpaper changes (`materal-recolor.{path,service}`) is machine-specific — see
-the port notes §8.10.
+the visual volume §8.10 (`docs/visual.md`).
 
 ---
 

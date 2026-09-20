@@ -114,7 +114,7 @@ install -m 0755 "$REPO"/hooks/theme-set.d/*    ~/.config/omarchy/hooks/theme-set
 `theme-set.d/10-niri-border` 在每次切换 style 时写入 focus-ring 颜色；
 `theme-set.d/20-materal` 用 Omarchy 当前选中的壁纸重新推导"带 `matugen.toml` 的主题"的配色（需要
 `matugen`；没有该文件的主题不受影响）。另外那对"换壁纸也重新取色"的 systemd 单元
-（`materal-recolor.{path,service}`）属机器专属，见移植笔记 §8.10。
+（`materal-recolor.{path,service}`）属机器专属，见视觉调整卷 `docs/visual.md` §8.10。
 
 ---
 
