@@ -1,0 +1,137 @@
+// Window rules let you adjust behavior for individual windows.
+// Find more information on the wiki:
+// https://niri-wm.github.io/niri/Configuration:-Window-Rules
+
+// Work around WezTerm's initial configure bug
+// by setting an empty default-column-width.
+window-rule {
+    // This regular expression is intentionally made as specific as possible,
+    // since this is the default config, and we want no false positives.
+    // You can get away with just app-id="wezterm" if you want.
+    match app-id=r#"^org\.wezfurlong\.wezterm$"#
+    default-column-width {}
+}
+
+// Open the Firefox picture-in-picture player as floating by default.
+window-rule {
+    // This app-id regular expression will work for both:
+    // - host Firefox (app-id is "firefox")
+    // - Flatpak Firefox (app-id is "org.mozilla.firefox")
+    match app-id=r#"firefox$"# title="^Picture-in-Picture$"
+    open-floating true
+}
+
+// Example: block out two password managers from screen capture.
+// (This example rule is commented out with a "/-" in front.)
+/-window-rule {
+    match app-id=r#"^org\.keepassxc\.KeePassXC$"#
+    match app-id=r#"^org\.gnome\.World\.Secrets$"#
+
+    block-out-from "screen-capture"
+
+    // Use this instead if you want them visible on third-party screenshot tools.
+    // block-out-from "screencast"
+}
+
+// Frosted-glass blur for Ghostty. xray false = blur what is really behind the
+// window (live frosted glass), not the wallpaper alone. The window must be
+// translucent for the effect to show — set background-opacity < 1.0 in
+// ~/.config/ghostty/config.
+// draw-border-with-background false stops the focus ring from rendering
+// *behind* the translucent window (which would show through on the focused one).
+window-rule {
+    match app-id=r#"^com\.mitchellh\.ghostty$"#
+    match app-id="^org.gnome.Nautilus$"
+    draw-border-with-background false
+    opacity 0.85
+    background-effect {
+        xray false
+        blur true
+    }
+}
+// geometry-corner-radius rounds the window geometry (logical px); clip-to-geometry
+// actually clips the rendered content to the rounded shape. Tune the radius to taste.
+// If CSD apps (their own rounded titlebars) show artifacts, also enable `prefer-no-csd`
+// in config.kdl — but that requires restarting apps to take effect.
+window-rule {
+    geometry-corner-radius 10
+    clip-to-geometry true
+}
+
+// Omarchy install/remove terminals. Their menu actions go through
+// xdg-terminal-exec, whose ghostty desktop entry carries
+// X-TerminalArgAppId=--class= -- so the wrapper passes
+// --app-id=org.omarchy.terminal and the window arrives under that app-id
+// instead of com.mitchellh.ghostty, which means the Ghostty rule above no
+// longer matches it. Float it, and repeat the frosted-glass block here or the
+// translucent window would show through to hard edges (xray false: blur what
+// is really behind the window, same preference as the Ghostty rule).
+window-rule {
+    match app-id=r#"^org\.omarchy\.terminal$"#
+    open-floating true
+    default-column-width { proportion 0.6; }
+    default-window-height { proportion 0.7; }
+    draw-border-with-background false
+    background-effect {
+        xray false
+        blur true
+    }
+}
+
+// --- Personal app rules carried over from the pre-migration (DMS-era) config ---
+// Zen opens maximized. (The old `com.danklinux.dms` rule was dropped with DMS itself.)
+window-rule {
+    match app-id="^zen-browser$"
+    open-maximized true
+    background-effect {
+        xray false
+        blur true
+    }
+}
+
+// WeChat: maximized + frosted. A background effect is only visible through a
+// *semitransparent* window ("otherwise it's fully covered by the opaque window" — niri
+// wiki, Window Effects), and this XWayland client paints opaque, so the blur needs the
+// compositor to press alpha onto it: that is `opacity`, which niri applies per surface
+// on top of the window's own opacity. Without this line the blur rule silently does
+// nothing visible.
+window-rule {
+    match app-id="^wechat"
+    open-maximized true
+    opacity 0.85
+    background-effect {
+        xray false
+        blur true
+    }
+}
+
+// --- Floating app windows (2026-09-20) ---
+// Window-opening properties CANNOT live in a keybind: `spawn "x"; open-floating true;`
+// makes niri reject the whole config ("only one action is allowed per keybind") and it
+// silently keeps the previous one. Floating belongs here.
+// Nautilus (Mod+E) as a floating panel.
+window-rule {
+    match app-id="^org.gnome.Nautilus$"
+    open-floating true
+    default-column-width { proportion 0.6; }
+    default-window-height { proportion 0.7; }
+}
+
+// Floating TUIs — Yazi (Mod+Y) and btop (Ctrl+Shift+Esc) run inside Ghostty, so they
+// arrive under one shared app-id instead of com.mitchellh.ghostty
+// (binds.kdl passes --app-id=org.omarchy.float-tui → xdg-terminal-exec → `ghostty --class=`,
+// the same route upstream uses to give its install/remove terminals org.omarchy.terminal).
+// The frosted-glass block is repeated because the Ghostty rule matches
+// com.mitchellh.ghostty and no longer covers this app-id.
+// Want a different size for one of them? Give that bind its own app-id and copy this rule.
+window-rule {
+    match app-id=r#"^org\.omarchy\.float-tui$"#
+    open-floating true
+    default-column-width { proportion 0.6; }
+    default-window-height { proportion 0.7; }
+    draw-border-with-background false
+    background-effect {
+        xray false
+        blur true
+    }
+}

@@ -29,6 +29,7 @@
 | `niri-port/niri.patch` + `Niri.qml` + `plugins/blurwallpaper` | 覆盖层，挺过 `omarchy update` | `~/bin/omarchy-niri-repatch`（幂等） |
 | `niri-port/plugin-patches/` | 4 个第三方插件的本地魔改补丁（+ README 说明怎么生成/怎么重放） | 手工 `git apply`（无自动重放器） |
 | `scripts/check-doc-links.sh` | 校验 `~/Documents` 那九个软链仍指向 `docs/`（提交文档前跑） | `./scripts/check-doc-links.sh` |
+| `niri-config/local/*.kdl`（7 份） | **本机在用的 niri 配置**（`config` + `input/monitor/layout/window-rules/effects/binds` 的模块化拆分） | 拷到 `~/.config/niri/`、把 `/home/<user>` 换成自己家目录、按自己显示器改 `monitor.kdl`，然后 `niri validate`；说明见 `niri-config/README.md` |
 | `niri-config/omarchy.kdl.template` + `shell.json` 示例 | niri 侧接线 | `install.sh` 会渲染成 `~/.config/niri/omarchy.kdl` 并拷 `shell.json`（**仅当不存在**）；**本机没走这条** —— 用的是模块化拆分，`config.kdl` 直接 include `{input,monitor,layout,window-rules,effects,binds}.kdl`，`omarchy.kdl` 不存在 |
 | `hooks/post-update.d/10-niri-repatch`、`hooks/theme-set.d/{10-niri-border,20-materal}` | 更新后重放覆盖层；换主题写边框渐变 | Omarchy 钩子机制自动调 |
 | `split-greeter/`、`split-lock/` | 自研登录器与锁屏，各带 `install.sh` + `tests/` | `sudo ./install.sh`（split-greeter 不碰 `config.toml`，最后一步手工） |
@@ -80,6 +81,7 @@
 
 - 文件：`config.kdl`（只留 include 与会话级设置）、`binds.kdl`、`layout.kdl`、`window-rules.kdl`、
   `effects.kdl`、`input.kdl`、`monitor.kdl`；每个旁边都有 `.bak-*`（改前必留）。
+  **2026-09-20 已收进仓库**：`niri-config/local/`（家目录参数化成 `/home/<user>`，说明见该目录 README）。
 - **静默陷阱**：bind 里写开窗属性（`open-floating` 等）→ `only one action is allowed per keybind`，
   而 niri 对**整份** `config.kdl`（含 include）做事务性校验，一处失败**整体丢弃、继续跑旧配置、桌面零提示**。
   改完必须 `niri validate`，再看 `journalctl | grep 'niri\['`。
@@ -153,6 +155,9 @@ git apply --reverse --check niri.patch   # 必须通过
    还会解析成空菜单）已并回仓库，两侧一致。
 6. `/etc/pam.d/omarchy-lock-face`、`/etc/greetd/*` 是 `split-*/install.sh` 装的（脚本在仓库），
    但**已装好的机器状态**没有版本记录。
+7. ~~本机 niri 配置（`~/.config/niri/` 七份 kdl，约 910 行）~~ **已收进仓库（2026-09-20）**：
+   `niri-config/local/`（家目录参数化为 `/home/<user>`，`monitor.kdl` 的 modeline 标了「本机面板专属」）。
+   此前仓库只有 `niri-config/omarchy.kdl.template`，而本机**没用**那条路 —— 别人照仓库装会缺合成器侧一整块。
 
 ---
 

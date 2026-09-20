@@ -54,6 +54,16 @@ This installs `hyprctl` (the shim — **critical**, ~50 omarchy scripts call it)
 
 ## 3. Wire the compositor (`~/.config/niri/config.kdl`)
 
+There are two ways in, and they are not equivalent:
+
+- **`niri-config/local/*.kdl`** — the config this machine actually runs: seven files, ~910 lines
+  (`config` + `input/monitor/layout/window-rules/effects/binds`), including the blur stack, the
+  rounded corners, gaps, window rules and the deduplicated bind set. Read `niri-config/README.md`,
+  copy them to `~/.config/niri/`, replace `/home/<user>` and fix the monitor block.
+- **`niri-config/omarchy.kdl.template`** (below) — a 58-line *wiring snippet*: environment, the
+  shell autostart and the Omarchy binds, meant to be merged into a config you already have. Enough
+  to get the shell up; it does not carry the compositor-side tuning.
+
 Back up first, then merge. Copy the relevant lines from generating the template by substituting your home
 path in place of `__HOME__`:
 

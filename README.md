@@ -18,8 +18,11 @@ standalone installer** — it assumes a working Arch + niri login session and an
   picker warm-up and the display text-size shim).
 - `niri-port/` — the idempotent overlay patch (`niri.patch` + `Niri.qml`) that survives `omarchy update`,
   plus `plugin-patches/` (local edits to third-party bar plugins, applied by hand — nothing replays them).
-- `niri-config/` — the niri-side wiring (`omarchy.kdl.template` to merge into `config.kdl`, plus a
-  `shell.json` sample).
+- `niri-config/local/` — the niri config this machine actually runs (seven `*.kdl` files: `config` plus
+  `input/monitor/layout/window-rules/effects/binds`; the home directory is a `/home/<user>` placeholder —
+  see the README in that directory).
+- `niri-config/omarchy.kdl.template` + `shell.json` — the other route: one merged file rendered by
+  `install.sh` (this machine never used it).
 - `hooks/` — Omarchy update/theme hooks that reapply the port.
 - `default/systemd/user/omarchy-picker-warmup.service` — the session-scoped picker warm-up unit
   (`install.sh` installs and enables it; disable with `toggles/picker-warmup-off`).
@@ -55,7 +58,7 @@ omarchy-on-niri/
 ├── port-bin/     <- port glue: hyprctl shim + niri system/power/theme/repatch scripts
 │                     install.sh copies these into ~/bin (PATH-first, survives `omarchy update`)
 ├── niri-port/    <- overlay: niri.patch + Niri.qml (reapplied after each update)
-├── niri-config/  <- omarchy.kdl.template (merge into ~/.config/niri/config.kdl)
+├── niri-config/  <- local/*.kdl (what this machine runs) + omarchy.kdl.template (the other route)
 │                     + shell.json sample (Omarchy config layer 1)
 ├── hooks/        <- post-update.d/10-niri-repatch, theme-set.d/10-niri-border
 ├── install.sh    <- optional convenience wrapper (prefer the manual steps in docs/INSTALL.md)

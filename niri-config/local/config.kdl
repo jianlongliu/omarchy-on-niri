@@ -1,0 +1,98 @@
+// This config is in the KDL format: https://kdl.dev
+// "/-" comments out the following node.
+// Check the wiki for a full description of the configuration:
+// https://niri-wm.github.io/niri/Configuration:-Introduction
+//
+// Modular layout (Omarchy-style): stable/shared sections stay here, while the
+// large/volatile ones live in their own files and are `include`d below:
+//   input.kdl        - input devices (keyboard/touchpad/mouse/trackpoint)
+//   monitor.kdl      - output "eDP-1" (resolution / modeline / scale)
+//   layout.kdl       - window layout, gaps, focus-ring, border, shadow, struts
+//   binds.kdl        - all keybindings
+//   window-rules.kdl - per-app rules + global rounded corners
+// `include` paths are relative to this file's directory (~/.config/niri/).
+
+include "input.kdl"
+
+environment {
+    // 迁移后本机（jianlongliu）路径。niri 不展开 $HOME/$PATH，必须写全字面量。
+    XDG_CURRENT_DESKTOP "niri"
+    QT_QPA_PLATFORMTHEME "qt6ct"
+    OMARCHY_PATH "/home/<user>/.local/share/omarchy"
+    PATH "/home/<user>/bin:/home/<user>/.local/share/omarchy/bin:/home/<user>/.local/bin:/home/<user>/.ante/bin:/home/<user>/.npm-global/bin:/home/<user>/.grok/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin:/var/lib/flatpak/exports/bin:/usr/lib/jvm/default/bin"
+}
+
+// Cursor: inherited from the retired DMS config (dms/cursor.kdl) so the look is unchanged.
+cursor {
+    xcursor-theme "Bibata-Modern-Amber"
+    xcursor-size 20
+    hide-when-typing
+}
+
+include "monitor.kdl"
+
+include "layout.kdl"
+
+// Add lines like this to spawn processes at startup.
+// Note that running niri as a session supports xdg-desktop-autostart,
+// which may be more convenient to use.
+// See the binds section below for more spawn examples.
+
+// Launch the shell through omarchy's own supervisor (journal logging + relaunch
+// after a crash). Spawning quickshell bare means a dead shell leaves the session
+// stranded on the lock surface's bare background color with no way back.
+spawn-sh-at-startup "omarchy-launch-shell"
+
+// To run a shell command (with variables, pipes, etc.), use spawn-sh-at-startup:
+// spawn-sh-at-startup "qs -c ~/source/qs/MyAwesomeShell"
+
+hotkey-overlay {
+    // Uncomment this line to disable the "Important Hotkeys" pop-up at startup.
+    skip-at-startup
+}
+
+// Alt+Tab family: cycle through recently used windows within the output / the same app.
+// These actions (next-window / previous-window) are only valid inside this block,
+// not in the top-level `binds` — carried over from the pre-migration config.
+recent-windows {
+    binds {
+        Alt+Tab         { next-window scope="output"; }
+        Alt+Shift+Tab   { previous-window scope="output"; }
+        Alt+grave       { next-window filter="app-id"; }
+        Alt+Shift+grave { previous-window filter="app-id"; }
+    }
+}
+
+// Uncomment this line to ask the clients to omit their client-side decorations if possible.
+// If the client will specifically ask for CSD, the request will be honored.
+// Additionally, clients will be informed that they are tiled, removing some client-side rounded corners.
+// This option will also fix border/focus ring drawing behind some semitransparent windows.
+// After enabling or disabling this, you need to restart the apps for this to take effect.
+// prefer-no-csd
+
+// You can change the path where screenshots are saved.
+// A ~ at the front will be expanded to the home directory.
+// The path is formatted with strftime(3) to give you the screenshot date and time.
+screenshot-path "~/Pictures/Screenshots/Screenshot from %Y-%m-%d %H-%M-%S.png"
+
+// You can also set this to null to disable saving screenshots to disk.
+// screenshot-path null
+
+// Animation settings.
+// The wiki explains how to configure individual animations:
+// https://niri-wm.github.io/niri/Configuration:-Animations
+animations {
+    // Uncomment to turn off all animations.
+    // off
+
+    // Slow down all animations by this factor. Values below 1 speed them up instead.
+    // slowdown 3.0
+}
+
+// Window rules + global rounded corners live in window-rules.kdl.
+include "window-rules.kdl"
+
+// Frosted-glass blur for the Omarchy (Quickshell) shell — see effects.kdl.
+include "effects.kdl"
+
+include "binds.kdl"

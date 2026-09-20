@@ -1,0 +1,16 @@
+// Output / monitor configuration.
+// You can configure outputs by their name, which you can find
+// by running `niri msg outputs` while inside a niri instance.
+// The built-in laptop monitor is usually called "eDP-1".
+// Find more information on the wiki:
+// https://niri-wm.github.io/niri/Configuration:-Outputs
+output "eDP-1" {
+    // Tuned for this machine: CSO1411 panel with custom EDID DTD2 = 2560x1600@60
+    // (cvt -r timing, matches vantage "均衡（默认）" preset). Do NOT add a `mode`
+    // line — niri won't rebuild custom modelines on reload and falls back to 4K.
+    // scale 2.0 = integer scale -> crisp X11 apps, bigger UI than 1.5/1.6.
+    // logical = 2560/2.0 x 1600/2.0 = 1280x800.
+    modeline 268.50 2560 2608 2640 2720 1600 1603 1609 1646 "+hsync" "-vsync"
+    scale 2.0
+    position x=0 y=0
+}

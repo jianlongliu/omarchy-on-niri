@@ -48,6 +48,15 @@ for f in "$REPO"/port-bin/*; do install -m 0755 "$f" ~/bin/; done
 
 ## 3. 接线合成器（`~/.config/niri/config.kdl`）
 
+两条路，**不等价**：
+
+- **`niri-config/local/*.kdl`** —— 本机**实际在用**的配置：七份文件、约 910 行
+  （`config` + `input/monitor/layout/window-rules/effects/binds`），含磨砂全栈、圆角、gaps、
+  窗口规则、去重后的整套按键。先读 `niri-config/README.md`，拷到 `~/.config/niri/`，
+  把 `/home/<user>` 换成自己家目录、按自己显示器改 `monitor.kdl`。
+- **`niri-config/omarchy.kdl.template`**（下面这条）—— 58 行的**接线片段**：`environment`、
+  shell 自启、Omarchy 那几条 bind，合并进你已有的配置里。够把壳跑起来，但**不含合成器侧的调校**。
+
 先备份，再合并。用你的 home 路径替换 `__HOME__`，从模板生成如下行：
 
 ```sh

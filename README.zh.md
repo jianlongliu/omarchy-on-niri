@@ -15,7 +15,8 @@ Arch + niri 登录会话、并且**已经装好 Omarchy**（或者你会先装 O
   `omarchy-picker-warmup`、`omarchy-display-text-size`）。
 - `default/systemd/user/` — 随移植分发的用户单元（选择器预热）。
 - `niri-port/` — 幂等的覆盖层 patch（`niri.patch` + `Niri.qml`），能在 `omarchy update` 之后存续。
-- `niri-config/` — niri 侧的接线（要合并进 `config.kdl` 的 `omarchy.kdl.template`，外加一份 `shell.json` 示例）。
+- `niri-config/local/` — **本机在用的 niri 配置**（七份 kdl：`config` + `input/monitor/layout/window-rules/effects/binds`，家目录参数化为 `/home/<user>`，见该目录 README）。
+- `niri-config/omarchy.kdl.template` + `shell.json` — 另一条路的一体式接线（本机**没用**它）。
 - `hooks/` — Omarchy update/theme 钩子，负责重放移植覆盖层。
 - `install.sh` — 可选的一套便捷包装脚本。**不是推荐的路径**：手动步骤在 `docs/INSTALL.zh.md`，应按它逐条来做。
 - `docs/INSTALL.zh.md` — 手动执行安装流程（依赖、文件放位、配置合并、覆盖层、背光）。
@@ -49,7 +50,7 @@ omarchy-on-niri/
 │                     install.sh 会把这些拷进 ~/bin（PATH 最前、挺过 `omarchy update`）
 ├── niri-port/    <- 覆盖层：niri.patch + Niri.qml（每次更新后重放）
 │                     + plugin-patches/（第三方 bar 插件的本地魔改补丁，只能手工重放）
-├── niri-config/  <- omarchy.kdl.template（合并进 ~/.config/niri/config.kdl）
+├── niri-config/  <- local/*.kdl（本机在用的 niri 配置）+ omarchy.kdl.template（另一条路）
 │                     + shell.json 示例（Omarchy 配置层1）
 ├── hooks/        <- post-update.d/10-niri-repatch, theme-set.d/10-niri-border
 ├── install.sh    <- 可选便捷包装脚本（推荐按 docs/INSTALL.zh.md 手动来）

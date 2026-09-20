@@ -1,0 +1,104 @@
+// Frosted-glass background blur for the Omarchy (Quickshell) shell.
+// Requires niri >= 26.04. The blurred surfaces must be semitransparent for
+// the blur to show — that's done via *-alpha keys in
+// ~/.config/omarchy/shell.toml (the user override layer), not here.
+//
+// xray defaults to true when blur is on: it blurs the wallpaper behind the
+// surfaces (cheap, stable). Every rule here sets xray false instead (user
+// preference): live blur of whatever is actually behind — experimental, drops
+// during open/close animations and while dragging tiled windows.
+
+blur {
+    passes 4
+    offset 3.5
+    noise 0.03
+    saturation 1.6
+}
+
+// Frosted blur for the SMALL Omarchy chrome surfaces. Match directives are
+// OR'd; namespace is a Rust regex.
+//
+// The OSD is a card-sized layer surface (see Osd.qml), so `blur true` there
+// only ever frosts the card.
+//
+// The toast surface is NOT card-sized: it is a full-screen transparent
+// PanelWindow (see notifications/Service.qml) so that adding or removing a
+// toast never resizes the surface. `blur true` on a surface that size frosts
+// the ENTIRE display — that was the "a notification blurs the whole screen"
+// bug (2026-09-20). The notifications rule therefore carries NO `blur true`:
+// the toast column is frosted through the ext_background_effect region
+// Quickshell sends, the same way the bar and the status-bar popups do it.
+// niri has no `ignore_alpha`, so that client region is the only thing keeping a
+// full-screen surface's blur off the rest of the display.
+//
+// The full-screen scrim overlays (menu, clipboard, emojis, image-picker, and
+// every status-bar panel: audio/bluetooth/network/power/clock/monitor/
+// tailscale/weather/dropbox/wifiqr/speedtest/...) plus the wallpaper and lock
+// preview are deliberately NOT matched, so a niri-side blur never frosts the
+// entire display.
+layer-rule {
+    match namespace="^omarchy-osd$"
+    background-effect {
+        blur true
+        // xray false: frost the LIVE content behind, not the wallpaper alone
+        // (same preference as the bar rule below). Experimental: the blur can
+        // drop during window open/close and while dragging a tiled window.
+        xray false
+    }
+}
+
+// Toast frost (2026-09-20). Only `xray` here, NOT `blur true`: the region
+// Quickshell sends (Service.qml's BackgroundEffect.blurRegion, tracking the
+// toast column) stays the sole blur area. Like the bar below, giving niri a
+// rounded region is also what stops its composited-scene sampling from smearing
+// the surface's own fill out through its transparent corners into a bright
+// halo — the artifact Hyprland fixes with `ignore_alpha`, which niri has no
+// equivalent for.
+layer-rule {
+    match namespace="^omarchy-notifications$"
+    background-effect {
+        xray false
+    }
+}
+
+// Floating bar frost (2026-09-19). Only `xray` is set here, NOT `blur true`:
+// the rounded region comes from the client, exactly like the status-bar popups
+// below. xray false frosts whatever is actually behind the bar (the live
+// windows, should one ever get there) rather than the wallpaper alone, per the
+// user. The bar has to stay semi-transparent for any of it to show -- shell.toml's
+// [bar] background-alpha feeds Color.bar.background, and the plugin now keeps
+// that alpha instead of forcing it to 1.
+layer-rule {
+    match namespace="^omarchy-bar$"
+    background-effect {
+        xray false
+    }
+}
+
+// Status-bar popups (audio/bluetooth/network/power/clock/monitor/tailscale/
+// weather/dropbox + the agent panel) are full-screen transparent PanelWindows
+// with a card. Quickshell sends an ext_background_effect region tracking the
+// card, so niri blurs ONLY behind it. xray false frosts the LIVE windows behind
+// the card (real frosted glass); xray true would blur the wallpaper instead.
+// Only `xray` is set here — NOT `blur true` — so the region from Quickshell
+// stays the sole blur area and the full-screen surface never frosts.
+// Experimental: the blur drops during window open/close and while dragging a
+// tiled window.
+layer-rule {
+    match namespace="^omarchy-keyboard-panel$"
+    background-effect {
+        xray false
+    }
+}
+
+// Blurred overview wallpaper (2026-09-03): while the niri overview is open,
+// BlurWallpaper.qml paints a strongly blurred version of the current wallpaper
+// INTO the compositor backdrop, replacing niri's flat dark overview color.
+// `place-within-backdrop` renders this layer inside the backdrop, on top of
+// the backdrop color and behind the window thumbnails. It is invisible on the
+// normal desktop (gated by Niri.overviewOpen in QML), so the crisp wallpaper
+// from Background.qml stays untouched there.
+layer-rule {
+    match namespace="^omarchy-blurwallpaper$"
+    place-within-backdrop true
+}
