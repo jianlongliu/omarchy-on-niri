@@ -6,6 +6,8 @@
 > 仓库 `docs/omarchy-on-niri-port.md` 归并为一，两份逐字节一致；补回仓库版缺的 §5.7/§5.8、媒体键 OSD、
 > `binds` 递归展开、发布流程等块，并补入仓库版今天的 §8.9 上游合并基线与 §9/§10 新条目；新增
 > §8.10 主题动态取色、§8.11 bar 插件层；修正 §5.6 C 层回归（已修）、§8.8 浮栏模糊规则变更）。
+> 2026-09-20 追加 §8 第 25–30 条（选择器异步解码、按键静默拒载、不透明 app 磨砂、bar 内联设置、gaps 16→8、
+> 菜单卡片底色），并同步 §3.2/§3.3/§5.3/§9 的计数与几何数字。
 
 ---
 
@@ -85,14 +87,17 @@ hyprctl 调用面有界、可直接映射。
 | 路径 | 改动 |
 |---|---|
 | `~/.local/share/omarchy/shell/Commons/qmldir` | 加一行 `singleton Niri 1.0 Niri.qml` |
+| `~/.local/share/omarchy/shell/Commons/Style.qml` | `applyShellValues()` 的 `[bar]` 分支原来只认 `scale-with-font` + 两个 size 键、**其余键静默丢弃**；扩成 `Style.bar` 全部整型 token，于是 `[bar] icon-font = 12` 这类调法能从 `shell.toml` 热改（见 §8 第 31 条） |
 | `~/.local/share/omarchy/shell/plugins/bar/widgets/Workspaces.qml` | 去掉 `import Quickshell.Hyprland`；`Hyprland.workspaces`→`Niri.workspaces`、`Hyprland.focusedWorkspace`→`Niri.focusedWorkspace` |
 | `~/.local/share/omarchy/shell/plugins/menu/Menu.qml` | 加 `import Quickshell.Wayland._BackgroundEffect`；根 `PanelWindow` 挂 `BackgroundEffect.blurRegion: Region { item: card; radius: root.cornerRadius }`（只磨砂菜单卡片，不全屏，见 §8.8）|
 | `~/.local/share/omarchy/shell/Ui/KeyboardPanel.qml` | 加 `import Quickshell.Wayland._BackgroundEffect`；根 `PanelWindow` 挂 `BackgroundEffect.blurRegion: Region { item: card; radius: Style.cornerRadius }`（覆盖所有 bar 弹窗面板，见 §8.8）|
 | `~/.local/share/omarchy/shell/plugins/bar/Bar.qml` | 去掉 import；`Hyprland.focusedMonitor`→`Niri.focusedMonitor` |
 | `~/.local/share/omarchy/shell/plugins/osd/Osd.qml` | OSD 改"卡片大小 surface" + 磨砂（§8.8） |
+| `~/.local/share/omarchy/shell/plugins/notifications/Service.qml` | 加 `import Quickshell.Wayland._BackgroundEffect`；吐司根 `PanelWindow` 挂 `BackgroundEffect.blurRegion: Region { item: popupColumn; radius: service.cornerRadius }`。**注意它与 OSD 相反：吐司 surface 必须保持全屏**（免得增删吐司时缩放着形），所以那条 namespace 不能再给 `blur true`（§8 第 32 条 / §8.8）|
 | `~/.local/share/omarchy/shell/services/AppLibrary.qml` | 加 `command -v uwsm-app` 回退（niri 无 uwsm-app，§8 第 14 条） |
 | `~/.local/share/omarchy/shell/plugins/background/Background.qml` | `readlinkProc` 回调强制即时切换背景（见 §8 第 1 条 b）|
 | `~/.local/share/omarchy/shell/plugins/image-picker/ImagePicker.qml` | 切片 `Image` 改 `asynchronous: true`（首帧不再同步解码 33 张缩略图，§8 第 25 条）|
+| `~/.local/share/omarchy/shell/plugins/panels/power/Panel.qml` | 电量部件的 `text` 由 `"50% 🔋"` 改成 `"🔋 50%"`（数字落到 bar 最右，§8 第 28 条）|
 | `~/.local/share/omarchy/bin/omarchy-launch-tui` | 加 uid 终端回退（ghostty），因 niri 无 `uwsm-app`/`xdg-terminal-exec`；2026-09-19 起垫片在位时走 `uwsm-app` 分支（§8 第 22 条）|
 | `~/.local/share/omarchy/bin/omarchy-launch-editor` | 同上：`uwsm-app` 存在才用、否则直接 `setsid $editor` 启动（niri 无 uwsm）；2026-09-19 起垫片在位时走 `uwsm-app` 分支（§8 第 22 条）|
 | `~/.local/share/omarchy/bin/omarchy-launch-floating-terminal-with-presentation` | 同上：`uwsm-app`+`xdg-terminal-exec` 缺时遍历 `ghostty/kitty/alacritty/foot` 起演示终端；2026-09-19 起垫片在位时走 `uwsm-app` 分支（§8 第 22 条）|
@@ -103,7 +108,7 @@ hyprctl 调用面有界、可直接映射。
 | `~/.config/niri/config.kdl` | 编排器：`environment`/`spawn`/`animations`/`screenshot-path` + 6 个 `include`（§5.7）；`focus-ring` 在 `layout.kdl`，颜色由主题驱动（§5.6）|
 | `~/.config/niri/{input,monitor,layout,window-rules,effects,binds}.kdl` | 模块化拆分出的子配置（§5.7）：输入/显示器/布局/窗口规则(含圆角)/磨砂(effects)/按键 |
 | `~/.config/niri/effects.kdl` | 2026-09-19 给 `^omarchy-bar$` 配 `background-effect { xray false }`（浮栏磨砂；圆角模糊区域由插件端下发，§8.8）|
-| `~/.config/omarchy/shell.json` | bar：`id` = `charlieras262.floating-bar`、`floatGap` 8、`cornerRadius` 10；`layout.left` = `yvonne.arch-logo` + `yvonne.workspaces`；`layout.right` 2026-09-19 摘掉空转的 `charlieras262.omablur`、并由 `ronald.input-sources` 取代 `ryuhzk.ime`；`layout.center` 同日摘掉 `omarchy.keyboard-layout`（与插件徽章重复，§8.11、§8.17）|
+| `~/.config/omarchy/shell.json` | bar：`id` = `charlieras262.floating-bar`、`floatGap` 8、`cornerRadius` 10；`layout.left` = `yvonne.arch-logo` + `yvonne.workspaces`；`layout.right` 2026-09-19 摘掉空转的 `charlieras262.omablur`、并由 `ronald.input-sources` 取代 `ryuhzk.ime`；`layout.center` 同日摘掉 `omarchy.keyboard-layout`（与插件徽章重复，§8.11、§8.17）；2026-09-20 `layout.right` 的 `omarchy.power` 加 `"showPercentage": true`、`layout.center` 摘掉 `omarchy.system-update`（§8 第 28 条）|
 | `~/.config/ghostty/config` | 半透明 (`background-opacity = 0.85`) + 关自带模糊 (`background-blur-radius = 0`)，blur 交给 niri（§5.8） |
 
 ### 3.3 备份（重要，可回滚）
@@ -121,6 +126,20 @@ hyprctl 调用面有界、可直接映射。
 > 现有 `~/.config/omarchy/niri-port/backups/` 里另有较新的可直接回滚的快照：
 > `shell.json.bak-20260919-013624`（加 bar 部件前）、`shell.json.bak-20260919-014210-prebar`
 > （上浮栏前）、`20260918-pre-merge/`（合并上游前整包）。
+>
+> 2026-09-20 新留的三个（本轮 bar / gaps / 菜单底色，就地放同目录）：`~/.config/omarchy/shell.json.bak-20260920-bar`、
+> `~/.config/omarchy/shell.toml.bak-20260920-menu`、`~/.config/niri/layout.kdl.bak-20260920-gaps`（§8 第 28–30 条）；
+> 电量数字置右那轮另有两个：`~/.local/share/omarchy/shell/plugins/panels/power/Panel.qml.bak-20260920-pctorder`、
+> `~/.config/omarchy/niri-port/niri.patch.bak-20260920-pctorder`。
+>
+> 2026-09-20 下半场（bar 字号统一，§8 第 31 条）新留四个：`~/.local/share/omarchy/shell/Commons/Style.qml.bak-20260920-bartoken`、
+> `~/.config/omarchy/niri-port/niri.patch.bak-20260920-bartoken`、`~/.config/omarchy/shell.toml.bak-20260920-iconfont`、
+> `~/.config/omarchy/shell.json.bak-20260920-bardisplay`（后者是恢复 ai-subs `barDisplay` 前的快照）。
+>
+> 2026-09-20 晚间（吐司"一有通知整屏变糊"，§8 第 32 条）新留三个：
+> `~/.local/share/omarchy/shell/plugins/notifications/Service.qml.bak-20260920-notifblur`、
+> `~/.config/niri/effects.kdl.bak-20260920-blurnotif`、
+> `~/.config/omarchy/niri-port/niri.patch.bak-20260920-notifblur`。
 
 ---
 
@@ -190,8 +209,8 @@ Mod+Return        hotkey-overlay-title="Terminal"     { spawn-sh "omarchy-launch
 Mod+L             hotkey-overlay-title="Lock screen"  { spawn-sh "omarchy-system-lock"; }
 Mod+E             hotkey-overlay-title="Files"        { spawn "nautilus"; }
 Mod+Z             hotkey-overlay-title="Browser"      { spawn-sh "omarchy-launch-browser"; }
-Mod+Y             hotkey-overlay-title="Yazi"         { spawn-sh "omarchy-launch-terminal yazi"; }
-Ctrl+Shift+Escape hotkey-overlay-title="btop"         { spawn-sh "omarchy-launch-terminal btop"; }
+Mod+Y             hotkey-overlay-title="Yazi"         { spawn-sh "omarchy-launch-terminal --app-id=org.omarchy.float-tui yazi"; }
+Ctrl+Shift+Escape hotkey-overlay-title="btop"         { spawn-sh "omarchy-launch-terminal --app-id=org.omarchy.float-tui btop"; }
 Mod+K             hotkey-overlay-title="Keybindings"  { spawn-sh "omarchy-menu-keybindings"; }
 Mod+Ctrl+V       hotkey-overlay-title="Clipboard"    { spawn-sh "omarchy-shell shell toggle omarchy.clipboard"; }
 Mod+Ctrl+E       hotkey-overlay-title="Emojis"       { spawn-sh "omarchy-shell shell toggle omarchy.emojis"; }
@@ -402,6 +421,8 @@ background-opacity = 0.85      # 必须 < 1.0，否则窗口不透明、模糊�
 background-blur-radius = 0     # 关掉 ghostty 自带模糊，避免和 niri 双层模糊
 ```
 
+（这条对**不透明的客户端**同样成立：它们只能靠 niri 侧的 `opacity` 压 alpha，见 §8 第 27 条。）
+
 `~/.config/niri/window-rules.kdl`（给 ghostty 加 frost）：
 
 ```kdl
@@ -489,7 +510,9 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
    - 写 `~/bin/omarchy-niri-apply-theme`，跑一次写入 `focus-ring`；建
      `~/.config/omarchy/hooks/theme-set.d/10-niri-border`。
 10. 更新覆盖层（让上游更新能重放我们的改动）：
-    - `git diff > ~/.config/omarchy/niri-port/niri.patch`，`cp shell/Commons/Niri.qml ~/.config/omarchy/niri-port/`。
+    - 导出覆盖层：**必须限路径**，别裸跑 `git diff`（工作区里有 238 条主题删除等非移植改动）——
+      `git diff -- $(grep '^diff --git' ~/.config/omarchy/niri-port/niri.patch | sed 's|.* b/||') <新增的仓库内文件>
+      > ~/.config/omarchy/niri-port/niri.patch`；另 `cp shell/Commons/Niri.qml ~/.config/omarchy/niri-port/`。
     - 写 `~/bin/omarchy-niri-repatch`，建
       `~/.config/omarchy/hooks/post-update.d/10-niri-repatch`。
     - 每次 `omarchy update` 之后钩子自动重放；若冲突（上游改了同一函数）则手动合并（找 Ante）。
@@ -691,7 +714,7 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
     `barClearance`）与 `KeyboardPanel` 家族面板（`shell/Ui/KeyboardPanel.qml` 的 `gap`）按固定 bar
     高度算边距、**不计入 `floatGap`**，浮栏（§8.11）启用后这些弹窗的顶边会压住 bar 底缘约 8px。
     首选修法：在这两处各加一个 `barEdgeMargin` 项（`KeyboardPanel.qml` 已在 `niri.patch` 内，
-    会让 patch 从 18 个文件涨到 20 个）。零仓库改动的替代：让垫片把 `Style.gapsOut` 报得更大，
+    会让 patch 从 19 个文件涨到 21 个）。零仓库改动的替代：让垫片把 `Style.gapsOut` 报得更大，
     代价是面板间距一起变大。验证：打开托盘面板，量顶边是否 ≥ bar 底缘（物理 y ≈ 80）。
 
 19. **耗电/续航专项（2026-09-19 测过一轮，下次接着做）**：表现为"感觉慢 + 续航差"。已排除的
@@ -759,7 +782,7 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
     随 `install.sh` 的 `port-bin/*` glob 装进 `~/bin`；`~/bin` 在 niri 会话和 Quickshell 壳层的 `PATH`
     里都排第一，已实测）。它丢掉 uwsm-app 自身的选项和 `--` 之后 `exec "$@"`，**不做** systemd
     scope/unit/cgroup 记账——调用方只依赖"进程起得来、且已脱离调用者"，niri 不需要更多。这样**不必**去
-    30 个调用点逐个打补丁（那会把 `niri.patch` 从 18 文件/34 hunk 顶到几十个 hunk，且每次上游更新都要
+    30 个调用点逐个打补丁（那会把 `niri.patch` 从 20 文件/36 hunk 顶到几十个 hunk，且每次上游更新都要
     重放一遍）。§3.2 里那 4 处 `command -v uwsm-app` 守卫**保持原样**：垫片在位时它们走 uwsm-app 分支
     （= 垫片 = 直接 exec，等价而更短），垫片被删时它们仍是"没装垫片的新机器"的兜底。
     验证：`port-bin/tests/test-uwsm-app-shim.sh`（**离线**：假命令 + 临时目录，13 项——参数透传 /
@@ -813,13 +836,17 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
       `xdg-terminal-exec`——这条依赖垫片在位（§8 第 22 条）。`Mod+Z` 的实测恰好把垫片 v1.0 的 `setsid`
       坑顶了出来（`systemd-run` 路径静默死，见 §8 第 22 条 v1.1），修完 3 秒出 Zen 窗口。
     - 遗留未定：`Mod+O` 与 `Mod+Tab` 都绑 `toggle-overview`（用户未表态，暂留两个）。
+    - 后补（2026-09-20）：`Mod+Y` / `Ctrl+Shift+Esc` 的命令行多了 `--app-id=org.omarchy.float-tui`、`Mod+E` 的 nautilus 靠 window-rule 浮动，
+      见 §8 第 26 条。
 
 25. **桌面双击弹窗慢（壁纸/主题切换器"要等会"）（2026-09-20，用户要求）**：入口是 `shell/plugins/background/Background.qml`
     末尾那个 `MouseArea` —— **左键双击**桌面 → `omarchy-theme-bg-switcher`（壁纸），**右键双击** → `omarchy-theme-switcher`
     （主题）；两者都是 `omarchy-menu-images` + Quickshell 的 `omarchy.image-picker` 面板（IPC target `image-selector`）。
     - **根因**：切片 delegate 里的 `Image` 写的是 `asynchronous: false` → **首帧同步解码**最多 33 张 1536×864
       缩略图（`nearby` 半径 16），≈300ms 全压在 GUI 线程：选择器晚出 300ms，**bar 也跟着僵住**（同一线程）。
-    - **修法**：只把这一行改成 `asynchronous: true`（附 4 行说明注释），进 `niri.patch`（现 **18 文件 / 34 hunk**）。
+    - **修法**：只把这一行改成 `asynchronous: true`（附 4 行说明注释），进 `niri.patch`（2026-09-20 当天
+      为 **18 文件 / 34 hunk**；当晚电量数字置右后为 **19 文件 / 35 hunk**；2026-09-20 下半场补 `[bar]` 令牌后为
+      **20 文件 / 36 hunk**（见 §8 第 28、31 条）。
     - **实测**（`grim -o eDP-1 -t ppm` 每 ~75ms 采一帧定"画面何时出现"，脚本段用 QML `console.log` 时间戳对齐）：
       壁纸路径（75 张）**550ms → 250ms**；主题路径（2 张预览）本来就 ~250ms。**~250ms 是下限**：脚本+IPC ~95ms
       （其中 `qs ipc` 进程启动 ~50ms）+ QML ~68ms（建 75 个 delegate 占 15~25ms）+ 首帧合成 ~90ms。
@@ -829,8 +856,195 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
       之后脚本段 30ms）。`omarchy-theme-bg-set`（换壁纸）不动主题背景目录，不会让缓存失效。
     - 改完必须 `omarchy-restart-shell`：`omarchy-launch-shell` 用 `QS_DISABLE_FILE_WATCHER=1` 起 quickshell，
       **QML 没有热重载**；QML 的 `console.log` 落在 `journalctl -t omarchy-shell`（查时序比截图准）。
+    - **2026-09-20 续：用户纠正"不是切换，是打开那个 picker"，于是分层量了一遍** ——
+      ① 脚本段（`omarchy-theme-bg-switcher` → `omarchy-menu-images` → IPC open）：`bash -x` + `EPOCHREALTIME`
+      跟踪 764 行，**全程 21ms**（rows 缓存 74 行命中、缩略图全在 `~/.cache/omarchy/image-selector`，18M/115 文件）；
+      ② 面板窗口进合成器 121ms 冷 / 18ms 热（轮询 `niri msg --json layers`）；
+      ③ 可见首帧（条带探针）：**scrim ≈220~280ms、整卡（切片+名字）≈240~400ms**。
+      **慢只在冷态**（开机后 / 重启壳层后第一次）：18M 缩略图的页缓存冷读 + 首帧的驱动侧管线/纹理分配。
+      **修正一个曾经的误判**：不是"每次壳层启动重编译 shader" —— Qt 有磁盘着色器缓存
+      `~/.cache/qtshadercache-x86_64-little_endian-lp64`（44K/3 文件，反复开 picker 不再写 = 命中），
+      重启后重付的只是管线创建 + 纹理/FBO 分配，比编译轻。
+      **不对称（壁纸比主题更明显的原因）**：主题路径带 `--lazy-thumbnails`，且 `omarchy-theme-set:402` 换完主题会
+      `omarchy-theme-switcher --preload` 焐热；壁纸路径（`omarchy-theme-bg-switcher`）**两样都没有** —— 永远冷启动。
+    - **2026-09-20 新增：登录后台预热（用户「如果开机做预热可以延迟吗?」→「搞」）**。
+      `~/.config/systemd/user/omarchy-picker-warmup.service`（软链进 `graphical-session.target.wants/`，
+      照 `omarchy-crash-watch.service` 的式样：`After=/PartOf=graphical-session.target`、
+      `ConditionEnvironment=WAYLAND_DISPLAY`、显式 `Environment=OMARCHY_PATH/PATH`）→ 跑
+      `~/bin/omarchy-picker-warmup`。三个设计点：
+      **① 延迟**：`Environment=PICKER_WARMUP_DELAY=45` + `ExecStartPre=/bin/sleep ${PICKER_WARMUP_DELAY}`
+      （systemd 支持在命令里做变量展开，实测生效）—— 预热会同步 fan-out `nproc` 个 vipsthumbnail，
+      会话刚起来时跟它抢盘不划算；**② 不抢资源**：`Nice=19` + `IOSchedulingClass=idle`；
+      **③ 可关**：`toggles/picker-warmup-off` 存在即跳过（沿用 crash-capture 的约定，不用 disable 单元）。
+      脚本做三件事：`omarchy-theme-switcher --preload`（顺手重建主题预览软链）、
+      `omarchy-menu-images --preload --selected … <主题 backgrounds> <用户 backgrounds/$theme_name>`
+      （**参数必须与 `omarchy-theme-bg-switcher` 一字不差**，否则行集不同 = 白热；已核对 md5 键
+      `b618dc51…` 同一份 74 行 rows 缓存）、`cat` 一遍 `*.jpg` 把 18M 缩略图拉进页缓存。
+      **顺序有讲究**：QML 只保留最后一次 preload 的行集，所以壁纸那条必须放最后。
+      **实测**（`systemctl --user start --no-block`）：45.16s 后执行、`Result=success`、
+      三段 `theme 113ms / background 98ms / thumbnails 10ms`；`touch toggles/picker-warmup-off` 后
+      `ConditionResult=no` 直接跳过。**它省不掉首帧渲染**（`preload` 只装数据不画，`card.visible=false`
+      时委托不渲染，且真开一帧会抢 `keyboardFocus: Exclusive`），所以预热后的可见首帧在我这边
+      与预热前同量级（177~280ms scrim / 240~400ms 整卡，噪声级别）—— 预热买的是**冷态**那几百 ms 的
+      页缓存与脚本重建，**热态无感属正常**。
+    - **测量备忘（重要，别再走弯路）**：`grim` 全屏一帧 ≈1.7s（2560×1600 → 逻辑 1280×800 的 CPU 缩放），
+      **完全不够用**；`grim -g "x,y 8x8"` ≈31ms/帧、`grim -g "0,396 1280x8"` ≈57ms/帧（起几条参考列做亮度时间线）
+      才是可用的时序探针。另外 `grim -g` 收**逻辑**坐标、输出却是物理像素（scale 2 → 2 倍尺寸）。
     - 回退：`git checkout -- shell/plugins/image-picker/ImagePicker.qml`，或先还原
-      `niri.patch.bak-20260920-prepickerperf` 再 `omarchy-niri-repatch`。
+      `niri.patch.bak-20260920-prepickerperf` 再 `omarchy-niri-repatch`；预热另回退
+      `systemctl --user disable --now omarchy-picker-warmup` + 删 `~/.config/systemd/user/omarchy-picker-warmup.service`
+      与 `graphical-session.target.wants/` 里的软链 + 删 `~/bin/omarchy-picker-warmup`（全在用户级，不碰 root）。
+
+26. **按键里不能写开窗属性（`open-floating` 放 bind 里 = 整份配置被拒）（2026-09-20，用户问「Super+E 的 nautilus、
+    Super+Y 的 yazi 能浮动吗」）**：
+    - **结论**：niri 26.04 的 keybind **只允许一个动作**。`Mod+E … { spawn "nautilus"; open-floating true; }` 的报错是
+      `× only one action is allowed per keybind`，箭头指在 `open-floating` 上（`unexpected node`）。不是拼写问题：临时配置里
+      把键名改成 `open-floaating`，报错**一模一样**；而只留 `spawn "nautilus";` 则 `config is valid`。
+      **开窗属性的正确位置是 window-rule**（本机已有两条在跑：Firefox PiP、`org.omarchy.terminal`）。
+    - **最坑的地方**：这个错**不弹在桌面上**。niri 的配置 watcher 对整份 `config.kdl`（含所有 include）做事务性校验，
+      **任何一处失败就整体丢弃、继续用旧配置**，屏幕上毫无提示；只有 journal 里有
+      `niri[pid]: Error: × only one action is allowed per keybind` + `binds.kdl:27` 那样的行号。
+      症状因此是"改了跟没改一样"，而且会连累**同一次写的其它按键**（用户那行就是这么一直不生效的）。
+      排查口诀：改完按键先 `niri validate`（它会对 include 一起校验），再看 `journalctl` 有没有 `niri\[` 的 config 报错。
+    - **落点（2026-09-20）**：`window-rules.kdl` 末尾加两条 —— `^org.gnome.Nautilus$` 与 `^org\.omarchy\.float-tui$`
+      （各 `open-floating true` + `default-column-width { proportion 0.6 }` / `default-window-height { proportion 0.7 }`）；
+      TUI 那条**要重复磨砂块**，因为 Ghostty 的规则匹配的是 `com.mitchellh.ghostty`，换了 app-id 就不覆盖了。
+      yazi 与 btop 都跑在 ghostty 里、app-id 本与所有终端相同，**靠 `--app-id` 分开**，且**共用一个 `org.omarchy.float-tui`**
+      （用户偏好统一入口：将来再加 htop 之类只需换命令、不用加规则；要单独调尺寸就给它自己的 app-id 再复制一条规则）：bind 改成
+      `omarchy-launch-terminal --app-id=org.omarchy.float-tui yazi|btop` → `xdg-terminal-exec --app-id=` → ghostty desktop entry 的
+      `X-TerminalArgAppId=--class=`（跟安装/卸载终端做成 `org.omarchy.terminal` 是同一条路；垫片 `~/bin/uwsm-app` 只吃掉
+      `--` 之前它自己的选项，命令行照原样透传）。
+    - **实测**（2026-09-20 逐个起窗口、`niri msg --json windows` 读回）：`… --app-id=org.omarchy.float-tui yazi` →
+      `app_id=org.omarchy.float-tui, title="Yazi: <cwd>", is_floating=true, window_size=[764,528]`；`… btop` 同样
+      `is_floating=true, [764,528]`（= 0.6×1280 / 0.7×760 逻辑像素减 gaps）；
+      `nautilus --new-window` → 新窗口同样 `is_floating=true`。`niri validate` 通过、niri 自动重载
+      （journal `DEBUG niri_config: loaded config from …`）。测试窗口已关闭，未留垃圾。
+    - **两个边角**：① 同文件里写 `match app-id="^org\.gnome\.Nautilus$"` 会报 `invalid escape char` —— KDL **普通字符串里
+      `\.` 非法**，要么照上游写不转义的 `"^org.gnome.Nautilus$"`，要么用原始串 `r#"^org\.gnome\.Nautilus$"#`
+      （这条是本次自己踩的，改完才 `config is valid`）。② nautilus 是单实例 / D-Bus 激活：**已有窗口时再按 Super+E 只是聚焦**
+      （旧窗口当初就没浮动，规则也不会回头改它，规则只作用于新窗口）；要每次开新的浮动窗就把 bind 写成
+      `spawn "nautilus" "--new-window"`。手动把当前窗口切浮动是 `Mod+V`。
+    - 回退：还原 `~/.config/niri/binds.kdl.bak-20260920-floatbinds` 与
+      `~/.config/niri/window-rules.kdl.bak-20260920-floatbinds`，再 `niri validate`。
+
+27. **不透明 app 的磨砂：只写 `background-effect { blur true }` 是看不见的（2026-09-20，用户要求「微信加上 blur，
+    我写那个不生效」）**：
+    - **根因（官方说法）**：niri wiki 的 Window Effects 页开篇就是「**The window needs to be semitransparent for you to
+      see the background effect**（否则被不透明窗口完全盖住）」。微信 Linux 版是 **XWayland** 客户端
+      （跑在 `xwayland-satellite` 下、niri 报的 pid 就是 satellite），自己画的是不透明底 —— 所以用户原来那条规则
+      （跟 zen 共用一条、带 `background-effect { xray false; blur true }`）**一直在应用，只是没有东西透过来**。
+    - **修法**：给窗口压 alpha —— `opacity 0.85`。niri 的 `opacity` 是**动态属性**、**逐 surface** 作用在窗口自身
+      不透明度之上（wiki：`Opacity is applied to every surface of the window individually`），客户端自己不肯透明的 app
+      只能靠它。顺手把原先与 zen 共用的那条规则拆成两条（zen 照旧 `open-maximized` + blur，不加透明度），微信单独：
+      `match app-id="^wechat"` + `open-maximized true` + `opacity 0.85` + `background-effect { xray false; blur true }`。
+    - **实测**（`grim` 全屏 → numpy 裁微信窗口内部 1190×1400 物理像素；微信当时占屏幕右半，物理 x 1260..2531）：
+      不透明时 `mean=225.3`；加 `opacity` 后 `mean=213.5`、**79.9% 的像素变化 >8**、`平均|Δ|=16.3` → alpha 确实压在
+      XWayland 窗口上（反推透出来的背景均值 ≈147，符合壁纸）。模糊是否真起作用：同 opacity 下 blur on/off 对比 →
+      `平均|Δ|=4.82`、16.6% 像素 >8，高频能量 `7.33 → 6.76`（模糊后透出来的背景更平滑）。`blur false` 那次是临时改动、
+      已恢复；最终配置 `niri validate` 通过、niri 自动重载、journal 无错。
+    - **顺手排除一个怀疑**：niri 的 `match` 是 **OR**（wiki：「a window needs to match *any* of the `match` directives」），
+      所以"一条规则里两个 `match app-id=`"不是错的，也不需要拆 —— 本次拆开只是为了给微信单独加 `opacity`。
+    - **测量踩的坑**：用户当场在别的 workspace 上干活，微信所在工作区一旦不是"当前显示"的那个，截图里就只有壁纸
+      （我第一次取到 `mean=70` 就是这种）。要测就先确认窗口真的在屏幕上（本机没装 xdotool/xwininfo，只能用
+      「亮色 UI 掩码扫列」或先看 `niri msg workspaces` 的 `active`/`active_window_id`）。
+    - 回退：`~/.config/niri/window-rules.kdl.bak-20260920-wechatblur`。另两条 niri 配置通用坑见 §8 第 26 条。
+
+28. **bar 的内联部件设置：电量百分比与摘掉 `omarchy.system-update`（2026-09-20，用户 "bar的电池加百分比, 去掉中间的
+    omarchy 更新"）**：bar 部件的参数**写在 `shell.json` 的 entry 自己身上**（不是插件目录），电量百分比就是
+    `omarchy.power` 加 `"showPercentage": true` —— `panels/power/Panel.qml` 读 `setting("showPercentage", false)`，
+    右键点部件图标是同一个开关；`layout.center` 把 `omarchy.system-update` 这条删掉即整块消失（该部件本来就只在
+    **有待更新包**时才画东西，平时隐形 —— "看不见它"不等于没生效）。**`shell.json` 是热监听**
+    （`shell.qml` 的 `userConfigFile`，`watchChanges: true` + `onFileChanged: reload()`），存盘即生效，
+    不必 `omarchy-restart-shell`。实测（bar 条内笔画像素）：最右端 684 → 939（多出电量数字）、中间带 1371 → 1213
+    （更新部件消失 + 居中组位移）。回退：`~/.config/omarchy/shell.json.bak-20260920-bar`。
+    **同日追加（用户 "百分比放最右边视觉效果更好"）**：上游 `panels/power/Panel.qml` 的 `text` 本来是
+    `Math.round(fraction*100) + "% " + batteryIcon()` —— **数字在左、图标在右**（这就是 Omarchy 的默认样子，
+    所以 bar 最右那格是电池图标）。改成 `root.batteryIcon() + " " + Math.round(...) + "%"` → 数字落到最右端。
+    这是**仓库内文件**，因此 `niri.patch` 从 18 文件/34 hunk 变为 **19 文件/35 hunk**（重生成务必限路径，
+    见 §8.7；裸 `git diff` 会把 238 条主题删除一起写进去）；QML 改动要 `omarchy-restart-shell` 才加载。
+    （2026-09-20 晚再补 `[bar]` 令牌后为 **20 文件/36 hunk**，见第 31 条。）
+    验收用**字形高度指纹**：电池图标比数字高一档（墨高 23 vs 19 物理像素）——改前 h23 块在 x 2493..2515（右端），
+    改后落到 x 2431..2454（左端），右端只剩三个 h19 块（`5`/`0`/`%`）。
+    回退：`shell/plugins/panels/power/Panel.qml.bak-20260920-pctorder` + `niri-port/niri.patch.bak-20260920-pctorder`。
+
+29. **窗口缝隙 16 → 8（2026-09-20，用户 "窗口缝隙过大调小些"）**：`~/.config/niri/layout.kdl` 的 `gaps`（逻辑像素，
+    内缝与外缝共用一个值；这里没有单独的 `window-gaps`）。实测：窗口**上缘物理 112 → 96**（= 逻辑 56 → 48 =
+    32 bar + 8 floatGap + 8 gaps）、**右缘 +16 物理**、整屏 22.6% 像素重排（niri 重载配置即重排，不用重启）。
+    `niri msg --json windows` 的 `tile_size` 616×728 → 628×744、`window_size` 612×724 → 624×740。
+    **坑：`window_size` 是"减过窗口边框"的数**（`window_offset_in_tile [2,2]` → 每边 2 逻辑），别拿它直接套
+    "屏幕 − 2×gaps" 的公式；对几何起疑时以**像素边缘**为准（本机 `tile_pos_in_workspace_view` 恒为 null）。
+    `gaps` 只存在于 `layout.kdl` 且不随主题重写（`omarchy-niri-apply-theme` 只插 `focus-ring`/`border` 的颜色块）。
+    回退：`~/.config/niri/layout.kdl.bak-20260920-gaps`。
+
+30. **菜单卡片"过于黑"：底色 = 主题 `[menu] background`（2026-09-20，用户 "omarchy menu过于黑了"）**：卡片底色不是
+    菜单代码里的常量，而是 `Commons/Color.qml` 从主题 `shell.toml` 的 `[menu] background` 取（模板
+    `default/themed/shell.toml.tpl` 里 = `{{ background }}`，本主题即 `colors.toml` 的 `background = #14140c`），
+    再乘用户层的 `background-alpha`（现 0.7）。所以"黑"是**底色本身近黑**，跟模糊没关系。改法：在
+    `~/.config/omarchy/shell.toml` 覆盖 `[menu] background = "#2a2a22"`（本主题的 `lighter_background`）——
+    卡片中位色**（45,38,38）→（60,53,54）**，与模型吻合（0.7×底色 + 0.3×背后模糊壁纸，反推出背后 ≈ (103,80,98)）。
+    **这个文件同样是热监听**（`userShellFile` `watchChanges: true` → `reload()`），存盘即变色。
+    两个坑：① **颜色 token 只认 `foreground` / `background` / `accent` / `urgent` / `muted` / `text` / `transparent`
+    和 shell.toml 里的 `section.key`**（如 `hyprland.active-border-foreground`）—— `colors.toml` 的
+    `lighter_background` 之类**不在解析表里**（`loadColors` 只提取 foreground/background/accent/muted/colorN），
+    所以这里只能写字面值，而写了字面值**就不再随主题变**（换主题/换壁纸重取色后要回来改）；想要"跟着主题走"就得改
+    模板 `shell.toml.tpl` 的 `[menu] background` 为 `{{ lighter_background }}`（会进 patch，需重新生成主题）；
+    ② 打开菜单时**整屏变暗来自 `menu.scrim`**（`scrim = {{ background }}` + `scrim-alpha 0.5`：亮壁纸区
+    220 → 120，正好压掉一半亮度）——嫌"菜单一开整屏黑"就调 `[menu] scrim-alpha`，别去动卡片底色。
+    回退：`~/.config/omarchy/shell.toml.bak-20260920-menu`。
+
+31. **`[bar]` 段只认 3 个键 → 让 `shell.toml` 能覆盖全部 bar 整型令牌（2026-09-20，起因："bar 上字体是不是有的大有的小" →
+    "能不能打补丁似的一样大"）**：起点是实测确有大小不一 —— 左组 `meviusisback.ai-subs` 的 bar 文字硬写
+    `Style.font.caption`(10)，比内置部件的数字小一档多（字形高 14–17 vs 19–20 物理像素）；先把它的 5 处提到
+    `Style.font.body`(12)（用户先要 13，试完说"太大了，再小点"→ 定 12，详见 `docs/plugins.md` §5.1），
+    再让它跟内置部件真正同档：往 `~/.config/omarchy/shell.toml` 写 `[bar] icon-font = 12` —— **不生效**。
+    根因在 `shell/Commons/Style.qml` 的 `applyShellValues()`：`[font]`/`[spacing]`/`[controls]` 都接受任意键
+    （`fontOut[key] = v`），唯独 `[bar]` 只认 `scale-with-font` + `size-horizontal`/`size-vertical`，
+    **其余键静默丢弃** —— 可 `Style.bar` 的 token 本来就是 `barToken(key, fallback)` 从 `barOverrides[key]`
+    按名取的，这个字面量白名单纯属漏写。补丁：扩成 `Style.bar` 里全部整型 token（`size-horizontal`/`size-vertical`/
+    `icon-slot`/`icon-canvas`/`icon-font`/`status-slot`）→ 以后 `[bar] icon-slot = 30` 之类也能用 shell.toml 热改。
+    实测（同一张截图内对比，scale 2 物理像素）：内置部件数字/图标 19–20 / 21–24 → **17–19 / 19–22**（电量 `80%`
+    由 19–20 降到 18–19、天气图标 24 → 22），时钟 18–19、ai-subs 17–18 → **全 bar 同一档 12**；残余 ±1 物理 px 是
+    "图标字体（`BarIconButton`）vs UI 字体（`WidgetButton`/插件）"的字形度量差，不是档位差。
+    ⚠ **别拿不同部件的高度差反推字号**：我自己就用这条把时钟误判成 13 档（其实它一直是 `WidgetButton.fontSize`
+    = `Style.font.body` = 12），同档不同字体面就会差 1–2 物理 px。
+    `niri.patch` 因此 19 文件/35 hunk → **20 文件 / 36 hunk**（重生成务必限路径，见 §8.7；`--reverse --check` 通过、
+    `omarchy-niri-repatch` 幂等）。仓库内 QML 改动要 `omarchy-restart-shell`。
+    回退：`shell/Commons/Style.qml.bak-20260920-bartoken` + `niri-port/niri.patch.bak-20260920-bartoken`，
+    再把 `shell.toml` 里那行 `icon-font` 撤掉（bar 回到 13 档）。
+    排查途中另捡到两件事（都与本条无关但会让人误判"部件坏了"）：① `~/.config/omarchy/shell.json` 里 ai-subs 的
+    `barDisplay` 被从 `Data` 切成了 `Icon`（面板底部那个 Icon/Data 开关，点一下就会写回 shell.json），
+    bar 上就只剩一个图标、没有用量数字 —— 已按文档恢复 `Data`，快照 `shell.json.bak-20260920-bardisplay`；
+    ② 该插件的取数 `Timer` 只在 `refreshIntervalSec`（900s）**到点后**才首次触发，所以**每次重启壳层后 bar 上
+    要空最多 15 分钟**才出数字（不是坏了）—— 想立刻要数据用
+    `qs -p ~/.local/share/omarchy/shell ipc call meviusisback.ai-subs refresh`（`open`/`close`/`toggle` 同理；
+    顺带一提，`qs ipc` 不带 `-p` 会报 "Could not find default config directory"，因为这套壳层的配置不在
+    `~/.config/quickshell/`）。
+
+32. **吐司"一来通知整屏变糊"：全屏 surface 撞上 niri 侧 `blur true`（2026-09-20，用户 "我的吐司通知,
+    现在有blur全屏故障. 我一直没修. 你看看"）**：吐司窗口是**全屏**透明 `PanelWindow`
+    （`shell/plugins/notifications/Service.qml`，注释写明"像 OSD 覆盖层那样固定尺寸，免得增删吐司时
+    surface 变尺寸、把卡片短暂拉伸"），而 `~/.config/niri/effects.kdl` 里那条
+    `background-effect { blur true }` 是 `^omarchy-osd$` 与 `^omarchy-notifications$` **共用**的——
+    `blur true` = "整面 surface 都糊"，只有在**卡片大小**的 surface 上才等价于"只糊卡片"。OSD 早先已改成
+    卡片大小（§8.8），吐司没有，于是每来一条通知 niri 就把**整屏**霜化。按 §8.8 的老规矩"让客户端下发区域"修：
+    ① `effects.kdl` 把这条规则拆开——OSD 保留 `blur true`，通知独立一条**只设 `xray false`**；
+    ② `Service.qml` 根 `PanelWindow` 加 `import Quickshell.Wayland._BackgroundEffect` +
+    `BackgroundEffect.blurRegion: Region { item: popupColumn; radius: service.cornerRadius }`。
+    实测（2560×1600，左下 40%×35% 区域的边缘能量；两次截图之间不产生终端输出以保内容不变，且用
+    `~/.local/state/omarchy/notifications/*.json` 确认截图时吐司确实在屏）：修前 有吐司 **8.25** / 无吐司 ~11.8–12.9
+    （整屏被糊）→ 修后 有吐司 **14.48** / 无吐司 **14.62**（差 1%，远处不受影响）。
+    `niri.patch` 20 文件/36 hunk → **21 文件 / 38 hunk**（重生成务必限路径，§8.7；**新增文件要显式补进
+    路径表**，否则下次重放会漏）。回退：`Service.qml.bak-20260920-notifblur` +
+    `effects.kdl.bak-20260920-blurnotif` + `niri-port/niri.patch.bak-20260920-notifblur`。
+    配置是 Layer-1（改完 `niri validate` 即热加载），仓库内 QML 改完要 `omarchy-restart-shell`。
+    两个已知残余：① 区域是**一个矩形**包住整列吐司，所以同时叠两条以上时卡片之间那 8px 缝隙也会被糊到
+    （很轻；quickshell 的 `blurRegion` 只收一个矩形）；② §8.8 记过 niri 上 region 几何跟踪会放大
+    （OSD 那次实测约 2.6 倍，疑似源于该 surface 会变尺寸）——吐司 surface 固定尺寸，本机实测远处无影响，
+    但若卡片周围出现肉眼可见的外溢，最省的回退是把通知那条规则整条删掉（卡片
+    `[notifications] background-alpha 0.85`，几乎不透明，霜面本就看不出）。
+    排查顺带否掉两个错误猜想（都不是这次的原因）：通知吐司本身是**图层表面**（`PanelWindow`），
+    结构上造不出 `xdg_popup must have parent before mapping`；锁屏期间吐司照收照 map，只是 niri 不渲染
+    非锁面所以看不见。
 
 ### 8.6 A 层：菜单指向 niri 真配置，Hyprland 层降级
 
@@ -885,13 +1099,14 @@ Omarchy 有两层配置，只有层1在 niri 上真正生效：
 
 - `omarchy update` = `git pull --ff-only`（`omarchy-update-dev`，在 `post-update` 钩子**之前**）+ 迁移。
 - **仓库外不碰**：`config.kdl` / `shell.json` / `~/bin/hyprctl` 都不在 omarchy 仓库内，`git pull` 动不到。
-- **仓库内会撞**：我们改了仓库内 **18 个文件**（`launch-tui`、`launch-editor`、
+- **仓库内会撞**：我们改了仓库内 **19 个文件**（`launch-tui`、`launch-editor`、
   `launch-floating-terminal-with-presentation`、`refresh-hyprland`、`theme-set`、`menu.jsonc`、
   `qmldir`、`Background.qml`、`ImagePicker.qml`、`Bar.qml`、`Workspaces.qml`、`Menu.qml`、`KeyboardPanel.qml`、
-  `osd/Osd.qml`、`AppLibrary.qml`，以及 2026-08-25 加的 3 个 `omarchy-system-{logout,reboot,shutdown}`）
-  ——这 18 个文件正是 `niri.patch` 的内容（`18 个文件 / 34 个 hunk`；2026-09-18 合并上游时为 30，
+  `osd/Osd.qml`、`AppLibrary.qml`、`panels/power/Panel.qml`，以及 2026-08-25 加的 3 个
+  `omarchy-system-{logout,reboot,shutdown}`）
+  ——这 19 个文件正是 `niri.patch` 的内容（`19 个文件 / 35 个 hunk`；2026-09-18 合并上游时为 30，
   2026-09-19 菜单自愈守卫 +2（§8.14）、Install/Remove 终端回退 +1（§8 第 21 条）、
-  2026-09-20 选择器异步解码 +1（§8 第 25 条））。
+  2026-09-20 选择器异步解码 +1（§8 第 25 条）、电量数字置右 +1（§8 第 28 条））。
   上游改到其中任何一个，`git pull --ff-only` 会因本地未提交改动而**失败中止**整个更新——这是需要
   手动合并的情况。
 - **不在 patch 里的新增文件**：`shell/Commons/Niri.qml`、`shell/plugins/blurwallpaper/` 是**未跟踪**
@@ -936,7 +1151,9 @@ niri 26.04 的 `background-effect` + Quickshell 的 `ext_background_effect` 形�
 
 **仓库内改动（已进 `niri-port/niri.patch`；2026-09-18 合并上游 `d174d4a` 后整份 patch = 17 个文件 /
 30 个 hunk，2026-09-19 起 32 个 hunk（菜单自愈守卫，§8.14）、再 +1 到 33（Install/Remove 终端回退，
-§8 第 21 条）、2026-09-20 再 +1 到 34（选择器异步解码，§8 第 25 条）；`--reverse --check` 通过）**：
+§8 第 21 条）、2026-09-20 再 +1 到 34（选择器异步解码，§8 第 25 条）；2026-09-20 晚实测
+**21 文件 / 38 hunk**（吐司 `blurRegion` +2，§8 第 32 条；中间还加过 bar 字号等改动，计数以实测为准）；
+`--reverse --check` 通过）**：
 - `shell/plugins/menu/Menu.qml`：加 `import Quickshell.Wayland._BackgroundEffect`，根 `PanelWindow`
   挂 `BackgroundEffect.blurRegion: Region { item: card; radius: root.cornerRadius }`。
 - `shell/Ui/KeyboardPanel.qml`：同上，根 `PanelWindow` 挂
@@ -956,8 +1173,13 @@ niri 26.04 的 `background-effect` + Quickshell 的 `ext_background_effect` 形�
 **仓库外 Layer-1 配置（pull 安全，不在 `niri.patch` 内）**：
 - `~/.config/niri/effects.kdl`（被 `config.kdl` `include`）：全局
   `blur { passes 4; offset 3.5; noise 0.03; saturation 1.6 }` + layer-rule：
-  - `^omarchy-osd$` / `^omarchy-notifications$` → `background-effect { blur true; xray true }`
-    （只磨砂背后壁纸；`omarchy-osd` 因 Osd.qml 已是卡片大小 surface，blur 只盖卡片）。
+  - `^omarchy-osd$` → `background-effect { blur true; xray false }`（Osd.qml 已是卡片大小 surface，
+    所以整面 blur 也只盖卡片；xray 与其余规则统一取 `false`，本篇早先写的 `xray true` 已过期）。
+  - `^omarchy-notifications$` → `background-effect { xray false }`（**只设 xray，不设 `blur true`**）。
+    吐司 surface 与 OSD 相反、**必须保持全屏**（`Service.qml`：固定尺寸，免得增删吐司时 surface 变尺寸、
+    卡片被短暂拉伸），所以 `blur true` 会霜化**整个屏幕**——2026-09-20 修的就是这个（§8 第 32 条）。
+    磨砂区域改由客户端下发：该文件根 `PanelWindow` 挂
+    `BackgroundEffect.blurRegion: Region { item: popupColumn; radius: service.cornerRadius }`。
   - `^omarchy-keyboard-panel$` → `background-effect { xray false }`（**只设 xray，不设 `blur true`**——
     Quickshell 已发卡片形状区域，该区域就是唯一磨砂范围，全屏 surface 不会霜化）。`xray false` =
     磨砂卡片背后的**实时窗口**（真毛玻璃）；`xray true` = 只磨砂壁纸。
@@ -1004,7 +1226,10 @@ git stash pop                               # 冲突集中在这一步
 
 # 解决冲突后，把工作区改动固化成新的覆盖层
 git add <已解决的冲突文件>                    # 必须归位 unmerged，否则 git diff 导出不全
-git diff HEAD > ~/.config/omarchy/niri-port/niri.patch
+git diff HEAD -- $(cat /tmp/niri-port-files) > ~/.config/omarchy/niri-port/niri.patch
+# ↑ 仍然必须限路径：工作区里长期存在非移植改动（2026-09-20 为止：238 条主题删除），
+#   裸 git diff HEAD 会把它们一起写进 patch，文件数从 19 变成 250+。
+#   /tmp/niri-port-files 从上一份 patch 提取：grep '^diff --git' niri.patch | sed 's|.* b/||'
 git reset                                   # 还原为「未暂存」，保持 pull 前置状态
 
 # 必做自检：patch 必须精确等于工作区改动，否则幂等判断失真
@@ -1186,8 +1411,10 @@ materal-update --print    # 只打印推导出的调色板
   该补丁**只存在实机**（插件本体仍从上游安装），未随移植仓库分发。
 - 参数：`floatGap = 8`（逻辑）、`cornerRadius = 10`、`transparent: false`。
 - 几何实测（scale 2.0，物理 px）：bar 占 y 16..79、左缘 x = 16（= 8 逻辑 floatGap，bar 高 32 逻辑）；
-  平铺窗口停在 728 = 800 − (32 bar + 8 floatGap + 16 niri gaps)——**niri 在自己的独占区之外又加了一次
-  gaps，两者不打架**（像素核对过）。
+  平铺窗口上缘从 112 收到 **96**（2026-09-20，`gaps` 16 → 8 后：逻辑 48 = 32 bar + 8 floatGap + 8 gaps；
+  旧值 112 = 逻辑 56 见 §9 的 2026-09-19 条目）——`tile_size` 628×744、`window_size` 624×740
+  （= 800 − 32 bar − 8 floatGap − 2×8 gaps）；**niri 在自己的独占区之外又加了一次 gaps，两者不打架**
+  （像素核对过；改法见 §8 第 29 条）。
 - 配套改动：`~/.config/niri/effects.kdl` 给 `^omarchy-bar$` 配 `background-effect { xray false }`（浮栏磨砂，
   2026-09-19；模糊区域形状由插件下发的圆角 `blurRegion` 决定，原因与实测见 §8.8）。
 - 第三方部件：`ryuhzk.ime` **2026-09-19 被 `ronald.input-sources` 取代**（macOS 式输入源徽章，见 §8.17）；
@@ -1268,7 +1495,7 @@ laravel 从 `~/.config/composer/vendor/bin/laravel` 改成 `~/.local/bin/laravel
 - **238 条主题删除未受影响**：上游这 5 个提交没碰 `themes/`，`--ff-only` 因此不会被本地删除挡住；
   更新后 `git status` 仍是 17 M + 238 D + 3 未跟踪（`shell/Commons/Niri.qml`、`shell/plugins/blurwallpaper/`、
   `shell/test-debug.qml`）。
-- **下次更新的预期**：上游一旦改到我们那 18 个文件（当时 17，2026-09-20 起 18，见 §8 第 25 条）里的**同一函数**，`omarchy-niri-repatch` 会以退出码 2
+- **下次更新的预期**：上游一旦改到我们那 19 个文件（当时 17，2026-09-20 起 18、当晚 19，见 §8 第 25/28 条）里的**同一函数**，`omarchy-niri-repatch` 会以退出码 2
   明确报冲突且不动仓库（见 §8.7），那时才需要手工翻译合并。
 
 ---
@@ -1581,6 +1808,10 @@ GTK/Qt 应用**重启后才生效**（截图核对：Nautilus 与 bar 文字同�
 
 **回退**：恢复各 `.bak-20260920-consistency` + `dconf load /org/gnome/desktop/interface/ < ~/.config/gsettings-interface.backup-20260920.ini` + 删 `~/bin/omarchy-display-text-size`。
 
+**2026-09-20 下半场补记（bar 自身的字号档）**：上面管的是"全局字号向 bar 看齐"，bar **自己**的档位也能调了 ——
+上游 `Style.qml` 的 `[bar]` 分支只认两个 size 键，补全后 `shell.toml` 写 `[bar] icon-font = 12` 即可让内置部件的
+图标+数字跟纯文本同档（本机现状，整条 bar 都是 12）。详见 §8 第 31 条。
+
 ---
 
 ## 9. 验证清单
@@ -1631,8 +1862,11 @@ GTK/Qt 应用**重启后才生效**（截图核对：Nautilus 与 bar 文字同�
 - [x] **主题动态取色（2026-09-19）**：`omarchy theme bg next` → path 单元触发 → `materal-update` 重取色并重套主题（staged `colors.toml` 与推导一致、生成了 `shell.toml`、无残留 guard）；重复运行判 "already matches"（幂等）；`omarchy theme set catppuccin` → `omarchy theme set Tonal-Spot` 钩子同样生效（见 §8.10）。
 - [x] **C 层回归修复（2026-09-19）**：脚本沿 `include` 找到 `layout.kdl` 的 `focus-ring` 并写入主题色（当时渐变取首色站），`niri validate` 通过（见 §5.6）。**晚些时候连升两级**：色源换成菜单同款 `active-border-foreground`；再把三色渐变拆成 `focus-ring`+`border` 两带并修掉角度约定（+90）——菜单卡片与窗口环逐点比对，外带 ΔRGB 合计 2，内带跟后半段（§5.6）。
 - [x] **窗口边框 = 菜单那圈（2026-09-19 晚）**：环的两带均由主题 token 生成（`--single-band` 保留单带对比版）；代价是 `border` 占内容 2 逻辑像素（`window_size` 612×724 vs `tile_size` 616×728），未聚焦窗透明不受影响（见 §5.6）。
-- [x] **浮栏几何（2026-09-19）**：像素实测 bar 占物理 y 16..79、左缘 x = 16；平铺窗口停在 728 = 800 − (32 bar + 8 floatGap + 16 niri gaps)，niri 独占区与自身 gaps 不打架（见 §8.11）。
+- [x] **浮栏几何（2026-09-19）**：像素实测 bar 占物理 y 16..79、左缘 x = 16；平铺窗口停在 728 = 800 − (32 bar + 8 floatGap + 16 niri gaps)——**这是当时的 gaps**，2026-09-20 改成 8 后为 744（见下条），niri 独占区与自身 gaps 不打架（见 §8.11）。
 - [x] **bar 部件（2026-09-19）**：胶囊工作区（聚焦点拉伸 2.6×、四级 alpha）与 Arch logo 渲染正常，点击经 `hyprctl` 垫片走通（见 §8.11）。
+- [x] **bar 电量百分比 + 去掉中间更新部件（2026-09-20）**：`omarchy.power` 加 `showPercentage: true`、`layout.center` 摘掉 `omarchy.system-update`；bar 条内笔画像素最右端 684 → 939（多出数字）、中间带 1371 → 1213（部件消失 + 居中组位移）；shell.json 热监听、免重启（见 §8 第 28 条）。**同日再改 `panels/power/Panel.qml`** 把 `text` 换成 `图标 + 数字%` 让数字落在最右（上游默认是数字在左）：字形高度指纹确认 h23 的图标块 x 2493..2515 → 2431..2454；`niri.patch` 因此 18 文件/34 hunk → **19 文件/35 hunk**（`--reverse --check` 通过、repatch 幂等）。
+- [x] **窗口缝隙 16 → 8（2026-09-20）**：`~/.config/niri/layout.kdl` 的 `gaps`；实测窗口上缘物理 112 → 96、右缘 +16、整屏 22.6% 像素重排，`tile_size` 616×728 → 628×744、`window_size` 612×724 → 624×740（本机 `tile_pos_in_workspace_view` 仍为 null，验收看像素边缘，见 §8 第 29 条）。
+- [x] **菜单卡片不再近黑（2026-09-20）**：`~/.config/omarchy/shell.toml` 覆盖 `[menu] background = "#2a2a22"`（本主题 `lighter_background`）→ 卡片中位色 (45,38,38) → (60,53,54)；该文件热生效；代价是**写了字面值后不再随主题变**，`menu.scrim-alpha` 才是"整屏变暗"的旋钮（见 §8 第 30 条）。
 - [x] **主题精简（2026-09-19）**：仓库自带主题删剩 `catppuccin`（含 `catppuccin-latte` 共删 21 个），用户层保留 `tonal-spot`；`omarchy-theme-list` → 只有 Catppuccin / Tonal Spot；覆盖层 `--reverse --check` 仍通过、当前主题与壁纸无断链（见 §8.7）。
 - [x] **菜单空白的成因与自愈（2026-09-19）**：截断 `default/omarchy/omarchy-menu.jsonc` 能复现
   "Nothing here yet"（恢复即好）；`Menu.qml` 自愈守卫进 patch（17 文件 / 32 hunk），实测健康 6 项 /
@@ -1650,8 +1884,23 @@ GTK/Qt 应用**重启后才生效**（截图核对：Nautilus 与 bar 文字同�
   （时钟右边的 `EN`）同日从 `layout.center` 摘掉，A/B 只差逻辑 x 706..742 那一块（见 §8.17）；徽章本地映射
   rime → `拼`（`badgeOverrides`，补丁 `plugin-patches/ronald.input-sources.patch`）。
 - [x] **桌面双击选择器弹窗速度（2026-09-20）**：切片 `Image` 改异步解码后，壁纸选择器首帧 550ms → 250ms，
-  且不再卡住 bar（原先是同线程同步解码 33 张缩略图）；主题选择器 ~250ms 已在下限；`niri.patch` 18 文件 /
-  34 hunk、`--reverse --check` 通过、`omarchy-niri-repatch` 幂等（见 §8 第 25 条）。
+  且不再卡住 bar（原先是同线程同步解码 33 张缩略图）；主题选择器 ~250ms 已在下限；`niri.patch` 20 文件 /
+  36 hunk、`--reverse --check` 通过、`omarchy-niri-repatch` 幂等（见 §8 第 25、28、31 条）。
+  **同日二次定位**（用户「不是切换，是打开那个 picker」）：脚本段全程 21ms、面板进合成器 121ms 冷/18ms 热、
+  可见首帧 scrim ≈220~280ms / 整卡 ≈240~400ms → 余下的"等会"只在**冷态**（页缓存 + 首帧管线/纹理分配），
+  已加登录后 45s 延迟预热单元 `omarchy-picker-warmup`（`Nice=19`/IO idle/可 toggle；45.16s 后执行、
+  三段 113/98/10ms、`Result=success`）。**热态无感是预期**——预热不画那一帧（见 §8 第 25 条）。
+- [x] **浮动 app 窗口（2026-09-20）**：nautilus 与 yazi 改由 `window-rules.kdl` 的 `open-floating` 浮动（bind 里写
+  `open-floating` 是无效语法，会让**整份配置**被静默丢弃、继续跑旧配置）；yazi 与 btop 经共用的 `--app-id=org.omarchy.float-tui` 与普通终端分开；三者（含 nautilus）实测 `is_floating=true`，
+  窗口 764×528（见 §8 第 26 条）。
+- [x] **微信磨砂（2026-09-20）**：XWayland 客户端自己画不透明底，光有 `blur` 规则看不见 —— 加 `opacity 0.85` 让 niri 压
+  alpha 后才出效果；实测不透明→半透明窗口区域 `mean 225.3→213.5`、79.9% 像素变化 >8，blur on/off `平均|Δ|=4.82`
+  （见 §8 第 27 条）。
+- [x] **全 bar 字号统一到 12（2026-09-20）**：ai-subs 胶囊的 bar 文字 `caption`(10) → `body`(12)（5 处，用户先要 13 再
+  改 12）；`Style.qml` 的 `[bar]` 分支补全整型 token 白名单后，`shell.toml` 的 `[bar] icon-font = 12` 生效 ——
+  内置部件数字/图标 19–20/21–24 → 17–19/19–22，与时钟、ai-subs 同档；`niri.patch` 19 文件/35 hunk →
+  **20 文件 / 36 hunk**（`--reverse --check` 通过、repatch 幂等）；顺带修回被切走的 ai-subs `barDisplay`，
+  并记下 `qs -p … ipc call … refresh` 这条立刻取数的路子（见 §8 第 31 条 + `docs/plugins.md` §5.1）。
 
 ---
 
@@ -1787,8 +2036,8 @@ tar -C "$HOME" -xzf /var/tmp/yvonne-to-main.tar.gz --strip-components=1
 
 ```bash
 git -C ~/.local/share/omarchy status --short | grep -c '^ D'   # 238
-git -C ~/.local/share/omarchy status --short | grep -c '^ M'   # 18
-grep -c '^@@' ~/.config/omarchy/niri-port/niri.patch           # 34（18 文件）
+git -C ~/.local/share/omarchy status --short | grep -c '^ M'   # 20
+grep -c '^@@' ~/.config/omarchy/niri-port/niri.patch           # 36（20 文件）
 ls ~/.local/state/omarchy/migrations | wc -l                   # 121
 systemctl --user daemon-reload && systemctl --user enable --now materal-recolor.path
 ```
@@ -2012,10 +2261,13 @@ greetd 重拉 greeter 时，新实例的脸扫**命中**了 → greetd 立刻又
 **2. 必须带走的东西**（不只是点文件）
 - `~/bin/` 里自写的：`hyprctl`（niri 的 shim，**必需**；`.bak-*` 可丢）、`uwsm-app`（**必需**，§8 第 22 条）、
   `materal-update`、`omarchy-niri-apply-theme`、
-  `omarchy-niri-repatch`、`omarchy-niri-system`、`omarchy-powerprofiles-{list,set}`、`vantage`（分辨率 TUI，若在别处也一并带）。
+  `omarchy-niri-repatch`、`omarchy-niri-system`、`omarchy-powerprofiles-{list,set}`、`vantage`（分辨率 TUI，若在别处也一并带）、
+  `omarchy-picker-warmup`（登录后台预热 picker，配 `~/.config/systemd/user/omarchy-picker-warmup.service`，§8 第 25 条）。
 - `~/.config/omarchy/`：`themes/`（含 tonal-spot 等自定义）、`plugins/`、`shell.json`、
   `extensions/omarchy-menu.jsonc`（用户级菜单 override，含 screensaver 屏蔽与 icon 转义修复）、hooks。
 - `~/.config/systemd/user/materal-recolor.{path,service}` → 搬完 `systemctl --user daemon-reload && systemctl --user enable --now materal-recolor.path`。
+- `~/.config/systemd/user/omarchy-picker-warmup.service`（+ `graphical-session.target.wants/` 软链；预热 picker，§8 第 25 条）、
+  `omarchy-crash-watch.service`（同上软链；忘搬就少了崩溃诊断）。
 - `~/.local/share/omarchy`（shell 本体 + bin + 主题，git 检出，带 `.git` 一起）。
 - 壁纸库 `/data/Pictures/Wallpapers`（所有主题都软链到这里，**路径大小写敏感**）。
 - 七个插件：`charlieras262.floating-bar`、`io.github.sirjul1337.lock-explorer`、`jrmmhm.pocket`、`meviusisback.ai-subs`、

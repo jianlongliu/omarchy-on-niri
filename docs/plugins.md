@@ -144,11 +144,51 @@ journalctl -t omarchy-shell --since "-10min" | tail -50
   python3 fetch_usage.py | jq -r '.providers[] | "\(.id)\t\(.configured)\t\(.error // "")\t\(.label // "")"'
   ```
 
-- **本地魔改**：Data 模式左内距 + 组间距（「太挤了」）——`leadingPad = Style.space(8)`（对齐第一方部件
-  的 8px 惯例）、窗口组间距 6→10、组内（`5h` / `%` / 进度条 / `(1h)`）4→6。
+- **本地魔改**（两批，同一份 patch 存档）：
+  1. Data 模式左内距 + 组间距（「太挤了」）——`leadingPad = Style.space(8)`（对齐第一方部件
+     的 8px 惯例）、窗口组间距 6→10、组内（`5h` / `%` / 进度条 / `(1h)`）4→6。实测宽度 321px → 359px。
+  2. **bar 字号提档（2026-09-20，「有的字大有的小」）**：部件内 bar 文字原来硬写 `Style.font.caption`(10)，
+     比 bar 上其它数字小一档多（实测字形高 14–17 物理 px，右侧电量 19–20）。先试了 13（`Style.bar.iconFont`）
+     —— **用户嫌太大**，最终定在 **12（`Style.font.body`，＝纯文本档，同托盘标题 / input-sources 徽章）**。
+     共 **5 处**，全在 `dataButton` 里——窗口组的 `·` / 窗口标签 / 百分比 / 重置倒计时 + 回落单标签 `chipLabel`；
+     **弹窗面板里的字号一处没动**（那是面板自己的尺度，如面板内 `Text { text: chip.label }` 仍是 `caption`）。
+     实测：字形高 14–17 → **17–18**；部件右缘 939 → 1005 物理 px（13 档是 1038），
+     与中间组（时钟前沿 x=1193）留 188 物理 px ≈ 94 逻辑 px 间隙 → 宽松。
+     再往下就是 `bodySmall`(11)（字高 ≈16）和原来的 `caption`(10)（字高 ≈14–15，即用户嫌小的那档），别不打招呼就退回去。
+  3. **顺手把全 bar 统一到 12（同日，用户「能不能打补丁似的一样大」）**：光把本部件调到 12 还不够 ——
+     内置部件的数字仍是 13 档（`Style.bar.iconFont`）。做法是 `~/.config/omarchy/shell.toml` 写 `[bar] icon-font = 12`，
+     但**上游 `Style.qml` 的 `[bar]` 分支只认 `size-horizontal`/`size-vertical`/`scale-with-font`、会静默丢弃
+     `icon-font`** → 先把 `shell/Commons/Style.qml` 的白名单补全（进 `niri.patch`，症状与踩坑见主文档 §8 第 31 条）。
+     生效后同图实测：内置数字/图标 19–20 / 21–24 → **17–19 / 19–22**，与时钟（18–19）、本部件（17–18）同档。
+     **回退 = 删 shell.toml 里那行**（bar 回 13 档；插件这 5 处不受影响）。
   patch 存档 `~/.config/omarchy/niri-port/plugin-patches/meviusisback.ai-subs.patch`
-  （`git apply --check --reverse` 通过 = 与工作树一致）。实测宽度 321px → 359px。
-- **回退**：`git -C ~/.config/omarchy/plugins/meviusisback.ai-subs checkout -- Panel.qml` + 重启壳层。
+  （`cd ~/.config/omarchy/plugins/meviusisback.ai-subs && git diff > <该路径>` 生成；
+  `git apply --reverse --check` 通过 = 与工作树一致；当前 9 hunk / 1 文件，含上面三批）。
+- **运维两条（都是「看着像坏了其实没坏」）**：
+  ① **`barDisplay` 会被面板底部那个 `Icon` / `Data` 开关写回 `shell.json`** —— 被切成 `Icon` 时 bar 上只剩一个图标、
+     **没有用量数字**（本机 2026-09-20 就被切走过一次，已按文档恢复 `Data`，快照 `shell.json.bak-20260920-bardisplay`）；
+     排查"数字不见了"先看 `shell.json` 里这个键，别急着怀疑插件。
+  ② **每次重启壳层后 bar 上最多空 15 分钟**才出数字：取数 `Timer` 的 `interval = refreshIntervalSec`(900s) 且
+     `running: true`，而 QML 定时器**不会**立刻触发一次。要立刻取数：
+     `qs -p ~/.local/share/omarchy/shell ipc call meviusisback.ai-subs refresh`（`open` / `close` / `toggle` 同理；
+     不带 `-p` 会报 `Could not find default config directory` —— 这套壳层的配置不在 `~/.config/quickshell/`）。
+     调完字号/重启壳层后想马上看效果，就走这条。
+- **bar 字号分层**（判「有的字大有的小」照这张表，都从 `[font] base-size` 派生，改字号全bar 一起走）：
+
+  | token | 逻辑 px | 谁在用 | 实测墨高（物理 px @scale 2） |
+  |---|---|---|---|
+  | `Style.bar.iconFont` | **12**（本机 `[bar] icon-font = 12` 覆盖；上游默认 13） | 内置部件的图标**和数字**（时钟、电量 %、网速、蓝牙…） | 数字 17–19 / 图标 19–22 |
+  | `Style.font.body` | 12 | 纯文本：托盘标题、input-sources 徽章、`WidgetButton`（时钟那格） | 17–18 |
+  | `Style.font.bodySmall` | 11 | 托盘次级标签 | 16 |
+  | `Style.font.caption` | 10 | 插件自定义内容（本部件改前的状态） | 14–15 |
+
+  ⚠ **同档≠同高**：电池的 `%` 与时钟的数字现在都是 12 档，但一个走 `BarIconButton`（图标字体面）、一个走
+  `WidgetButton`（UI 字体面），墨高会差 1–2 物理 px —— 别用高度差反推档位（我据此把时钟误判成 13 档过一次）。
+
+  图标比同级数字高一截是 **Nerd Font 的光学对齐，不是错**。测法=**墨高指纹**：`grim` 截 bar 条 →
+  逐列减背景取墨 → 按块量字高；`tesseract` 也能读（左组原本字号太小，OCR 一个字都认不出来，提档后能认出）。
+- **回退**：`git -C ~/.config/omarchy/plugins/meviusisback.ai-subs checkout -- Panel.qml` + `omarchy-restart-shell`。
+  备份：`Panel.qml.bak-20260920-fontsize`、旧 patch `…ai-subs.patch.bak-20260920-fontsize`（都在原地）。
 
 ### 5.2 `ronald.input-sources` —— 输入源徽章
 
@@ -185,13 +225,30 @@ journalctl -t omarchy-shell --since "-10min" | tail -50
 | 插件 | 源码 | 说明 |
 |---|---|---|
 | `yvonne.arch-logo` | 只在 `~/.config/omarchy/plugins/`（无 git、仓库里没有） | Arch logo 按钮 + 菜单 |
-| `yvonne.workspaces` | 同上 | 胶囊工作区（`clonedFrom: omarchy.workspaces`），第一方 `omarchy.workspaces` 已停用 |
+| `yvonne.workspaces` | 同上 | 胶囊工作区（`clonedFrom: omarchy.workspaces`），第一方 `omarchy.workspaces` 已停用；**点数动态**（§5.5 末） |
 | `yvonne.split-lock` | 正本在 `~/omarchy-on-niri/split-lock/`（含 `install.sh`、测试、`face-pam.sh`） | 分屏锁屏，`clonedFrom: omarchy.lock`；在 `shell.json` 的 `plugins[]` 里常驻 |
 
 三者都**没有 `.git`**，所以 `omarchy plugin update` 不会碰它们（更新只收有 `.git` 的目录）。
 ⚠ 后两个的源码改动要**同时**同步到 `~/.config/omarchy/plugins/` 那份才生效（install.sh 负责拷贝）。
 锁屏相关的两个结构性缺口（howdy 没进 `omarchy-lock-password`、`faceConfigured` 写死 false）见
 `omarchy-on-niri.md`。
+
+**`yvonne.workspaces` 点数改动态（2026-09-20，用户要的「1+1 → 有 app 就三个」）**
+
+- 旧行为：`workspaceIds()` 写死 `[1, 2, 3, 4, 5]` + 补 6–10 的实际 id，**永远 5 个点**。
+- 新行为：显示 `1..N`，`N = 最靠右的「有窗口 **或** 正在聚焦」的工作区 + 1`，**最少 2 个、封顶 10**。
+  - 空桌面（只有 ws1）→ 「胶囊 + 1 个空点」＝用户说的「1+1」；
+  - 第二个工作区一有 app（或只是聚焦过去）→ 三个点（1、2 + 预留的空位 3）。
+- ⚠ 关键是**按「占用」算、不按「工作区是否存在」算**：niri 会长期留着空工作区（实测去 ws2 转一圈回来，
+  空 ws3 还挂在 `niri msg workspaces` 里），胶囊照样只画 2 个点 —— 否则一逛工作区就永远回不去 2 个点。
+- 聚焦空工作区时也把它算进 `N`（`w.focused` 那半边），不然跳过去的瞬间胶囊会把自己藏掉。
+- 改法：`~/.config/omarchy/plugins/yvonne.workspaces/Workspaces.qml` 的 `workspaceIds()`；
+  备份 `Workspaces.qml.bak-20260920-capsuledots`（原地），patch 存档
+  `plugin-patches/yvonne.workspaces.patch`（**该目录没有 git**，用 `diff -u --label a/… --label b/…` 生成，
+  `git apply --reverse --check` 通过 = 与工作树一致）。它**不进 `omarchy plugin update` 那条流程**（§6 只管有 `.git` 的）。
+- 生效/验收：QML 不热更 → `omarchy-restart-shell`；`debugBarGeometry` 里 `yvonne.workspaces` 宽度
+  只有 ws1 时 **~104 → 52**；肉眼数点子用 `grim -g "0,0 200x40" /tmp/bar.png`。
+- 回退：`cp Workspaces.qml.bak-20260920-capsuledots Workspaces.qml && omarchy-restart-shell`。
 
 ## 6. 更新与本地改动（重要）
 
