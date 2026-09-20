@@ -222,6 +222,70 @@ run_enter_face_case() {
 
 run_enter_face_case
 
+# Tonight's failure as a case (2026-09-20): the scan is running, the person
+# presses Enter again because nothing seems to be happening, and greetd --
+# which holds ONE session under configuration for the whole daemon -- refuses
+# the second create_session with "a session is already being configured" for
+# the rest of the boot. Every later attempt hits the same wall, so tty1 could
+# never log in again. The host has to ignore the second Enter and finish on the
+# conversation that is already open.
+run_double_enter_case() {
+  if ! command -v wtype >/dev/null 2>&1; then note "-- enter-twice-while-scanning" "skipped (no wtype)"; return; fi
+  dir=$(mktemp -d)
+  mkdir -p "$dir/home"
+  # --delay holds the first create_session unanswered, which is the window the
+  # second Enter has to land in.
+  python3 "$MOCK" --socket "$dir/mock.sock" --user jianlongliu --password hunter2 \
+    --log "$dir/start.log" --pidfile "$dir/mock.pid" --howdy-fail --delay 3 >"$dir/mock.out" 2>&1 &
+  mock=$!
+  trap 'kill "$mock" 2>/dev/null || true' EXIT
+  while [ ! -S "$dir/mock.sock" ]; do sleep 0.1; done
+  env HOME="$dir/home" GREETD_SOCK="$dir/mock.sock" GREETER_BRIDGE="$BRIDGE" GREETER_USER=jianlongliu \
+    GREETER_ACCOUNTS_DIR="$ACCOUNTS" GREETER_CORNER_RADIUS=10 GREETER_FACE=1 GREETER_DEBUG_FOCUS=1 \
+    timeout 40 qs -n -p "$GREETER" >"$dir/run.log" 2>&1 &
+  greeter=$!
+  if wait_for_log "$dir/run.log" 'activeFocus=true' 30; then sleep 1; fi
+  delivered=0
+  tries=0
+  while [ "$tries" -lt 8 ]; do
+    wtype x
+    sleep 1
+    if [ "$(grep -c 'password field received input' "$dir/run.log")" -gt 0 ]; then delivered=1; break; fi
+    tries=$((tries + 1))
+  done
+  [ "$delivered" = 1 ] && wtype -k BackSpace
+  check "the field took keys at all (probe character)" "$delivered" 1
+  wtype -k Return
+  wait_for_log "$dir/run.log" 'starting a passwordless' 20 || true
+  wtype -k Return
+  sleep 2
+  check "the second Enter opened no second conversation" \
+    "$(grep -c 'starting a passwordless' "$dir/run.log")" 1
+  check "greetd never answered with the wedge" \
+    "$(grep -c 'already being configured' "$dir/run.log")" 0
+  # The scan misses, so PAM asks for the secret on the conversation that is
+  # still open: answering it has to log in.
+  wait_for_log "$dir/run.log" 'auth_message secret' 25 || true
+  wtype 'hunter2'
+  sleep 1
+  wtype -k Return
+  wait_for_log "$dir/start.log" 'start_session' 25 || true
+  kill "$greeter" 2>/dev/null || true
+  kill "$(cat "$dir/mock.pid")" 2>/dev/null || true
+  note "-- enter-twice-while-scanning" ""
+  check "the login finished on the open conversation" \
+    "$(grep -c start_session "$dir/start.log" 2>/dev/null || echo 0)" 1
+  if grep -q ' ERROR' "$dir/run.log"; then
+    check "no QML errors" "$(grep -m1 ' ERROR' "$dir/run.log")" ""
+  else
+    note "no QML errors" ok
+  fi
+  cp "$dir/run.log" "/tmp/greeter-smoke-double-enter.log" 2>/dev/null || true
+  rm -rf "$dir"
+}
+
+run_double_enter_case
+
 # The account picture is the switcher now (the corner chip is gone, 2026-09-20).
 # A pointer click cannot be injected here -- no ydotool, and wtype is keyboard
 # only -- so this drives the design's avatarClicked() signal, which is the host

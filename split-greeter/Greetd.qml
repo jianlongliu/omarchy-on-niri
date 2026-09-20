@@ -65,6 +65,13 @@ Item {
   // actually did. Never log the password itself.
   function begin() {
     if (root.sessionStarting) return
+    // Enter on an empty field asks for a face, but only when there is nothing
+    // to ask into: greetd holds one session under configuration for the whole
+    // daemon, so a second create_session is refused ("a session is already
+    // being configured") and it would also throw away the prompt the user is
+    // answering. Pressing Enter twice during a scan is exactly how tty1 wedged
+    // on 2026-09-20.
+    if (root.busy || root.faceAttempt || root.awaitingSecret) return
     console.warn("greeter: starting a passwordless (face) attempt for", root.username)
     root.epoch += 1
     root.errorMessage = ""

@@ -16,11 +16,15 @@ import Quickshell
 //   GREETER_STATE_DELAY_MS=<ms>         when to submit (default 1500)
 //   GREETER_STATE_SWITCH=<account>      pick another account first (the picker
 //                                       path), then submit the password
+//   GREETER_STATE_EXTRA_FACE_MS=<ms>    ask for a face again this long after the
+//                                       attempt started (Enter hammered while
+//                                       the first scan was still running)
 //   GREETER_ATTEMPT_TIMEOUT_MS=<ms>     forwarded to Greetd.qml
 ShellRoot {
   id: root
 
   property int submitDelay: Number(Quickshell.env("GREETER_STATE_DELAY_MS")) || 1500
+  property int extraFaceDelay: Number(Quickshell.env("GREETER_STATE_EXTRA_FACE_MS")) || 0
   property string password: Quickshell.env("GREETER_STATE_PASSWORD") || ""
   property string switchTo: Quickshell.env("GREETER_STATE_SWITCH") || ""
 
@@ -56,6 +60,19 @@ ShellRoot {
   Timer {
     id: submitLater
     onTriggered: root.submit()
+  }
+
+  // Enter on an empty field during a scan: the design emits faceRequested again
+  // and shell.qml calls begin(). greetd only ever has one session under
+  // configuration, so the second request has to be dropped, not turned into a
+  // second conversation.
+  Timer {
+    interval: root.extraFaceDelay
+    running: root.extraFaceDelay > 0
+    onTriggered: {
+      console.warn("statetest: asking for a face again")
+      welcome.begin()
+    }
   }
 
   function submit() {

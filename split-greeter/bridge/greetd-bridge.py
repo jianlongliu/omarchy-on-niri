@@ -96,13 +96,37 @@ def auth_reply(greetd, reply, epoch):
     emit("auth_fail", epoch=epoch, kind=error_type, description=description)
 
 
+def clear_pending(greetd):
+    """Cancel whatever greetd still holds under configuration.
+
+    greetd has ONE session under configuration for the whole daemon (context.rs
+    keeps a single `configuring` slot) and it only lets go of it on
+    cancel_session, start_session or a restart. A failed attempt -- and even the
+    client going away -- leaves it behind: server.rs returns on EOF without
+    calling cancel. Every later create_session is then refused with "a session
+    is already being configured", i.e. a login that never succeeds again until
+    greetd is restarted. That is a real boot: it is what tty1 did on 2026-09-20.
+
+    Cancelling first is safe and cheap: greetd answers success whether or not
+    anything was configured, and cancel can only ever touch a half-finished
+    login, never the running greeter or a logged-in session.
+    """
+    try:
+        greetd.request({"type": "cancel_session"})
+    except OSError as exc:
+        log("cancel before create_session failed: %s" % exc)
+        greetd.close()
+
+
 def handle(greetd, request):
     op = request.get("op")
     epoch = request.get("epoch")
     if op == "auth":
         # Every attempt gets a fresh session: a session left half-configured
-        # after a failed create_session is not reusable.
+        # after a failed create_session is not reusable -- and it also has to be
+        # cleared out of the way first, see clear_pending().
         greetd.close()
+        clear_pending(greetd)
         message = {"type": "create_session", "username": request.get("username") or ""}
         # No password here. greetd's create_session has no such field and would
         # ignore one, so the secret only ever travels as the answer to a prompt —

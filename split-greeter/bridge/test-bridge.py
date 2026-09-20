@@ -26,11 +26,12 @@ class Session:
 
     def __init__(self, user="tester", password="hunter2", interactive=False,
                  howdy=False, howdy_fail=False, delay=0.0):
-        gap = tempfile.mkdtemp(prefix="mock-greetd-")
-        self.sock = os.path.join(gap, "greetd.sock")
-        self.log = os.path.join(gap, "start.log")
+        self.gap = tempfile.mkdtemp(prefix="mock-greetd-")
+        self.sock = os.path.join(self.gap, "greetd.sock")
+        self.log = os.path.join(self.gap, "start.log")
+        self.trace = os.path.join(self.gap, "requests.log")
         mock_args = [sys.executable, MOCK, "--socket", self.sock, "--user", user,
-                     "--password", password, "--log", self.log]
+                     "--password", password, "--log", self.log, "--trace", self.trace]
         if interactive:
             mock_args.append("--interactive")
         if howdy:
@@ -41,11 +42,25 @@ class Session:
             mock_args += ["--delay", str(delay)]
         self.mock = subprocess.Popen(mock_args, stdout=subprocess.PIPE, text=True)
         self.mock.stdout.readline()  # "ready"
+        self.bridge = None
+        self.spawn_bridge()
+
+    def spawn_bridge(self):
         env = dict(os.environ, GREETD_SOCK=self.sock, USER="greeter")
         self.bridge = subprocess.Popen([sys.executable, "-u", BRIDGE], stdin=subprocess.PIPE,
                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                        text=True, env=env)
         self.readline()  # "ready"
+
+    def respawn_bridge(self):
+        """Drop the helper the way Greetd.qml's restartHelper does.
+
+        The greetd socket dies with it, and greetd does not read that as a
+        cancel: whatever was being configured stays configured.
+        """
+        self.bridge.kill()
+        self.bridge.wait()
+        self.spawn_bridge()
 
     def readline(self):
         line = self.bridge.stdout.readline()
@@ -60,6 +75,13 @@ class Session:
     def ask(self, **request):
         self.send(**request)
         return self.readline()
+
+    def requests(self):
+        try:
+            with open(self.trace) as handle:
+                return handle.read().split()
+        except OSError:
+            return []
 
     def started_cmd(self):
         try:
@@ -77,7 +99,11 @@ class Session:
 def case_wrong_password():
     session = Session()
     try:
-        event = session.ask(op="auth", username="tester", password="nope")
+        # The password never travels with create_session (greetd has no field for
+        # it), so a login is always: ask, then answer the prompt.
+        event = session.ask(op="auth", username="tester")
+        check("passwordless auth -> secret prompt", event.get("kind"), "secret")
+        event = session.ask(op="respond", response="nope")
         check("wrong password -> auth_fail", event.get("event"), "auth_fail")
         check("wrong password -> auth_error kind", event.get("kind"), "auth_error")
         session.send(op="quit")
@@ -88,7 +114,9 @@ def case_wrong_password():
 def case_happy_path():
     session = Session()
     try:
-        event = session.ask(op="auth", username="tester", password="hunter2")
+        event = session.ask(op="auth", username="tester")
+        check("passwordless auth -> secret prompt", event.get("kind"), "secret")
+        event = session.ask(op="respond", response="hunter2")
         check("right password -> auth_ok", event.get("event"), "auth_ok")
         event = session.ask(op="start", cmd=["niri-session"], env=["XDG_SESSION_TYPE=wayland"])
         check("start_session -> started", event.get("event"), "started")
@@ -99,11 +127,53 @@ def case_happy_path():
 
 
 def case_retry_after_failure():
+    """A failed attempt leaves greetd holding that session under configuration."""
     session = Session()
     try:
-        session.ask(op="auth", username="tester", password="wrong")
-        event = session.ask(op="auth", username="tester", password="hunter2")
-        check("retry on a fresh connection -> auth_ok", event.get("event"), "auth_ok")
+        session.ask(op="auth", username="tester")
+        session.ask(op="respond", response="wrong")
+        event = session.ask(op="auth", username="tester")
+        check("retry after a failure -> secret prompt", event.get("kind"), "secret")
+        event = session.ask(op="respond", response="hunter2")
+        check("retry after a failure -> auth_ok", event.get("event"), "auth_ok")
+        session.send(op="quit")
+    finally:
+        session.close()
+
+
+def case_new_bridge_after_abandoned_face():
+    """The helper is dropped mid-face-scan, the way restartHelper does it.
+
+    greetd does not cancel on disconnect, so the abandoned conversation is still
+    under configuration when the fresh helper asks for a new one: without the
+    bridge's cancel-before-create the greeting would answer "a session is
+    already being configured" and tty1 could never log in again on that boot.
+    """
+    session = Session(howdy_fail=True)
+    try:
+        event = session.ask(op="auth", username="tester")
+        check("face scan -> info message", event.get("kind"), "info")
+        session.respawn_bridge()
+        event = session.ask(op="auth", username="tester")
+        check("fresh helper after an abandoned face -> face message", event.get("kind"), "info")
+        event = session.ask(op="respond")
+        check("fresh helper after an abandoned face -> secret prompt", event.get("kind"), "secret")
+        event = session.ask(op="respond", response="hunter2")
+        check("fresh helper after an abandoned face -> auth_ok", event.get("event"), "auth_ok")
+        session.send(op="quit")
+    finally:
+        session.close()
+
+
+def case_cancel_before_create():
+    """The cancel has to go out ahead of the next create_session."""
+    session = Session()
+    try:
+        session.ask(op="auth", username="tester")
+        session.ask(op="respond", response="wrong")
+        session.ask(op="auth", username="tester")
+        check("cancels the stale conversation first",
+              session.requests()[-2:], ["cancel_session", "create_session"])
         session.send(op="quit")
     finally:
         session.close()
@@ -157,7 +227,7 @@ def case_howdy_miss_then_password():
 def case_unknown_user():
     session = Session()
     try:
-        event = session.ask(op="auth", username="nobody", password="hunter2")
+        event = session.ask(op="auth", username="nobody")
         check("unknown user -> auth_fail", event.get("event"), "auth_fail")
         session.send(op="quit")
     finally:
@@ -168,9 +238,12 @@ def case_epoch_echo():
     """Events carry the attempt's epoch, so the UI can drop a stale attempt."""
     session = Session()
     try:
-        event = session.ask(op="auth", username="tester", password="nope", epoch=7)
+        event = session.ask(op="auth", username="tester", epoch=7)
+        check("secret prompt echoes the epoch", event.get("epoch"), 7)
+        event = session.ask(op="respond", response="nope", epoch=7)
         check("auth_fail echoes the epoch", event.get("epoch"), 7)
-        event = session.ask(op="auth", username="tester", password="hunter2", epoch=8)
+        session.ask(op="auth", username="tester", epoch=8)
+        event = session.ask(op="respond", response="hunter2", epoch=8)
         check("auth_ok echoes the epoch", event.get("epoch"), 8)
         session.send(op="quit")
     finally:
@@ -182,7 +255,9 @@ def case_cancel():
     try:
         event = session.ask(op="cancel")
         check("cancel_session -> cancelled", event.get("event"), "cancelled")
-        event = session.ask(op="auth", username="tester", password="hunter2")
+        event = session.ask(op="auth", username="tester")
+        check("auth after cancel -> secret prompt", event.get("kind"), "secret")
+        event = session.ask(op="respond", response="hunter2")
         check("auth after cancel -> auth_ok", event.get("event"), "auth_ok")
         session.send(op="quit")
     finally:
@@ -206,6 +281,7 @@ def case_bad_socket():
 
 def main():
     for case in (case_wrong_password, case_happy_path, case_retry_after_failure,
+                 case_new_bridge_after_abandoned_face, case_cancel_before_create,
                  case_interactive_secret, case_howdy_match, case_howdy_miss_then_password,
                  case_unknown_user, case_epoch_echo, case_cancel, case_bad_socket):
         print("-- %s" % case.__name__)
