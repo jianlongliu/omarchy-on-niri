@@ -60,12 +60,18 @@ omarchy-on-niri/
 ├── niri-port/    <- overlay: niri.patch + Niri.qml (reapplied after each update)
 ├── niri-config/  <- local/*.kdl (what this machine runs) + omarchy.kdl.template (the other route)
 │                     + shell.json sample (Omarchy config layer 1)
-├── hooks/        <- post-update.d/10-niri-repatch, theme-set.d/10-niri-border
+├── local-config/ <- the machine's ~/.config layer: ghostty (blur off + opacity) + dankcolors theme
+│                     + materal-recolor.service/.path; copy over your own, see its README
+├── config/       <- upstream Omarchy's default config tree, untouched (NOT this machine's)
+├── plugins/      <- self-written plugin sources (jianlongliu.arch-logo; split-lock has its own dir)
+├── split-greeter/, split-lock/  <- self-written greeter and lock screen, each with install.sh + tests
+├── default/      <- upstream-shaped defaults this machine ships (systemd/user units, omarchy menu jsonc)
+├── hooks/        <- post-update.d/10-niri-repatch, theme-set.d/{10-niri-border,20-materal}
 ├── install.sh    <- optional convenience wrapper (prefer the manual steps in docs/INSTALL.md)
 ├── docs/INSTALL.md  <- hand-run install procedure
 ├── docs/omarchy-on-niri-port.md <- main volume: current facts + module map
 ├── docs/{visual,behavior,plugins,shims,upstream,migration,lock,local-overrides}.md <- module volumes
-├── scripts/     <- check-doc-links.sh (the nine ~/Documents convenience names still point into docs/)
+├── scripts/     <- check-doc-links.sh, kdl-sync.sh, local-files-sync.sh
 └── README.md
 ```
 

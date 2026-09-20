@@ -529,6 +529,9 @@ niri 只在 overview 内合成 `place-within-backdrop` 的图层，所以桌面*
    窗口**背后**的实心矩形，半透明窗口会把它透出来，且**只有聚焦窗口有焦点环** → 只有选中窗口
    "诡异"。`draw-border-with-background false` 让焦点环画在窗口周围解决。ghostty
    `background-opacity = 0.85` 提供半透明载体。
+   **这一处对应的文件 2026-09-20 才进仓库**：`local-config/ghostty/config`（+ 它 `theme = dankcolors`
+   指向的 `local-config/ghostty/themes/dankcolors`）。此前仓库 `config/ghostty/config` 是上游默认，
+   于是"磨砂五处"里 ghostty 这处整个缺失 —— 别人照旧仓库装只会得到"有装饰、无磨砂"。
 
 ---
 

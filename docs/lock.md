@@ -150,6 +150,13 @@ fprint 只挂在 `/etc/pam.d/sudo` 与 `polkit-1` 上，greetd 这条栈没有�
 
 **多账户，且"长相"跟着账户**：账户 = `/etc/passwd` 里 uid≥1000，头像 = `/var/lib/AccountsService/icons/<user>`（没有就显示首字母圆牌）。右上角常驻账户按钮开选择器（↑↓ / Enter / Esc，也可鼠标点）。切账户 `epoch += 1`：**旧账户在途的人脸命中会被丢弃、并向 greetd 发 `cancel_session`**——宁可退回登录界面，也不登成错的人。成功登录的账户写 `~/.local/state/split-greeter/last-user`，下次默认选中。**配色与壁纸跟着选中的账户**（启动时 = 上次登录的账户）：`split-greeter-sync` 把每个账户的 `colors.toml` / `shell.toml` / 当前壁纸拷到 `/var/lib/greeter/users/<账户>/`，`shell.qml` 用 `Color.themeOverride` 把面板指过去；字体与间距是机器级，取共享缺省（`/var/lib/greeter`）。目录布局、测试钩子等细节见 `split-greeter/README.md`。
 
+**`ir-light` 是这套里唯一没有替代品的本机脚本**（仓库副本 `split-lock/ir-light`，2026-09-20 收进）：它只做一件事
+——`open("/dev/video2")` 后发一个 UVC 扩展单元 ioctl（`unit=13 selector=14`，就是"模式 2 + 亮度 100"）点亮
+ThinkPad X1 Carbon Gen9 那块 Chicony 04f2:b6ea 的 IR 灯。没有它，`howdy` 在暗光下认不出人；因此它在
+`/etc/pam.d/{greetd,omarchy-lock-face}` 里都是 `pam_exec.so … optional` —— **灯没点亮或脚本缺失都不会把人锁在外面**，
+只是退回输密码。换机器要改两处：设备节点（`/dev/video2` 未必是那个摄像头，用 `v4l2-ctl --list-devices` 认）和
+单元/选择器号（`uvcvideo` 的扩展单元随固件而异）。`split-lock/face-pam.sh` 只**检查**这个文件在不在、不负责安装它。
+
 **装与回滚**——切 greetd 的 `[default_session].command` 是唯一能把人锁在门外的一步，脚本**不碰** `/etc/greetd/config.toml`：
 
 1. `sudo ./install.sh`：拷到 `/etc/greetd/split-greeter`（世界可读，greeter 用户要读）+ `/usr/local/bin/split-greeter{,-sync}`；建 `/var/lib/greeter/{users,.config/omarchy,.local/state/split-greeter}`（属 `greeter`）。

@@ -99,8 +99,10 @@ hyprctl 调用面有界、可直接映射。
 | `~/bin/materal-update` (Python, +x) | **主题动态取色生成器**：读当前壁纸 → matugen 出 M3 配色 → 映射成 omarchy `colors.toml` → 重套主题（§8.10；仓库副本 `port-bin/materal-update`） |
 | `~/.config/omarchy/themes/tonal-spot/` | 用户级主题（`matugen.toml` + 自生成 `backgrounds/` + 静态 ANSI 16 色），`omarchy theme set Tonal-Spot` 选用（§8.10） |
 | `~/.config/omarchy/hooks/theme-set.d/20-materal` | 换 theme 时重新取色（与 `10-niri-border` 并列，§8.10；仓库副本 `hooks/theme-set.d/20-materal`） |
-| `~/.config/systemd/user/materal-recolor.{path,service}` | 盯 `current/` 与 `current/background` 的 path/service 单元：换壁纸即自动重取色（§8.10） |
-| `~/.config/omarchy/plugins/jianlongliu.arch-logo/`、`~/.config/omarchy/plugins/jianlongliu.workspaces/` | 用户级 bar 部件（仓库外、抗 `omarchy update`）：Arch logo、胶囊式工作区指示（§8.11） |
+| `~/.config/systemd/user/materal-recolor.{path,service}` | 盯 `current/` 与 `current/background` 的 path/service 单元：换壁纸即自动重取色（§8.10；仓库副本 `local-config/systemd/user/`） |
+| `~/.config/ghostty/config` + `~/.config/ghostty/themes/dankcolors` | **磨砂五处里的 ghostty 那一处**：`background-blur-radius = 0`（niri 不实现 KDE blur 协议，叠起来是双层模糊）+ `background-opacity = 0.85` + `window-decoration = false`；`theme = dankcolors` 指向那份 454 B 静态主题（§8.10；仓库副本 `local-config/ghostty/`）|
+| `/usr/local/bin/ir-light` | 点亮内置 IR 灯，供 howdy 在暗光下人脸识别；`/etc/pam.d/{omarchy-lock-face,greetd}` 用 `pam_exec.so` 调它（`optional`，坏了不锁人）。**硬件专属**（写死 `/dev/video2` + UVC unit 13/selector 14），仓库副本 `split-lock/ir-light` |
+| `~/.config/omarchy/plugins/jianlongliu.arch-logo/`、`~/.config/omarchy/plugins/jianlongliu.workspaces/` | 用户级 bar 部件（仓库外、抗 `omarchy update`）：Arch logo、胶囊式工作区指示（§8.11；前者是自研、无 `clonedFrom`，源码副本 `plugins/jianlongliu.arch-logo/`；后者 = 上游克隆 + `plugin-patches/jianlongliu.workspaces.patch`） |
 | `~/.config/omarchy/plugins/ronald.input-sources/` | 第三方 bar 部件：fcitx5 输入源徽章/切换菜单（`omarchy plugin add … --enable` 装的 git 克隆；仓库外、抗更新，§8.17） |
 | `~/.config/omarchy/backgrounds/{tonal-spot,catppuccin}` | 共享壁纸库软链 → `/data/Pictures/Wallpapers`（所有主题翻同一套图，§8.12） |
 | `~/omarchy-wallpaper-aio/` | 参考仓库 `jianlongliu/omarchy-wallpaper-aio` 的克隆：只含 `setup.sh`（把主题背景目录软链到壁纸库，§8.12） |

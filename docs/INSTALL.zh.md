@@ -109,6 +109,23 @@ mkdir -p ~/.config/omarchy
 cp "$REPO/niri-config/shell.json" ~/.config/omarchy/shell.json
 ```
 
+**4b. 本机 `~/.config` 覆盖层（`local-config/`）** —— 上游默认树之外、上游不给的那几份，漏掉就会
+"有窗口装饰、无磨砂"：
+
+```sh
+cp "$REPO/local-config/ghostty/config" ~/.config/ghostty/config      # 先备份你自己的
+mkdir -p ~/.config/ghostty/themes ~/.config/systemd/user
+cp "$REPO/local-config/ghostty/themes/dankcolors" ~/.config/ghostty/themes/
+cp "$REPO/local-config/systemd/user/materal-recolor."* ~/.config/systemd/user/
+systemctl --user enable --now materal-recolor.path                   # 需要 ~/bin/materal-update 在位
+```
+
+`ghostty/config` 里三条是移植必需的（`window-decoration = false`、`background-opacity = 0.85`、
+**`background-blur-radius = 0`** —— niri 不实现 KDE blur 协议，磨砂要交给 niri 的 `background-effect`）；
+`theme = dankcolors` 指着 `themes/dankcolors` 那个静态文件，不收会因"未知主题"起不来（也可以改回上游的
+`config-file = ?"~/.local/state/omarchy/current/theme/ghostty.conf"`）。字体/键位是个人口味，按需改。
+细节见 `local-config/README.md`。
+
 ---
 
 ## 5. 更新/主题钩子
@@ -123,7 +140,7 @@ install -m 0755 "$REPO"/hooks/theme-set.d/*    ~/.config/omarchy/hooks/theme-set
 `theme-set.d/10-niri-border` 在每次切换 style 时写入 focus-ring 颜色；
 `theme-set.d/20-materal` 用 Omarchy 当前选中的壁纸重新推导"带 `matugen.toml` 的主题"的配色（需要
 `matugen`；没有该文件的主题不受影响）。另外那对"换壁纸也重新取色"的 systemd 单元
-（`materal-recolor.{path,service}`）属机器专属，见视觉调整卷 `docs/visual.md` §8.10。
+（`materal-recolor.{path,service}`）装法见上面第 4b 步（仓库 `local-config/systemd/user/`）。
 
 ---
 

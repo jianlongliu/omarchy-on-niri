@@ -1,0 +1,19 @@
+#!/bin/bash
+# 点亮 ThinkPad X1 Carbon Gen9 内置 IR 灯 (Chicony 04f2:b6ea)
+# UVC 扩展单元 unit=13 selector=14 = [2, 100] (模式2 + 亮度100)
+exec python3 - <<'EOF'
+import os, ctypes
+from ctypes import c_uint8, c_uint16
+libc = ctypes.CDLL(None, use_errno=True)
+UVCIOC_CTRL_QUERY = 0xC0107521
+SET_CUR = 0x01
+class Q(ctypes.Structure):
+    _fields_ = [("unit", c_uint8), ("selector", c_uint8), ("query", c_uint8),
+                ("size", c_uint16), ("data", ctypes.c_void_p)]
+fd = os.open("/dev/video2", os.O_RDWR)
+buf = ctypes.create_string_buffer(2)
+ctypes.memmove(buf, b"\x02\x64", 2)
+qq = Q(13, 14, SET_CUR, 2, ctypes.addressof(buf))
+libc.ioctl(fd, UVCIOC_CTRL_QUERY, ctypes.byref(qq))
+os.close(fd)
+EOF

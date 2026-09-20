@@ -1,0 +1,16 @@
+[Unit]
+Description=Watch the Omarchy wallpaper and re-derive the materal theme on change
+
+[Path]
+# Two targets on purpose: a symlink path resolves to the image it points at, so that
+# entry catches the file being rewritten in place (theme staging re-copies it), while
+# the directory entry catches the link itself being retargeted to another wallpaper
+# (omarchy theme bg next / the shell's background picker).  Verified: retargeting does
+# not fire the link entry, rewriting the image does not fire the directory entry.
+PathChanged=%h/.local/state/omarchy/current/
+PathChanged=%h/.local/state/omarchy/current/background
+
+Unit=materal-recolor.service
+
+[Install]
+WantedBy=default.target

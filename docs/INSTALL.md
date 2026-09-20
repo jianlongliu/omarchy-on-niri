@@ -118,6 +118,24 @@ mkdir -p ~/.config/omarchy
 cp "$REPO/niri-config/shell.json" ~/.config/omarchy/shell.json
 ```
 
+**4b. The machine's `~/.config` layer (`local-config/`)** — what this machine runs on top of the upstream
+default tree, which upstream does not ship. Skip it and you get window decorations and no frosting:
+
+```sh
+cp "$REPO/local-config/ghostty/config" ~/.config/ghostty/config      # back up yours first
+mkdir -p ~/.config/ghostty/themes ~/.config/systemd/user
+cp "$REPO/local-config/ghostty/themes/dankcolors" ~/.config/ghostty/themes/
+cp "$REPO/local-config/systemd/user/materal-recolor."* ~/.config/systemd/user/
+systemctl --user enable --now materal-recolor.path                   # needs ~/bin/materal-update
+```
+
+Three lines in `ghostty/config` are required by the port (`window-decoration = false`,
+`background-opacity = 0.85`, **`background-blur-radius = 0`** — niri implements no KDE blur protocol, so the
+frosting has to come from niri's own `background-effect`); `theme = dankcolors` points at that static file in
+`themes/`, and without it ghostty refuses to start on an unknown theme (you can also switch back to upstream's
+`config-file = ?"~/.local/state/omarchy/current/theme/ghostty.conf"`). Fonts and keybindings are taste. Details
+in `local-config/README.md`.
+
 ---
 
 ## 5. Update / theme hooks
@@ -132,8 +150,8 @@ install -m 0755 "$REPO"/hooks/theme-set.d/*    ~/.config/omarchy/hooks/theme-set
 `theme-set.d/10-niri-border` writes the focus-ring color on each style switch;
 `theme-set.d/20-materal` re-derives the palette of a theme that carries a `matugen.toml` from the wallpaper
 Omarchy currently has selected (needs `matugen`; themes without that file are untouched). The systemd pair
-that also re-colours when the wallpaper changes (`materal-recolor.{path,service}`) is machine-specific — see
-the visual volume §8.10 (`docs/visual.md`).
+that also re-colours when the wallpaper changes (`materal-recolor.{path,service}`) is installed in step 4b
+above (repo copy: `local-config/systemd/user/`).
 
 ---
 

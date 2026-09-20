@@ -21,7 +21,7 @@
 | `meviusisback.ai-subs` | 1.4.2 | bar-widget | meviusisback/omarchy-ai-subs | 各家 AI 订阅的用量 / 余额 | 有 · §5.1 |
 | `ronald.input-sources` | 0.1.0 | bar-widget | ronaldlangeveld/omarchy-input-sources | fcitx5 输入源徽章 + 菜单 | 有 · §5.2 |
 | `jrmmhm.pocket` | 0.4.1 | bar-widget | jrmmhm/omarchy-pocket | 把不常用的 bar 部件收进抽屉 | 无 |
-| `jianlongliu.arch-logo` | 1.0.0 | bar-widget | 自研（无 git） | Arch logo + 菜单 | 自研 · §5.5 |
+| `jianlongliu.arch-logo` | 1.0.0 | bar-widget | 自研（无 `clonedFrom`，源码 `plugins/jianlongliu.arch-logo/`） | Arch logo + 菜单 | 自研 · §5.5 |
 | `jianlongliu.workspaces` | 1.0.0 | bar-widget | 自研（clone of `omarchy.workspaces`） | 胶囊工作区 | 自研 · §5.5 |
 | `jianlongliu.split-lock` | 0.1.0 | service | 自研（clone of `omarchy.lock`） | 分屏锁屏 | 自研 · §5.5 |
 
@@ -226,8 +226,8 @@ journalctl -t omarchy-shell --since "-10min" | tail -50
 
 | 插件 | 源码 | 说明 |
 |---|---|---|
-| `jianlongliu.arch-logo` | 只在 `~/.config/omarchy/plugins/`（无 git、仓库里没有） | Arch logo 按钮 + 菜单 |
-| `jianlongliu.workspaces` | 同上 | 胶囊工作区（`clonedFrom: omarchy.workspaces`），第一方 `omarchy.workspaces` 已停用；**点数动态**（§5.5 末） |
+| `jianlongliu.arch-logo` | 正本在 `~/omarchy-on-niri/plugins/jianlongliu.arch-logo/`（3 文件；无 `clonedFrom`，不是上游克隆，所以没有 patch 可复现 —— 2026-09-20 收进仓库） | Arch logo 按钮 + 菜单 |
+| `jianlongliu.workspaces` | 上游克隆（`clonedFrom: omarchy.workspaces`）+ 仓库里的 `niri-port/plugin-patches/jianlongliu.workspaces.patch`，机器上那份只在 `~/.config/omarchy/plugins/` | 胶囊工作区，第一方 `omarchy.workspaces` 已停用；**点数动态**（§5.5 末） |
 | `jianlongliu.split-lock` | 正本在 `~/omarchy-on-niri/split-lock/`（含 `install.sh`、测试、`face-pam.sh`） | 分屏锁屏，`clonedFrom: omarchy.lock`；在 `shell.json` 的 `plugins[]` 里常驻 |
 
 三者都**没有 `.git`**，所以 `omarchy plugin update` 不会碰它们（更新只收有 `.git` 的目录）。
@@ -327,7 +327,7 @@ omarchy-restart-shell                               # QML 不热更，必须重�
 - 点击：走 `hyprctl` 垫片的 `hl.dsp.focus({ workspace = "N" })`。
 - 坑：`implicitHeight: barSize` 必须写，否则该 slot 会顶到 bar 上沿。
 
-**2. Arch logo —— `jianlongliu.arch-logo`**（普通 bar-widget）
+**2. Arch logo —— `jianlongliu.arch-logo`**（普通 bar-widget；源码副本 `plugins/jianlongliu.arch-logo/`）
 
 - 左键 `omarchy-shell shell toggle omarchy.menu '{"menu":"root"}'`；右键 `xdg-terminal-exec`。
 - SVG 必须是纯 `#ffffff`：`MultiEffect.colorization` 是**按源图亮度相乘**着色，带灰度的 logo 会发暗。

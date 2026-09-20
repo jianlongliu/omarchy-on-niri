@@ -1,0 +1,13 @@
+[Unit]
+Description=Re-derive the materal theme's palette from the current Omarchy wallpaper
+Documentation=file:%h/bin/materal-update
+
+[Service]
+Type=oneshot
+
+# Wallpaper switches arrive as a burst of writes (theme staging re-copies the image),
+# so let them settle before deriving.  materal-update is idempotent -- it hashes the
+# wallpaper and skips when the palette already matches -- which is what makes the
+# overlapping triggers from the path unit below harmless.
+ExecStartPre=-/bin/sleep 1
+ExecStart=%h/bin/materal-update

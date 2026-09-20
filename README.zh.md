@@ -52,12 +52,18 @@ omarchy-on-niri/
 │                     + plugin-patches/（第三方 bar 插件的本地魔改补丁，只能手工重放）
 ├── niri-config/  <- local/*.kdl（本机在用的 niri 配置）+ omarchy.kdl.template（另一条路）
 │                     + shell.json 示例（Omarchy 配置层1）
-├── hooks/        <- post-update.d/10-niri-repatch, theme-set.d/10-niri-border
+├── local-config/ <- 本机 ~/.config 覆盖层：ghostty（关装饰 + 磨砂交给 niri）+ dankcolors 主题
+│                     + materal-recolor.{path,service}；拷到 ~/.config/ 用，说明见该目录 README
+├── config/       <- **上游 Omarchy 的默认配置树**（未改动，不是本机在用的那份）
+├── plugins/      <- 自研插件源码（jianlongliu.arch-logo；split-lock 自成一档）
+├── split-greeter/、split-lock/  <- 自研登录器与锁屏，各带 install.sh + tests/
+├── default/      <- 本机随仓库走的"上游形状"默认件（systemd 用户单元、omarchy 菜单 jsonc）
+├── hooks/        <- post-update.d/10-niri-repatch, theme-set.d/{10-niri-border,20-materal}
 ├── install.sh    <- 可选便捷包装脚本（推荐按 docs/INSTALL.zh.md 手动来）
 ├── docs/INSTALL.zh.md   <- 手动执行安装流程
 ├── docs/omarchy-on-niri-port.md <- 主文档（当前事实 + 模块映射表，中文）
 ├── docs/{visual,behavior,plugins,shims,upstream,migration,lock,local-overrides}.md <- 各模块卷（中文）
-├── scripts/             <- check-doc-links.sh（`~/Documents` 那九个软链必须仍指向 `docs/`）
+├── scripts/             <- check-doc-links.sh、kdl-sync.sh、local-files-sync.sh
 └── README.md / README.zh.md
 ```
 
