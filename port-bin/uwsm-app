@@ -1,0 +1,60 @@
+#!/bin/bash
+# uwsm-app — PATH-first shim for the Omarchy-on-niri port (doc §8 第 22 条).
+#
+# Why: Omarchy's bin/ calls `uwsm-app -- <command>` in ~30 places so that launched
+# apps land in their own transient systemd user unit. That is a Hyprland/uwsm-session
+# facility, and this niri session has no uwsm at all — so every one of those call
+# sites died silently with:
+#     setsid: failed to execute uwsm-app: No such file or directory
+# (user-visible symptom: Omarchy menu entries, `omarchy-launch-terminal`, app/webapp
+# launches just did nothing, no error, no window.)
+#
+# Instead of guarding ~30 call sites one by one — and re-patching them after every
+# upstream update — this shim absorbs the whole interface in a single place.
+# ~/bin is first in PATH for both the niri session and the Quickshell shell.
+#
+# What it does NOT do: systemd scope/unit bookkeeping, cgroup placement, app-id
+# juggling. Callers only rely on "the process starts"; niri needs nothing more.
+# Options intended for real uwsm-app are accepted and dropped.
+#
+# NOTE — deliberately NO `setsid` here (1.1, 2026-09-20):
+#   Callers that want detachment already write `setsid uwsm-app -- …` themselves.
+#   And under `systemd-run --user` (e.g. bin/omarchy-launch-browser) the unit's main
+#   process IS a session leader, so `setsid` can only fork-and-exit at once — systemd
+#   then treats the unit as finished and reaps the rest of its cgroup
+#   (KillMode=control-group), killing the app we just launched. Silent, because those
+#   launchers pass --property=StandardError=null. Symptom: exit code 0, no window.
+#   The app must therefore stay the unit's main process: exec it directly.
+#
+# Usage (the form all callers use):  uwsm-app -- <command> [args...]
+#
+# Rollback: rm ~/bin/uwsm-app   (the per-site `command -v uwsm-app` guards in the
+# omarchy tree then fall back to their own direct-launch paths again)
+set -euo pipefail
+
+case "${1:-}" in
+--version | -v)
+    echo "uwsm-app (niri-port shim) 1.1"
+    exit 0
+    ;;
+-h | --help)
+    echo "uwsm-app (niri-port shim) — drops uwsm-app's own options, then runs the command."
+    echo "Usage: uwsm-app [options] -- <command> [args...]"
+    exit 0
+    ;;
+esac
+
+# Drop uwsm-app's own options (--app-name=…, --unit-name=…, …) and the `--` separator.
+while (($#)) && [[ $1 == -* ]]; do
+    shift
+done
+if (($#)) && [[ $1 == "--" ]]; then
+    shift
+fi
+
+if (($# == 0)); then
+    echo "uwsm-app(shim): no command given" >&2
+    exit 1
+fi
+
+exec "$@"
