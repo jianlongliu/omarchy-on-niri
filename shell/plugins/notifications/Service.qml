@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import Quickshell.Wayland._BackgroundEffect
 import Quickshell.Services.Notifications
 import qs.Commons
 
@@ -963,6 +964,14 @@ Item {
       WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
       exclusionMode: ExclusionMode.Ignore
       color: "transparent"
+
+      // This surface is full-screen (see below), so a niri-side `blur true` on
+      // the notifications namespace would frost the ENTIRE display — that was
+      // the "a notification blurs the whole screen" bug (2026-09-20). Hand niri
+      // the toast column as the blur region instead, the way the menu, the
+      // keyboard panel and the floating bar do. effects.kdl sets only `xray`
+      // for this namespace, so this region stays the sole blur area.
+      BackgroundEffect.blurRegion: Region { item: popupColumn; radius: service.cornerRadius }
 
       readonly property var popupPlacement: NotificationLogic.popupPlacement(
         service.barPosition, service.barClearance, Style.gapsOut)

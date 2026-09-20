@@ -248,6 +248,28 @@ index 2ee2457..2d9cc69 100644
    "update.config.plymouth": {"icon":"󱣴","label":"Plymouth","action":"omarchy-launch-floating-terminal-with-presentation omarchy-refresh-plymouth"},
    "update.config.tmux": {"icon":"","label":"Tmux","action":"omarchy-launch-floating-terminal-with-presentation omarchy-refresh-tmux"},
    "update.config.shell": {"icon":"󰍜","label":"Shell","action":"omarchy-launch-floating-terminal-with-presentation omarchy-refresh-shell"},
+diff --git a/shell/Commons/Style.qml b/shell/Commons/Style.qml
+index ec61252..ec2ee7d 100644
+--- a/shell/Commons/Style.qml
++++ b/shell/Commons/Style.qml
+@@ -403,9 +403,16 @@ QtObject {
+         if (key === "base-size") nextBase = ival
+         else fontOut[key] = ival
+       } else if (section === "bar") {
++        // Integer bar tokens, i.e. every `barToken()` key declared below in the
++        // Bar singleton. barToken() looks readings up by name, so a machine-level
++        // shell.toml can retune any of them: `[bar] icon-font = 12` drops the
++        // built-in widgets' icons *and* digits to the body size. This used to
++        // accept only the two size keys and silently swallow the rest.
+         if (key === "scale-with-font") {
+           nextBarScaleWithFont = boolToken(raw, nextBarScaleWithFont)
+-        } else if (key === "size-horizontal" || key === "size-vertical") {
++        } else if (key === "size-horizontal" || key === "size-vertical"
++                   || key === "icon-slot" || key === "icon-canvas"
++                   || key === "icon-font" || key === "status-slot") {
+           var b = parseInt(raw, 10)
+           if (isFinite(b)) barOut[key] = b
+         }
 diff --git a/shell/Commons/qmldir b/shell/Commons/qmldir
 index 4bfd0b7..17edf0c 100644
 --- a/shell/Commons/qmldir
@@ -450,6 +472,33 @@ index aa879c1..95fc735 100644
      // The card opens centered exactly as always. The first search keystroke
      // or submenu move freezes the top line where it currently sits — from
      // then on the card grows and shrinks downward instead of re-centering
+diff --git a/shell/plugins/notifications/Service.qml b/shell/plugins/notifications/Service.qml
+index 0122310..39d5556 100644
+--- a/shell/plugins/notifications/Service.qml
++++ b/shell/plugins/notifications/Service.qml
+@@ -5,6 +5,7 @@ import QtQuick.Layouts
+ import Quickshell
+ import Quickshell.Io
+ import Quickshell.Wayland
++import Quickshell.Wayland._BackgroundEffect
+ import Quickshell.Services.Notifications
+ import qs.Commons
+ 
+@@ -964,6 +965,14 @@ Item {
+       exclusionMode: ExclusionMode.Ignore
+       color: "transparent"
+ 
++      // This surface is full-screen (see below), so a niri-side `blur true` on
++      // the notifications namespace would frost the ENTIRE display — that was
++      // the "a notification blurs the whole screen" bug (2026-09-20). Hand niri
++      // the toast column as the blur region instead, the way the menu, the
++      // keyboard panel and the floating bar do. effects.kdl sets only `xray`
++      // for this namespace, so this region stays the sole blur area.
++      BackgroundEffect.blurRegion: Region { item: popupColumn; radius: service.cornerRadius }
++
+       readonly property var popupPlacement: NotificationLogic.popupPlacement(
+         service.barPosition, service.barClearance, Style.gapsOut)
+ 
 diff --git a/shell/plugins/osd/Osd.qml b/shell/plugins/osd/Osd.qml
 index 581bfa3..0228823 100644
 --- a/shell/plugins/osd/Osd.qml
@@ -486,6 +535,22 @@ index 581bfa3..0228823 100644
        borderSpec: Border.surfaceSpec("popups", "border", Color.popups.border, Math.max(1, Style.space(2)))
        radius: Style.cornerRadius
        opacity: root.opened ? 1 : 0
+diff --git a/shell/plugins/panels/power/Panel.qml b/shell/plugins/panels/power/Panel.qml
+index b1c34da..168779c 100644
+--- a/shell/plugins/panels/power/Panel.qml
++++ b/shell/plugins/panels/power/Panel.qml
+@@ -277,8 +277,10 @@ Panel {
+     id: button
+     anchors.fill: parent
+     bar: root.bar
++    // Percentage trails the icon so the digits sit at the far right edge of
++    // the bar (leftmost widget-relative order read poorly there).
+     text: root.showPercentage && !vertical
+-      ? Math.round(root.batteryFraction * 100) + "% " + root.batteryIcon()
++      ? root.batteryIcon() + " " + Math.round(root.batteryFraction * 100) + "%"
+       : root.batteryIcon()
+     slotSize: Style.bar.iconSlot * (root.showPercentage && !vertical ? 2 : 1)
+     tooltipText: ""
 diff --git a/shell/services/AppLibrary.qml b/shell/services/AppLibrary.qml
 index 738529d..460565c 100644
 --- a/shell/services/AppLibrary.qml
