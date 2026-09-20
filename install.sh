@@ -92,7 +92,7 @@ else
 fi
 
 # ---- 7. niri compositor wiring: prepare snippet + print manual step ----
-log "Preparing niri composeor snippet at ~/.config/niri/omarchy.kdl"
+log "Preparing niri compositor snippet at ~/.config/niri/omarchy.kdl"
 mkdir -p "$HOME_DIR/.config/niri"
 sed "s|__HOME__|$HOME_DIR|g" "$REPO_DIR/niri-config/omarchy.kdl.template" > "$HOME_DIR/.config/niri/omarchy.kdl"
 

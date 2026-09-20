@@ -45,7 +45,7 @@
 | 名字 | 说明 | 仓库里有? |
 |---|---|---|
 | `hyprctl` | Hyprland 兼容层（脚本改了 `monitors`/`eval` 等才在 niri 上跑得动） | ✅ `port-bin/` |
-| `uwsm-app` | 吃掉 `uwsm-app -- <cmd>`（niri 没有 uwsm）。**里面绝不能有 `setsid`**（见移植笔记 §8 第 22 条） | ✅ |
+| `uwsm-app` | 吃掉 `uwsm-app -- <cmd>`（niri 没有 uwsm）。**里面绝不能有 `setsid`**（见垫片卷 `docs/shims.md` §8 第 22 条） | ✅ |
 | `materal-update` | 取色/重上色 | ✅ |
 | `omarchy-niri-system` | logout/reboot/shutdown 统一入口（logind D-Bus，免密） | ✅ |
 | `omarchy-niri-apply-theme` | 按主题 token 写 niri 的边框渐变（两带方案） | ✅ |
@@ -56,7 +56,9 @@
 | `omarchy-display-text-size` | bar 的 Display 面板字号滑块驱动全桌面（CLI 路径绕过它） | ✅ `port-bin/`（2026-09-20 收进） |
 | `wechat`、`clipboard-sync.sh`、`clipboard-handler.sh` | 移植之前的老自建，保留 | ❌（与本移植无关） |
 
-- 上表前 8 个与仓库 `port-bin/` **逐字节一致**（2026-09-20 `md5sum` 逐个核过）。
+- 上表 11 项与仓库 `port-bin/` 的对账（2026-09-20 `md5sum` 逐个核过）：**10 项逐字节一致**；
+  唯一例外是 `omarchy-update` —— 仓库版只把注释改成了通用措辞（"这类机器"而不是"本机"），
+  **代码体逐行相同**（`diff <(grep -v '^#' ~/bin/omarchy-update) <(grep -v '^#' port-bin/omarchy-update)` 为空）。
 - 回退：`rm ~/bin/<名字>`（若 `$OMARCHY_PATH/bin` 有同原件，会自动回退到它）。
 
 ---

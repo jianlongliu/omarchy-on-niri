@@ -109,7 +109,7 @@ hyprctl 调用面有界、可直接映射。
 | `~/bin/omarchy-display-text-size` (+x) | bar 的 Display 面板 TEXT SIZE 滑块垫片：官方脚本只管 shell `[font]`/GTK factor/终端 pt，这个补 GTK dconf+settings.ini、Qt(qt6ct)、fcitx5、XSETTINGS 各层（§8.19）。仓库 `port-bin/omarchy-display-text-size` |
 | `~/.config/omarchy/hooks/theme-set.d/10-niri-border` | 换 style 时自动 `omarchy-niri-apply-theme`（只写不重载，保护 SCALE）|
 | `~/.config/omarchy/hooks/post-update.d/10-niri-repatch` | `omarchy update` 后自动重放覆盖层 |
-| `~/.config/omarchy/niri-port/`（`niri.patch` + `Niri.qml` + `plugins/` + `plugin-patches/` + `backups/`）| 移植覆盖层产物（仓库外，重放用）|
+| `~/.config/omarchy/niri-port/`（`niri.patch` + `Niri.qml` + `plugins/` + `plugin-patches/` + `backups/`）| 移植覆盖层产物（仓库外，重放用）。**当前：`niri.patch` 21 文件 / 38 hunk**，`--reverse --check` 通过、repatch 幂等，md5 `047e5866a03228e30ae6069e9b2b9dd9`（2026-09-20 深夜核，与仓库 `niri-port/niri.patch` 一致）|
 | `~/.ante/projects/-home-jianlongliu/memory/`（`omarchy-niri-migration.md` 等） | 项目记忆（旧 yvonne 侧那份已废弃） |
 
 ### 3.2 修改
