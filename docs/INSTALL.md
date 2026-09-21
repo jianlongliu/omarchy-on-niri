@@ -118,6 +118,12 @@ mkdir -p ~/.config/omarchy
 cp "$REPO/niri-config/shell.json" ~/.config/omarchy/shell.json
 ```
 
+That file is **upstream's stock layout** (a neutral starting point). The porting machine's actual bar is
+a different, opinionated one — `bar.id = charlieras262.floating-bar` plus five third-party widgets — and
+lives in `local-config/omarchy/{shell.json,shell.toml,extensions/omarchy-menu.jsonc}`. Use that set only
+if you are also installing those five plugins from the Omarchy plugin store; `shell.toml` (font size,
+frosting alphas) is worth copying either way.
+
 **4b. The machine's `~/.config` layer (`local-config/`)** — what this machine runs on top of the upstream
 default tree, which upstream does not ship. Skip it and you get window decorations and no frosting:
 
@@ -127,6 +133,8 @@ mkdir -p ~/.config/systemd/user
 cp "$REPO/local-config/systemd/user/materal-recolor."* ~/.config/systemd/user/
 systemctl --user enable --now materal-recolor.path                   # needs ~/bin/materal-update
 ghostty +validate-config                                             # silent means it parsed
+mkdir -p ~/.config/omarchy
+cp "$REPO/local-config/omarchy/shell.toml" ~/.config/omarchy/        # font size + frosting alphas
 ```
 
 Three lines in `ghostty/config` are required by the port (`window-decoration = false`,

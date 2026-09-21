@@ -1,6 +1,6 @@
 # 本机改动总账（Omarchy on niri）
 
-> 文档只有一份：本文件（`docs/local-overrides.md`）。`~/Documents/omarchy-niri-overrides.md` 是指向它的软链。
+> 文档只有一份：本文件（`docs/local-overrides.md`）。
 > 目的：一眼看出**这台机器上相对上游 omarchy 到底动了什么、落在哪一层、怎么回退**，以及
 > **哪些东西只在机器上、仓库里没有**（= 换机不可复现的缺口）。
 > 最后核对：2026-09-20 深夜（仓库 `quattro`，覆盖层 21 文件 / 38 hunk）。
@@ -20,7 +20,7 @@
 
 ---
 
-## 1. 仓库内（随 git 走：`~/omarchy-on-niri`）
+## 1. 仓库内（随 git 走：`~/Projects/omarchy-on-niri`）
 
 | 路径 | 内容 | 生效方式 |
 |---|---|---|
@@ -28,7 +28,6 @@
 | `port-bin/*`（8 个） | `hyprctl`、`uwsm-app`、`materal-update`、`omarchy-niri-system`、`omarchy-niri-apply-theme`、`omarchy-niri-repatch`、`omarchy-powerprofiles-{list,set}` | `install.sh` 拷进 `~/bin`（PATH-first） |
 | `niri-port/niri.patch` + `Niri.qml` + `plugins/blurwallpaper` | 覆盖层，挺过 `omarchy update` | `~/bin/omarchy-niri-repatch`（幂等） |
 | `niri-port/plugin-patches/` | 4 个第三方插件的本地魔改补丁（+ README 说明怎么生成/怎么重放） | 手工 `git apply`（无自动重放器） |
-| `scripts/check-doc-links.sh` | 校验 `~/Documents` 那九个软链仍指向 `docs/`（提交文档前跑） | `./scripts/check-doc-links.sh` |
 | `scripts/kdl-sync.sh`、`scripts/local-files-sync.sh` | 机器 ↔ 仓库的对账：前者比 `niri-config/local/*.kdl`（家目录占位符），后者比 `local-config/` + `plugins/` + `split-lock/ir-light`（逐字节） | 各自直接跑；不在本机则 `skip` |
 | `local-config/` | **本机 `~/.config` 覆盖层**（上游默认树 `config/` 之外那几份）：`ghostty/config`（含 `background-blur-radius = 0` 这条磨砂必需改动；配色走 Omarchy 主题的 `config-file`，不带私有主题文件）、`systemd/user/materal-recolor.{path,service}` | 拷到 `~/.config/` 对应路径（见该目录 README）；`materal-recolor.path` 还要 `systemctl --user enable --now` |
 | `plugins/jianlongliu.arch-logo/` | 自研 bar 插件的源码（`BarWidget.qml` + `arch-logo.svg` + `manifest.json`；无 `clonedFrom`，不是上游克隆） | 拷到 `~/.config/omarchy/plugins/jianlongliu.arch-logo/` |
@@ -38,10 +37,15 @@
 | `hooks/post-update.d/10-niri-repatch`、`hooks/theme-set.d/{10-niri-border,20-materal}` | 更新后重放覆盖层；换主题写边框渐变 | Omarchy 钩子机制自动调 |
 | `split-greeter/`、`split-lock/` | 自研登录器与锁屏，各带 `install.sh` + `tests/` | `sudo ./install.sh`（split-greeter 不碰 `config.toml`，最后一步手工） |
 | `default/omarchy/omarchy-menu.jsonc` | `install.package`/`install.aur`/`remove.package` 的 `xdg-terminal-exec` 回退 | 随仓库/覆盖层 |
-| `docs/` | `INSTALL{,.zh}.md` + **主文档 `omarchy-on-niri-port.md`（当前事实 + 映射表）** + 模块卷 `visual/behavior/plugins/shims/upstream/migration/lock/local-overrides`（编号沿用原号），**正本就在 `docs/`**，`~/Documents/omarchy-niri-*.md` 是软链 | 改哪边都一样；跑 `scripts/check-doc-links.sh` 确认软链没被换成真副本 |
+| `docs/` | `INSTALL{,.zh}.md` + **主文档 `omarchy-on-niri-port.md`（当前事实 + 映射表）** + 模块卷 `visual/behavior/plugins/shims/upstream/migration/lock/local-overrides`（编号沿用原号），**正本就在 `docs/`** | 直接改 `docs/`，无第二副本 |
 
-- 覆盖层实际内容：**21 文件 / 38 hunk**（`--reverse --check` 通过、repatch 幂等）；
-  **md5 `047e5866a03228e30ae6069e9b2b9dd9`**，与 `~/.config/omarchy/niri-port/niri.patch` 一致（2026-09-20 核）。
+- 覆盖层实际内容：**22 文件 / 48 hunk**（`--reverse --check` 通过、repatch 幂等）；
+  **md5 `6138cc1bece9a94312572d8685c845a4`**，与 `~/.config/omarchy/niri-port/niri.patch` 一致（2026-09-21 晚重导出核；
+  比 2026-09-20 那版多 `shell/shell.qml` 的 boot reveal 标记 + `pushBootReveal()` 推送、以及 `shell/plugins/bar/Bar.qml` 的滑入，见 §9 / `docs/visual.md` 第 33 条；
+  比 2026-09-21 01:29 那版（46 hunk）多 `Background.qml` 的 `paintedOnce` 与 `shell.qml` 的推送增补 —— 那两处活体先改、补丁没跟上，曾让 repatch 判 exit 2）。
+- **在用的 bar 是第三方插件，不在 `niri.patch` 里**：`~/.config/omarchy/shell.json` 的 `bar.id = charlieras262.floating-bar`，
+  它的 boot reveal 走 `niri-port/plugin-patches/charlieras262.floating-bar.patch`（md5 `0d36c626a9992de5a457e3f2880bc99a`，7 hunk，2026-09-21 核；含加载期底部 `Thinking…` 卡片——卡片照 OSD 关机吐司的尺寸/字体做，表面是**卡片大小 + 借用 `omarchy-osd` 那条霜化规则**，收卡时机等宿主推的"壁纸已画"而不是固定时长），
+  该补丁**没有自动重放器**，插件被更新覆盖后要手工 `git apply`。
 
 ---
 
@@ -73,7 +77,7 @@
 | 文件 | 关键内容 | 回退 |
 |---|---|---|
 | `shell.json` | bar 用 `charlieras262.floating-bar`（`centerAnchor: omarchy.clock`、`cornerRadius 10`、`floatGap 8`）；`omarchy.tray.hidden: ["Fcitx"]`（藏掉 fcitx5 的托盘图标）；`omarchy.power.showPercentage`；`ronald.input-sources.showSourceName=false`；`meviusisback.ai-subs`（`barDisplay: Data`、900s）；`idle.lock 300` / `idle.screensaver 150`（**screensaver 已由 flag 禁用**）；`disabledPlugins: ["omarchy.lock"]`；`plugins: [jianlongliu.split-lock, io.github.claudsondouglas.arcdock]` | `.bak-20260919-preaisubs`、`.bak-20260919-prehidetray`、`.bak-20260920-bar`、`.bak-20260920-bardisplay` |
-| `shell.toml` | `[font] base-size 12`；`[bar]` 尺寸 + `background-alpha 0.45` + **`icon-font 12`**（要 `Style.qml` 的白名单，已进覆盖层）；`[popups]/[notifications]/[tooltip]` alpha；`[menu] background "#2a2a22"` + `background-alpha 0.7`（**写字面值就不再随主题走**） | `.bak-20260920-{consistency,iconfont,menu}` |
+| `shell.toml` | `[font] base-size 12`；`[bar]` 尺寸 + `background-alpha 0.45` + **`icon-font 12`**（要 `Style.qml` 的白名单，已进覆盖层）；`[popups]/[notifications]/[tooltip]` alpha；`[menu]` 只有 `background-alpha 0.45`、**不写底色**（走主题的 `[menu] background` ＝ matugen 出的 `colors.toml` `background`，跟 `[bar]` 同档半透明磨砂；2026-09-21 起，替掉 9-20 写死的 `"#2a2a22"` @ 0.7） | `.bak-20260920-{consistency,iconfont,menu}`、`.bak-20260921-menu` |
 | `extensions/omarchy-menu.jsonc` | 菜单用户层 override：`trigger.*` 屏蔽、`setup.input` 指 `niri/input.kdl`、screensaver 6 条 `when:"false"`。⚠ 同一 id 别写两遍；**别写行内注释**（`stripJsonc` 只删整行注释） | `.bak-20260919-{prehide,prelearn}`、`.bak-20260920-prescreensaver` |
 | `niri-port/` | `niri.patch`（与仓库同 md5）、`Niri.qml`、`plugin-patches/*.patch`（4 个，机器独有，见 §6） | 各自的 `.bak-*` |
 | `plugins/`（8 个） | 自研：`jianlongliu.arch-logo`（**源码已进仓库 `plugins/jianlongliu.arch-logo/`**）、`jianlongliu.workspaces`（上游克隆 + `niri-port/plugin-patches/jianlongliu.workspaces.patch`）、`jianlongliu.split-lock`（**正本 `split-lock/`**）（**没有 `.git`**，`omarchy plugin update` 不碰）；第三方：`charlieras262.floating-bar`、`ronald.input-sources`、`meviusisback.ai-subs`、`jrmmhm.pocket`、`io.github.claudsondouglas.arcdock`（**本身就是上游 git 克隆**，本地魔改用 `git diff` 就地生成 patch） | `plugin-patches/*.patch` 反向 `git apply -R` |
@@ -86,6 +90,13 @@
 - 文件：`config.kdl`（只留 include 与会话级设置）、`binds.kdl`、`layout.kdl`、`window-rules.kdl`、
   `effects.kdl`、`input.kdl`、`monitor.kdl`；每个旁边都有 `.bak-*`（改前必留）。
   **2026-09-20 已收进仓库**：`niri-config/local/`（家目录参数化成 `/home/<user>`，说明见该目录 README）。
+  **2026-09-21 两处新改**：① `layout.kdl` 的 `layout { background-color }` —— 这就是**开机到壁纸画出来之间那一屏的底色**（niri 内建默认 `#404040` 深灰，配置里原本没人设过；实测用 `#FF00FF` 试色当场生效），现设成**当前壁纸的平均色**（`magick <bg> -resize 1x1!` 取，当时 `#BDBDBE`），开机那屏因此从"深灰洞"变成与壁纸亮部接近的平色；换壁纸后可跟着重取。② `config.kdl` 的 `cursor` 块加了 `hide-after-inactive-ms 1000`（原块已有 `hide-when-typing`、`Bibata-Modern-Amber` 20）：想让**开机那根箭头**自己消失——niri 没有"立刻藏"的接口，这是唯一的旋钮；副作用是平时停手 1s 箭头也没。备份 `layout.kdl.bak-20260921-bgcolor`、`config.kdl.bak-20260921-cursor`。
+- **壁纸从会话第一帧就在（2026-09-21 晚，本机新装的包）**：`swaybg`（**extra 仓库 `pacman -S swaybg`，1.2.2-1，非 omarchy 自带**）由 `config.kdl` 的 `spawn-at-startup "swaybg" "-i" "/home/<user>/.local/state/omarchy/current/background" "-m" "fill"` 拉起（走 omarchy 的"当前壁纸"软链 ⇒ 换壁纸自动跟）。
+  动机：Quickshell 的 `omarchy.background` 要 ~1.4s 才画出壁纸，这段只有一屏底色（见 `docs/lock.md` §11.27 的"② 可打的部分"）。
+  **实测三点**：① `-m fill` = 源图 cover 居中，与插件渲染**逐像素一致**（130 个纯壁纸区块差 0.01/255）⇒ 插件那份上来时无缝；② 杀掉壳层后壁纸仍在（顺带成壳层崩溃时的兜底）；③ **同一 background 层内"后映射的在上"**——把 swaybg 起在壳层之后它就压住插件那份（用一张品红测试图复现：此时换壁纸会看到旧图）。
+  故这行**必须排在 `spawn-sh-at-startup "omarchy-launch-shell"` 之前**（niri 按配置里的先后顺序 spawn）；排对了插件永远在上面，swaybg 常驻无害。
+  画质：swaybg 走 gdk-pixbuf（连 cairo/png），本机壁纸是 jpg/png ✓；**`.webp` 未装加载器**（`webp-pixbuf-loader`），真换 webp 壁纸要补包。
+  不想要了就删这行 + `pacman -Rns swaybg`（唯一影响：回到那 1.4s 空窗）。
 - **静默陷阱**：bind 里写开窗属性（`open-floating` 等）→ `only one action is allowed per keybind`，
   而 niri 对**整份** `config.kdl`（含 include）做事务性校验，一处失败**整体丢弃、继续跑旧配置、桌面零提示**。
   改完必须 `niri validate`，再看 `journalctl | grep 'niri\['`。
@@ -127,7 +138,7 @@
 
 - `~/.local/state/omarchy/toggles/screensaver-off` = **screensaver 禁用 flag**（用户明确要关，别恢复）。
 - `~/.local/share/omarchy` = `$OMARCHY_PATH`，**工作区里有非移植改动**（2026-09-20 核：`git status` 265 条，
-  主要是主题删除）→ **重生成 `niri.patch` 必须限路径**，否则 21 文件会膨胀成 250+：
+  主要是主题删除）→ **重生成 `niri.patch` 必须限路径**，否则 22 文件会膨胀成 250+：
 
 ```bash
 # 旧 patch 的文件清单 + 本次新增的文件
@@ -136,9 +147,9 @@ git apply --reverse --check niri.patch   # 必须通过
 ~/bin/omarchy-niri-repatch               # 应回 "already applied"
 ```
 
-- `~/Documents/omarchy-niri-*.md`（九个）= **指向仓库 `docs/` 的软链**（2026-09-20 文档归一，取消"母本 + 镜像"双写）。
-  改哪边都一样；被人换成真副本、或指错地方，`./scripts/check-doc-links.sh` 会报红。归一前的真副本备份在
-  `~/Documents/archive/doc-backups/pre-merge-20260920-232818/`（九个文件，逐字节等于当时的仓库版）。
+- `~/Documents/omarchy-niri-*.md`（九个）**已删**（2026-09-21）：2026-09-20 文档归一时它们曾是指向 `docs/` 的软链，
+  守它们的 `./scripts/check-doc-links.sh` 一并退役。正本只在 `docs/`，不再有入口层。归一前的真副本备份仍在
+  `~/Documents/AI Agents/archive/doc-backups/pre-merge-20260920-232818/`（九个文件，逐字节等于当时的仓库版）。
 - 第三方插件的本地魔改：`cd ~/.config/omarchy/plugins/<id> && git diff > ~/.config/omarchy/niri-port/plugin-patches/<id>.patch`，
   改完核对 `git apply --reverse --check` 通过。
 - `plugin-patches/*.patch` **没有自动重放器**：`omarchy-niri-repatch` 只管 `$OVL/niri.patch` + `Niri.qml` + `$OVL/plugins/*`；
@@ -153,11 +164,15 @@ git apply --reverse --check niri.patch   # 必须通过
    （写成 `%h` 模板；本机那份是写死 `~` 的等价物）
 3. ~~`plugin-patches`~~ **已收进仓库（2026-09-20）**：`niri-port/plugin-patches/`（4 个 patch + README，
    说明怎么 `git diff` 生成、怎么 `git apply` 重放）；机器上同目录的 `.bak-*` 是历史，仍只在本地。
-4. `~/.config/omarchy/{shell.json,shell.toml,extensions/omarchy-menu.jsonc}` 的实际取值
-   （仓库只有 `niri-config/shell.json` 示例）。**这是 `~/.config` 层最后一个缺口**（2026-09-20 复核）：
-   三份加起来 16 K、已扫过**不含任何密钥**（无 token / 无 `.hermes`/`.env` 引用 / 无邮箱、URL 凭据），
-   收不收只取决于"要不要公开本机偏好"。收法是照 `local-config/` 的样子放进
-   `local-config/omarchy/{shell.json,shell.toml,extensions/omarchy-menu.jsonc}`，`local-files-sync.sh` 会自动认。
+4. ~~`~/.config/omarchy/{shell.json,shell.toml,extensions/omarchy-menu.jsonc}` 的实际取值~~
+   **已收进仓库（2026-09-21）**：`local-config/omarchy/{shell.json,shell.toml,extensions/omarchy-menu.jsonc}`
+   （照 `local-config/` 的样子逐字节镜像，`local-files-sync.sh` 自动认，已验 rc=0）。三份复扫过
+   **不含任何密钥**（无 token / 无 `.hermes`/`.env` 引用 / 无邮箱、URL 凭据），路径零字面量
+   （`omarchy-menu.jsonc` 里那处走的是 `$HOME`），出现的 `jianlongliu.*` 只是插件 id。
+   ⚠ **换机注意**：这份 `shell.json` 钉的是本机的 bar 偏好 —— `bar.id = charlieras262.floating-bar`
+   ＋ 5 个第三方部件（`charlieras262.floating-bar` / `io.github.claudsondouglas.arcdock` /
+   `jrmmhm.pocket` / `meviusisback.ai-subs` / `ronald.input-sources`）**都不在仓库里**，直接照抄会得到
+   一条缺部件的 bar；`niri-config/shell.json`（上游默认盘）才是中性起手式，两份都留着，按需选。
 5. ~~钩子漂移~~ **已修（2026-09-20）**：本机那份多出的 8 行（更新后 `omarchy-restart-shell` ——
    上游 `omarchy-update-restart` 只给"重启"选项，而 QML 换了不重启等于旧部件继续跑、菜单 jsonc 写到一半
    还会解析成空菜单）已并回仓库，两侧一致。
@@ -195,6 +210,8 @@ git apply --reverse --check niri.patch   # 必须通过
 | 某个 `~/bin` 垫片 | `rm ~/bin/<名字>` |
 | 覆盖层（回到上游 omarchy） | 在 `$OMARCHY_PATH` 里 `git apply -R ~/.config/omarchy/niri-port/niri.patch`（`omarchy-niri-repatch` **没有**反向开关，反向只能手动 `git apply -R`） |
 | 用户级 shell 配置 | 用同目录 `.bak-*` 覆盖回去（热生效，存盘即回） |
+| 桌面交接的 bar 滑入（boot reveal） | 反向重放旧覆盖层 `niri.patch.bak-20260921-bootcurtain2`（= 上一版）或 `…bootcurtain`（= 更早的黑幕版），再 `omarchy-restart-shell`；只想关掉动画：删 `$XDG_RUNTIME_DIR/omarchy-boot-splash` 的写入者（`split-greeter/session.sh` 那行）或干脆不装它 |
+| 登录交接的另外三处（刷黑 + 输出改道 + 登录面淡出） | 用仓库 HEAD 覆盖 `split-greeter/{install.sh,niri.kdl,Greetd.qml,shell.qml}` 并删 `session.sh`，`GREETER_SESSION` 改回 `niri-session`，重跑 `pkexec ./install.sh` |
 | 登录页 | 恢复 `/etc/greetd/config.toml.backup-*`，再 `systemctl restart greetd`（**在 TTY 里做**） |
 | 锁屏人脸 | `sudo split-lock/face-pam.sh --remove` |
 | screensaver 恢复 | 删 `~/.local/state/omarchy/toggles/screensaver-off` + 复原 `omarchy-menu.jsonc.bak-20260920-prescreensaver` |

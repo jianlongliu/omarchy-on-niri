@@ -1,0 +1,52 @@
+{
+  // niri port overrides.
+  //
+  // 本文件是用户层 override：在仓库外 → `omarchy update`（git pull）碰不到，
+  // 且被 FileView 盯着、热重载。合并按 id 覆盖默认项，所以这里复用默认的
+  // dotted id；label/icon 建议一并带上，否则合并后会退化成 id。
+  //
+  // 分区：① 屏蔽（niri 无对应）② 暂未接上（能实现，待改写）③ 已核实可用
+
+  // niri 上根本没有对应功能的三条 → 直接从 Trigger 里屏蔽（when:false 就是隐藏；
+  // label/icon 一并带上，将来若取消隐藏不会退化成 id）。
+  //   Mirror Display：niri 无镜像输出；Workspace Layout：dwindle/scrolling 是 Hyprland 语义；
+  //   Window Gaps：niri 的 gap 只能改配置，无运行时 IPC。
+  // 图标转义注意：>U+FFFF 的码点必须写成 UTF-16 代理对（JSON.parse 的 \u 只吃 4 位十六进制）。
+  // 例：Screensaver 的 U+F1104 = \udb84\udd04；写成 \uf1104 会被当成 U+F110 + '4'。
+  "trigger.hardware.mirror-display": {"icon":"\udb80\udf79","label":"Mirror Display","when":"false"},
+  "trigger.toggle.workspace-layout": {"icon":"\udb84\udcac","label":"Workspace Layout","when":"false"},
+  "trigger.toggle.window-gaps": {"icon":"\ue62a","label":"Window Gaps","when":"false"},
+
+  // 暂时不可用（本机缺依赖或需要改写实现，见 §8 第 21 条那批 override）
+  // 注：Capture → Color 的 override 已撤（2026-09-19 装了 hyprpicker 并在 niri 上实测能抓屏），
+  //     现在走上游默认动作 `pkill hyprpicker || hyprpicker -a`。
+  "trigger.toggle.nightlight": {"action":"omarchy-notification-send '暂时不可用' '夜灯：niri 无 Hyprsunset，需 wlsunset 之类替代'"},
+  "trigger.hardware.laptop-display": {"action":"omarchy-notification-send '暂时不可用' '笔记本屏幕开关：niri 需改用 niri msg output'"},
+  "trigger.toggle.one-window-ratio": {"action":"omarchy-notification-send '暂时不可用' '单窗口方形比例：Hyprland 专属'"},
+
+  // 2026-09-19 用户要求：屏蔽 + 禁用 screensaver（idle 到 150s 就弹，很烦）。
+  // 「禁用」本体**不在这里**——是官方开关 `~/.local/state/omarchy/toggles/screensaver-off`
+  // （`omarchy-toggle screensaver-off` 打开它），omarchy-launch-screensaver 见到就直接 exit 1。
+  // 下面这些是「屏蔽」：它们是唯独几条带 `force`、能绕过那个开关的入口
+  // （System 菜单、Trigger→Toggle、Style→Screensaver 那组 branding）——全部隐藏。
+  // 隐藏是「只有显式 false 才生效」的 when 表达式，父项隐藏后子项也不会被渲染。
+  "system.screensaver": {"icon":"\udb84\udd04","label":"Screensaver","when":"false"},
+  "trigger.toggle.screensaver": {"icon":"\udb84\udd04","label":"Screensaver","when":"false"},
+  "style.screensaver": {"icon":"\udb84\udd04","label":"Screensaver","when":"false"},
+  "style.screensaver.text": {"icon":"\uf044","label":"Edit Text","when":"false"},
+  "style.screensaver.image": {"icon":"\uf03e","label":"Set From Image","when":"false"},
+  "style.screensaver.default": {"icon":"\uf46a","label":"Restore Default","when":"false"},
+
+  // niri port: Learn → 原 "Hyprland" 指 wiki.hypr.land，本机跑 niri，改指 niri 官方文档站
+  // （niri 的仓库/wiki 已迁到 niri-wm，文档站是 niri-wm.github.io/niri）。
+  // 复用同一 id 覆盖；label/icon 必须一起带上，否则合并时会回退成 id。
+  "learn.hyprland": {"icon":"\uf359","label":"niri","action":"omarchy-launch-webapp 'https://niri-wm.github.io/niri/'"},
+
+  // niri port: setup items open the modular config files. After the niri
+  // config was split into includes, config.kdl is just `include`s, so the
+  // root file is near-empty — point each at the file that holds its settings.
+  // Override (not the repo default) so it hot-reloads and survives omarchy update.
+  "setup.monitors": {"icon":"󰍹","label":"Monitors","action":"omarchy-launch-config-editor \"$HOME/.config/niri/monitor.kdl\""},
+  "setup.keybindings": {"icon":"","label":"Keybindings","action":"omarchy-launch-config-editor \"$HOME/.config/niri/binds.kdl\""},
+  "setup.input": {"icon":"","label":"Input","action":"omarchy-launch-config-editor \"$HOME/.config/niri/input.kdl\""}
+}

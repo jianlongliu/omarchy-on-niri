@@ -1,6 +1,12 @@
 #!/bin/bash
-# Contract test for the hyprctl->niri shim, offline: fake `niri` and `loginctl`
-# so nothing here can touch the real session, the real displays, or logind.
+# Contract test for the hyprctl->niri shim. `niri` and `loginctl` are faked, so
+# nothing here can touch the real session, the real displays, or logind.
+#
+# It is *not* hermetic, though: the last three cases drive the real upstream
+# consumer `omarchy-hyprland-session-locked` (that is the point -- asserting the
+# shim's output against the actual thing that reads it), and it needs `jq`.
+# Both must be on PATH. With a stripped PATH (`env PATH=/usr/bin:/bin ...`)
+# those three fail with 127, which says nothing about the shim.
 #
 # What is under test is the two fields the Omarchy lock layer reads out of
 # `hyprctl -j monitors` and never got on niri: dpmsStatus (which the stock lock
@@ -44,7 +50,7 @@ case $1 in
 action)
   shift
   echo "action $*" >>"$NIRI_ACTIONS"
-  exit 0
+  exit "${FAKE_NIRI_RC:-0}"
   ;;
 outputs)
   cat <<'JSON'
@@ -125,6 +131,43 @@ FAKE_LOCKED=no
 check "unlocked -> exit 1 (unlocked)" "$(sl)" 1
 FAKE_LOCKED=fail
 check "unknown  -> exit 2 (undetermined)" "$(sl)" 2
+
+echo "== dispatch translates to niri's real argument shapes"
+# niri 26.04 dropped the `--` separator: `focus-window` and `close-window` take
+# `--id`, while `focus-workspace` / `move-window-to-workspace` take a positional
+# reference. Getting this wrong used to send every focus/close dispatch to an
+# exit-2 "unexpected argument" that the shim then swallowed.
+: >"$NIRI_ACTIONS"
+hyprctl dispatch 'hl.dsp.focus({ window = "address:0x10" })' >/dev/null 2>&1
+check "lua focus window -> --id" "$(cat "$NIRI_ACTIONS")" "action focus-window --id 16"
+
+: >"$NIRI_ACTIONS"
+hyprctl dispatch focuswindow "0x10" >/dev/null 2>&1
+check "legacy focuswindow -> --id" "$(cat "$NIRI_ACTIONS")" "action focus-window --id 16"
+
+: >"$NIRI_ACTIONS"
+hyprctl dispatch 'hl.dsp.window.close({ window = "address:0x10" })' >/dev/null 2>&1
+check "close by address actually closes" "$(cat "$NIRI_ACTIONS")" "action close-window --id 16"
+
+: >"$NIRI_ACTIONS"
+hyprctl dispatch 'hl.dsp.window.close({})' >/dev/null 2>&1
+check "close with no window -> focused" "$(cat "$NIRI_ACTIONS")" "action close-window"
+
+: >"$NIRI_ACTIONS"
+hyprctl dispatch 'hl.dsp.focus({ workspace = "3" })' >/dev/null 2>&1
+check "lua focus workspace -> positional" "$(cat "$NIRI_ACTIONS")" "action focus-workspace 3"
+
+: >"$NIRI_ACTIONS"
+hyprctl dispatch movetoworkspace 2 >/dev/null 2>&1
+check "movetoworkspace -> positional" "$(cat "$NIRI_ACTIONS")" "action move-window-to-workspace 2"
+
+echo "== niri's exit status reaches the caller (upstream's ||-fallbacks need it)"
+export FAKE_NIRI_RC=7
+hyprctl dispatch 'hl.dsp.focus({ window = "address:0x10" })' >/dev/null 2>&1
+check "dispatch propagates niri's failure" "$?" 7
+hyprctl dispatch 'no-such-dispatcher-at-all' >/dev/null 2>&1
+check "unknown dispatcher is still a safe no-op" "$?" 0
+export FAKE_NIRI_RC=0
 
 echo
 echo "checks=$checks failures=$failures"

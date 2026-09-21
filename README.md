@@ -45,9 +45,7 @@ standalone installer** — it assumes a working Arch + niri login session and an
   howdy and avatars, and greetd's single `configuring` slot.
 
 The volumes keep the original section numbering (`§8 第 N 条`, `§8.x`, `§11.x`); the main volume
-holds a map from every moved section to its volume. The volumes have exactly one home — `docs/`
-itself; the `~/Documents/omarchy-niri-*.md` names are symlinks into it, and `scripts/check-doc-links.sh`
-makes sure nobody turns one back into a drifting copy.
+holds a map from every moved section to its volume. The volumes have exactly one home: `docs/` itself.
 
 ## Repository layout
 
@@ -72,14 +70,14 @@ omarchy-on-niri/
 ├── docs/INSTALL.md  <- hand-run install procedure
 ├── docs/omarchy-on-niri-port.md <- main volume: current facts + module map
 ├── docs/{visual,behavior,plugins,shims,upstream,migration,lock,local-overrides}.md <- module volumes
-├── scripts/     <- check-doc-links.sh, kdl-sync.sh, local-files-sync.sh
+├── scripts/     <- kdl-sync.sh, local-files-sync.sh
 └── README.md
 ```
 
 ## Requirements / dependencies
 
 Install these on the target Arch machine. Everything below was verified in use on the porting machine
-(March 2026 / Arch rolling, systemd 261, niri 26.04); verify package availability on your box.
+(September 2026 / Arch rolling, systemd 261, niri 26.04); verify package availability on your box.
 
 ### Required — the shell engine
 | Package | Why |

@@ -2,3 +2,21 @@
 # Python bytecode (orchestrator)
 __pycache__/
 *.pyc
+
+# 敏感内容永不提交：个人隐私 / API key / env / 代理订阅与节点
+# （用户名 jianlongliu 本身可以出现，见 ~/.ante/skills/writing-docs）
+.env
+.env.*
+*.env
+token
+*.token
+*.key
+*.pem
+*credential*
+*secret*
+*subscription*
+mihomo*.yaml
+
+# `.bak-*` 是本机的回退副本（每份配置旁边都留一个），一律只在本地、不进仓库
+# —— 见 docs/local-overrides.md §8 第 3 条与 niri-config/README.md 的改动纪律。
+*.bak-*

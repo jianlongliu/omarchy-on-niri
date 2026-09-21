@@ -1,5 +1,5 @@
 diff --git a/Bar.qml b/Bar.qml
-index 6839594..a5d0408 100644
+index 6839594..4a3f3e5 100644
 --- a/Bar.qml
 +++ b/Bar.qml
 @@ -1,7 +1,7 @@
@@ -42,21 +42,275 @@ index 6839594..a5d0408 100644
      return monitor ? String(monitor.name || "") : ""
    }
  
-@@ -1135,6 +1130,13 @@ Item {
+@@ -662,6 +657,224 @@ Item {
+ 
+   Component.onCompleted: applyBarConfig()
+ 
++  // ---- boot reveal -------------------------------------------------------
++  //
++  // A real login starts the shell on a wallpaper that is already there, and the
++  // bar's own first ~1s is nothing anyone wants to watch: glyphs shape, icons
++  // load, the frosted fill pops in mid-layout. So the bar's surface stays off
++  // the screen for that moment, then appears whole.
++  //
++  // Whole, and deliberately not floated in. niri paints the blur for the region
++  // it was handed by itself: the frost is a compositor effect, not the client's
++  // pixels, so it shows even where the surface draws nothing at all. A bar that
++  // slides into place therefore lands as an empty frosted rectangle with the
++  // bar chasing it down -- two bars, and the second one is the ugly half. Nor
++  // can the region follow the slide (measured: a region bound to the moved item
++  // left the screen with it and the frost never came back). A surface that
++  // appears in one piece has neither problem.
++  //
++  // Only a real login arms this. The session wrapper drops a marker in the
++  // runtime directory, the host shell reads it there and pushes the flag down
++  // onto whichever bar is configured -- this plugin sees only a restricted
++  // shell API, so it cannot reach the marker itself -- and the host removes the
++  // marker as it reads it, so restarting the shell while working on it never
++  // hides the bar.
++  property bool bootRevealArmed: false
++  onBootRevealArmedChanged: if (bootRevealArmed) root.armBootReveal()
++
++  // Whether the bar may be on screen at all. True from the start unless a real
++  // login armed the reveal, so an ordinary restart changes nothing.
++  property bool bootRevealShown: true
++
++  // A fixed hold was always wrong by some amount: the shell assembles itself at
++  // whatever speed the machine feels like, and the slowest part is not the bar
++  // or a widget but the wallpaper, which the background service decodes
++  // asynchronously and paints well after every layer exists. So hold until that
++  // service says a wallpaper frame is up, with a floor so a fast machine does
++  // not blink the card, and a ceiling so a broken one cannot hide the bar
++  // forever.
++  readonly property int bootHoldMs: 600
++  readonly property int bootHoldMaxMs: 6000
++  // Pushed by the host, which owns the handle to the background service -- a
++  // plugin bar only ever sees a restricted shell API and cannot look it up
++  // itself. Defaults to true so the plugin still behaves sensibly if some other
++  // host loads it without pushing anything.
++  property bool bootRevealPainted: true
++  readonly property bool wallpaperPainted: root.bootRevealPainted
++
++  // A small timer, not an animation: nothing of ours is on screen to drive
++  // frames while it runs.
++  function armBootReveal() {
++    root.bootRevealShown = false
++    bootHoldTimer.start()
++  }
++
++  function finishBootReveal() {
++    if (!root.wallpaperPainted) return
++    bootHoldTimer.stop()
++    bootHoldPoll.stop()
++    root.bootRevealShown = true
++  }
++
++  Timer {
++    id: bootHoldTimer
++    interval: root.bootHoldMs
++    onTriggered: {
++      bootHoldPoll.start()
++      root.finishBootReveal()
++    }
++  }
++
++  Timer {
++    id: bootHoldPoll
++    interval: 100
++    repeat: true
++    onTriggered: root.finishBootReveal()
++  }
++
++  // Safety net: whatever happens above, the bar must never stay off screen.
++  Timer {
++    interval: root.bootHoldMaxMs
++    running: !root.bootRevealShown
++    onTriggered: {
++      bootHoldPoll.stop()
++      root.bootRevealShown = true
++    }
++  }
++
++  // While the bar is held back the desktop is wallpaper and nothing else, which
++  // reads as "nothing is happening" -- so say something. Same shape as the
++  // shutdown toast, with the brain the menu uses for its Learn entry. It lives
++  // here instead of going through the host's osd plugin: that plugin pays about
++  // a second to load on the first show of a session, which lands the toast
++  // after the bar instead of before it.
++  Variants {
++    model: Quickshell.screens
++
++    delegate: Component {
++      BootBannerPanel {
++        required property var modelData
++
++        screen: modelData
++      }
++    }
++  }
++
++  component BootBannerPanel: PanelWindow {
++    id: bootBannerPanel
++
++    readonly property bool bannerUp: root.bootRevealArmed && !root.bootRevealShown
++    // These are the osd plugin's own numbers (plugins/osd/Osd.qml, the card its
++    // shutdown toast is drawn in), so the two come out the same size: pad 16 on
++    // every side, two thirds of that between glyph and message, card 67 off the
++    // bottom edge. Note Style.space(px) is a scaled pixel value, not a step
++    // index -- space(16) is not the 16th step.
++    readonly property int bannerPad: Style.space(16)
++    readonly property int bannerGap: Math.round(Style.space(16) * 2 / 3)
++    readonly property int bannerRowHeight: Style.font.displayLarge
++    // Nerd Font glyphs draw well outside their monospace cell, so that card
++    // measures its icon column by ink rather than by advance width. Measuring
++    // by the cell instead is worth about 10px of extra card.
++    readonly property int bannerInk: Math.ceil(bannerIconMetrics.tightBoundingRect.width)
++    readonly property int bannerMessageWidth: Math.ceil(bannerMessageMetrics.advanceWidth)
++    readonly property int bannerScreenWidth: bootBannerPanel.modelData ? bootBannerPanel.modelData.width : 0
++
++    TextMetrics {
++      id: bannerIconMetrics
++
++      font.family: Style.font.family
++      font.pixelSize: Style.font.displayLarge
++      text: "󰧑"
++    }
++
++    TextMetrics {
++      id: bannerMessageMetrics
++
++      font.family: Style.font.family
++      font.bold: true
++      font.pixelSize: Style.font.title
++      text: "Thinking…"
++    }
++
++    // Parked just below the screen edge while idle, and always mapped: the
++    // first show then costs a margin change (~20ms) instead of building a layer
++    // surface and shaping the glyph, which measured ~1s here -- long enough to
++    // land the card after the bar rather than before it. The bar parks for the
++    // same reason.
++    //
++    // The surface is card-sized rather than a full-width strip because this
++    // card borrows the osd card's `blur true` layer rule (effects.kdl) so the
++    // two are frosted alike, and niri frosts the whole surface a rule matches:
++    // a full-width strip under that rule would frost the entire display. That
++    // is why the card is centred with side margins instead of anchored edge to
++    // edge.
++    visible: true
++    color: "transparent"
++    exclusionMode: ExclusionMode.Ignore
++    WlrLayershell.namespace: "omarchy-boot-banner"
++    WlrLayershell.layer: WlrLayer.Overlay
++    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
++    mask: Region {}
++
++    anchors {
++      bottom: true
++      left: true
++      right: true
++    }
++
++    implicitHeight: bannerPill.height
++    margins {
++      left: Math.max(0, Math.round((bannerScreenWidth - bannerPill.width) / 2))
++      right: Math.max(0, Math.round((bannerScreenWidth - bannerPill.width) / 2))
++      bottom: bannerUp ? Style.space(67) : -(bannerPill.height + Style.space(67) + 40)
++    }
++
++    BorderSurface {
++      id: bannerPill
++      width: bannerPill.borderLeft + bannerPad + bannerInk + bannerGap + bannerMessageWidth + bannerPad + bannerPill.borderRight
++      height: bannerPill.borderTop + bannerPad + bannerRowHeight + bannerPad + bannerPill.borderBottom
++      // The osd card's own fill, alpha and all: the layer rule for this
++      // namespace frosts it exactly like that card.
++      color: Color.menu.background
++      borderSpec: Border.surfaceSpec("popups", "border", Color.popups.border, Math.max(1, Style.space(2)))
++      radius: Style.cornerRadius
++
++      Row {
++        id: bannerRow
++        anchors.fill: parent
++        anchors.topMargin: bannerPill.borderTop + bannerPad
++        anchors.rightMargin: bannerPill.borderRight + bannerPad
++        anchors.bottomMargin: bannerPill.borderBottom + bannerPad
++        anchors.leftMargin: bannerPill.borderLeft + bannerPad
++        spacing: bannerGap
++
++        Item {
++          width: bannerInk
++          height: parent.height
++
++          Text {
++            textFormat: Text.PlainText
++            // Sit the glyph's ink flush in the column, like the osd card does.
++            x: Math.round((bannerInk - bannerIconMetrics.tightBoundingRect.width) / 2 - bannerIconMetrics.tightBoundingRect.x)
++            anchors.verticalCenter: parent.verticalCenter
++            text: "󰧑"
++            font: bannerIconMetrics.font
++            color: Color.popups.text
++          }
++        }
++
++        Text {
++          textFormat: Text.PlainText
++          width: bannerMessageWidth
++          anchors.verticalCenter: parent.verticalCenter
++          text: "Thinking…"
++          font: bannerMessageMetrics.font
++          color: Color.popups.text
++        }
++      }
++    }
++  }
++
+   // Revealing the indicators widens their section, which can slide a neighbour
+   // under a stationary pointer. Collapsing on that un-hover would move it back
+   // out and re-open the peek, so hold until the pointer leaves the bar.
+@@ -1087,7 +1300,9 @@ Item {
+     // reveal has to rebuild them — new surface, re-shaped glyphs, re-uploaded
+     // textures — which measures ~150ms against ~20ms to tear down. Parking
+     // keeps the surface alive, so showing is only a margin change.
+-    visible: !remapGuard.remapping
++    // The bar's own remap guard and the boot reveal both want the surface
++    // gone, and QML refuses an object that sets the same property twice, so
++    // they share one binding here.
+     exclusionMode: root.barHidden ? ExclusionMode.Ignore : ExclusionMode.Auto
+ 
+     ScreenMoveRemap {
+@@ -1135,6 +1350,31 @@ Item {
      WlrLayershell.namespace: "omarchy-bar"
      WlrLayershell.layer: WlrLayer.Top
  
++    // The whole reveal: off the screen, then on it. Nothing moves -- see
++    // the boot reveal notes above for why a slide cannot work.
++    visible: root.bootRevealShown && !remapGuard.remapping
++
 +    // niri port: hand niri the bar's own rounded rect as the blur region, so the
 +    // frost follows the rounded shape instead of the full surface rectangle --
 +    // blurring that rectangle smears the bar's fill out through its transparent
 +    // corners into a halo (niri samples the composited scene; Hyprland fixes the
 +    // same thing with `ignore_alpha` and niri has no equivalent).
-+    BackgroundEffect.blurRegion: Region { item: barBackground; radius: root.effectiveCornerRadius }
++    // The blur region must not move, so it tracks a stationary stand-in instead
++    // of the sliding visual: niri blurs the rectangle it is handed, and the bar
++    // begins the reveal parked above the top edge -- a region sampled there is
++    // off-screen, and it takes the frost with it. Same geometry as the bar at
++    // rest (the bar fills the surface); only ever a shape, never a colour.
++    Rectangle {
++      id: barBlurAnchor
++      anchors.fill: parent
++      radius: root.effectiveCornerRadius
++      color: "transparent"
++    }
++
++    BackgroundEffect.blurRegion: Region { item: barBlurAnchor; radius: root.effectiveCornerRadius }
++
++
 +
      Rectangle {
        id: barBackground
        anchors.fill: parent
-@@ -1144,13 +1146,21 @@ Item {
+@@ -1144,13 +1384,21 @@ Item {
        // means Style.shellOpacity below is an absolute result, not a
        // multiplier on top of an already-translucent color -- shellOpacity a
        // plugin never touches still reaching exactly opaque.

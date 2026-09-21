@@ -60,18 +60,25 @@ niri validate                                      # 必须通过；见下面的
 ## 两份怎么保持同步
 
 机器上的 `~/.config/niri/*.kdl` 是**权威版**（家目录是真路径），本目录是**占位符版**。两者之间
-**只差家目录那一处**（`scripts/kdl-sync.sh` 就是按这个不变量对账的）。改完本机配置、`niri validate`
+**只差家目录那一处**（`scripts/kdl-sync.sh` 就是按这个不变量对账的）—— **`layout.kdl` 是唯一例外**：
+它的 `active-color` / `active-gradient` / `inactive-color` / `inactive-gradient` 以及 `border` 的裸
+`on`/`off` 是 `omarchy-niri-apply-theme` 从当前主题**生成**的，换主题**或换壁纸**（matugen 重推调色板 →
+`theme-set.d/20-materal` 重套主题 → `10-niri-border` 重写这几行）都会变，所以对账脚本会把这几行从两边
+一起剔掉再比；`layout.kdl` 其余部分仍是逐字节比，手工改到别处照样报错。改完本机配置、`niri validate`
 通过后同步过来：
 
 ```bash
-cd ~/omarchy-on-niri
+cd ~/Projects/omarchy-on-niri
 for f in config input monitor layout window-rules effects binds; do
   sed "s|$HOME|/home/<user>|g" ~/.config/niri/$f.kdl > niri-config/local/$f.kdl
 done
-./scripts/kdl-sync.sh          # 七份逐字节对账（把本机版换成占位符后比较）
+./scripts/kdl-sync.sh          # 七份逐字节对账（把本机版换成占位符后比较；layout.kdl 剔掉生成行）
 niri validate -c niri-config/local/config.kdl
 git diff --stat niri-config/local/
 ```
+
+仓库里 `layout.kdl` 存的那几个颜色值只是"最后一次同步时的样子"，**不要**拿它当当前主题的参照 ——
+要看现在的值就看机器上那份（或跑 `niri msg action load-config-file` 后看窗口环）。
 
 **本机专有一律不进这两份文件**：仓库里不写「换机」注释、不写"这是占位符"提示 —— 那些话在这份 README 里
 （上面两节），否则同步时会被 `sed` 冲掉、对账出现假差异。

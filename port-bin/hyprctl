@@ -117,8 +117,12 @@ def niri_json(args):
 
 
 def niri_action(action):
-    subprocess.run(["niri", "msg", "action"] + action, capture_output=True, text=True)
-    return 0
+    # Return niri's real exit status: upstream callers rely on
+    # `hyprctl dispatch <lua form> || hyprctl dispatch <legacy form>` fallbacks,
+    # so swallowing the code here would make every fallback unreachable.
+    return subprocess.run(
+        ["niri", "msg", "action"] + action, capture_output=True, text=True
+    ).returncode
 
 
 MONITOR_BOOTSTRAP = {
@@ -605,25 +609,27 @@ def _find_window(world_id):
 
 def _focus_window_addr(addr):
     wid = _addr_to_id(addr)
-    return niri_action(["focus-window", "--", str(wid)])
+    return niri_action(["focus-window", "--id", str(wid)])
 
 
 def _close_window_addr(addr):
     wid = _addr_to_id(addr)
-    return niri_action(["close-window"]) if not wid else niri_action(["focus-window", "--", str(wid)])
+    if not wid:
+        return niri_action(["close-window"])
+    return niri_action(["close-window", "--id", str(wid)])
 
 
 def _focus_workspace(ref):
     if isinstance(ref, str):
         ref = _unquote(ref)
-    return niri_action(["focus-workspace", "--", str(_parse_int(ref))])
+    return niri_action(["focus-workspace", str(_parse_int(ref))])
 
 
 def _move_window_to_workspace(ref):
     if isinstance(ref, str):
         parts = re.split(r"\s+", _unquote(ref))
         ref = parts[-1]
-    return niri_action(["move-window-to-workspace", "--", str(_parse_int(ref))])
+    return niri_action(["move-window-to-workspace", str(_parse_int(ref))])
 
 
 def cmd_eval(payload):

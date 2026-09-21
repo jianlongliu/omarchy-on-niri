@@ -1,6 +1,7 @@
 # Omarchy 插件层：现状与运维（主账户）
 
-> 核于 2026-09-20。姊妹卷：主文档 `docs/omarchy-on-niri-port.md`（当前事实：约束/架构/文件清单/部署/验证）、
+> 核于 2026-09-20；**2026-09-21 复核**（补漏掉的 `arcdock`、修 bar 布局与插件计数、加 §1.1 换机装机清单）。
+> 姊妹卷：主文档 `docs/omarchy-on-niri-port.md`（当前事实：约束/架构/文件清单/部署/验证）、
 > `docs/shims.md`（垫片）、`docs/visual.md`（磨砂全栈等视觉调整）、
 > `docs/behavior.md`（`§8.17` 输入源徽章、菜单与按键行为）。
 > 本卷末尾附有原文 `§8.11`（bar 插件层总览）。
@@ -8,12 +9,13 @@
 > **分工**：
 > - **本文**：第三方 / 自研插件的**现状与日常运维** —— 装了哪些、怎么配、怎么验、怎么更新、踩过什么坑；
 > - **魔改与正本**：改插件源码产生的 patch 存档在 `~/.config/omarchy/niri-port/plugin-patches/`，
->   自研插件（split-lock）的源码正本在 `~/omarchy-on-niri` 仓库。
+>   自研插件（split-lock）的源码正本在 `~/Projects/omarchy-on-niri` 仓库。
 
 ## 1. 一页速查
 
-本机在 `~/.config/omarchy/plugins/` 下有 7 个插件（其余 38 个都是第一方，在 `$OMARCHY_PATH/shell/plugins/`，
-`$OMARCHY_PATH=~/.local/share/omarchy`）：
+本机在 `~/.config/omarchy/plugins/` 下有 **8 个**插件（其余 **38 个第一方**在
+`$OMARCHY_PATH/shell/plugins/`，`$OMARCHY_PATH=~/.local/share/omarchy`；`omarchy plugin list` 合计 **46 条**
+—— 2026-09-21 复核，此前本表漏了 `io.github.claudsondouglas.arcdock`、总数也写错）：
 
 | 插件 id | 版本 | kind | 上游 | 干什么 | 本地改动 |
 |---|---|---|---|---|---|
@@ -21,16 +23,51 @@
 | `meviusisback.ai-subs` | 1.4.2 | bar-widget | meviusisback/omarchy-ai-subs | 各家 AI 订阅的用量 / 余额 | 有 · §5.1 |
 | `ronald.input-sources` | 0.1.0 | bar-widget | ronaldlangeveld/omarchy-input-sources | fcitx5 输入源徽章 + 菜单 | 有 · §5.2 |
 | `jrmmhm.pocket` | 0.4.1 | bar-widget | jrmmhm/omarchy-pocket | 把不常用的 bar 部件收进抽屉 | 无 |
+| `io.github.claudsondouglas.arcdock` | 0.4.1 | service,panel | Claudson/arc.dock | macOS 式磨砂 dock（指针下放大，每 app 一格） | 无 · §5.6 |
 | `jianlongliu.arch-logo` | 1.0.0 | bar-widget | 自研（无 `clonedFrom`，源码 `plugins/jianlongliu.arch-logo/`） | Arch logo + 菜单 | 自研 · §5.5 |
 | `jianlongliu.workspaces` | 1.0.0 | bar-widget | 自研（clone of `omarchy.workspaces`） | 胶囊工作区 | 自研 · §5.5 |
 | `jianlongliu.split-lock` | 0.1.0 | service | 自研（clone of `omarchy.lock`） | 分屏锁屏 | 自研 · §5.5 |
 
-当前 bar 布局（`~/.config/omarchy/shell.json` → `bar.layout`）：
+当前 bar 布局（`~/.config/omarchy/shell.json` → `bar.layout`，2026-09-21 逐项核对）：
 
 - 左：`jianlongliu.arch-logo` · `jianlongliu.workspaces` · `meviusisback.ai-subs`（Data 模式，默认显示 Command Code）
-- 中：`omarchy.indicators` · `omarchy.clock` · `omarchy.weather` · `omarchy.system-update`
+- 中：`omarchy.indicators` · `omarchy.clock` · `omarchy.weather`
 - 右：`omarchy.tray`（hidden: `Fcitx`）· `jrmmhm.pocket` · `ronald.input-sources` · `omarchy.agents` ·
   `omarchy.bluetooth` · `omarchy.network` · `omarchy.audio` · `omarchy.monitor` · `omarchy.power`
+
+**不在 `bar.layout` 里的三个顶层键**（别只照抄上面那张 bar 表）：
+
+- `plugins[]`（**必须常驻**）：`jianlongliu.split-lock`（锁屏）、`io.github.claudsondouglas.arcdock`（dock）
+- `disabledPlugins[]`：`omarchy.lock`（被 `jianlongliu.split-lock` 顶掉）
+- `cloneSourceRestores[]`：`jianlongliu.split-lock` → 关掉它，`omarchy.lock` 自动回来
+
+### 1.1 换机怎么把这 8 个装回来
+
+5 个第三方**都是 git clone**，只能靠 `omarchy plugin add <url>` 装（它会记下 origin，`omarchy plugin update`
+才认这些目录）。URL 是 2026-09-21 从各自 `.git` 的 `remote get-url origin` 读出来的：
+
+| 插件 id | `omarchy plugin add` 的 URL |
+|---|---|
+| `charlieras262.floating-bar` | `https://github.com/Charlieras262/omarchy-floating-bar.git` |
+| `meviusisback.ai-subs` | `https://github.com/meviusisback/omarchy-ai-subs.git` |
+| `ronald.input-sources` | `https://github.com/ronaldlangeveld/omarchy-input-sources` |
+| `jrmmhm.pocket` | `https://github.com/jrmmhm/omarchy-pocket.git` |
+| `io.github.claudsondouglas.arcdock` | `https://github.com/claudsondouglas/arc.dock.git` |
+
+装完**只有 3 个需要重放本地魔改**（`niri-port/plugin-patches/` 里那 4 个 patch，用法见该目录 README）：
+`charlieras262.floating-bar`、`meviusisback.ai-subs`、`ronald.input-sources`。
+`jrmmhm.pocket` 与 `io.github.claudsondouglas.arcdock` **无本地改动**，装完即用。
+
+3 个自研的**不要**用 `plugin add`（它们没有 `.git`，也装不出正确 id）：
+
+```sh
+cp -r plugins/jianlongliu.arch-logo ~/.config/omarchy/plugins/   # 源码正本在仓库，无 clonedFrom
+omarchy plugin clone omarchy.workspaces                          # 再重放 jianlongliu.workspaces.patch
+split-lock/install.sh                                            # split-lock 自带 installer
+```
+
+⚠ 仓库 `plugins/` 里**只有 `jianlongliu.arch-logo` 一份源码**；`jianlongliu.workspaces` 是"上游克隆 + patch"，
+仓库不存它的全文，所以必须先 `clone` 再打 patch（§5.5 表里有正本路径）。
 
 ## 2. 插件层怎么运转
 
@@ -61,7 +98,7 @@
 
 | 命令 | 作用 | 备注 |
 |---|---|---|
-| `omarchy plugin list` | 列已装插件 + `STATE` / `SOURCE` / `KINDS` | 本机 45 条（含第一方） |
+| `omarchy plugin list` | 列已装插件 + `STATE` / `SOURCE` / `KINDS` | 本机 46 条（8 第三方 + 38 第一方，2026-09-21） |
 | `omarchy plugin catalog` | 全部已知插件（含 `manifestPath` / `entryPoints`）JSON | 给脚本用 |
 | `omarchy plugin add <git-url> [--enable] [--yes]` | 从 git 装第三方插件 | 交互式问确认；`--enable` 会顺带问放哪个 section |
 | `omarchy plugin clone <source-id> [--edit]` | 把第一方插件复制成用户插件（写 `clonedFrom`） | 自研三件就是这么来的 |
@@ -226,9 +263,9 @@ journalctl -t omarchy-shell --since "-10min" | tail -50
 
 | 插件 | 源码 | 说明 |
 |---|---|---|
-| `jianlongliu.arch-logo` | 正本在 `~/omarchy-on-niri/plugins/jianlongliu.arch-logo/`（3 文件；无 `clonedFrom`，不是上游克隆，所以没有 patch 可复现 —— 2026-09-20 收进仓库） | Arch logo 按钮 + 菜单 |
+| `jianlongliu.arch-logo` | 正本在 `~/Projects/omarchy-on-niri/plugins/jianlongliu.arch-logo/`（3 文件；无 `clonedFrom`，不是上游克隆，所以没有 patch 可复现 —— 2026-09-20 收进仓库） | Arch logo 按钮 + 菜单 |
 | `jianlongliu.workspaces` | 上游克隆（`clonedFrom: omarchy.workspaces`）+ 仓库里的 `niri-port/plugin-patches/jianlongliu.workspaces.patch`，机器上那份只在 `~/.config/omarchy/plugins/` | 胶囊工作区，第一方 `omarchy.workspaces` 已停用；**点数动态**（§5.5 末） |
-| `jianlongliu.split-lock` | 正本在 `~/omarchy-on-niri/split-lock/`（含 `install.sh`、测试、`face-pam.sh`） | 分屏锁屏，`clonedFrom: omarchy.lock`；在 `shell.json` 的 `plugins[]` 里常驻 |
+| `jianlongliu.split-lock` | 正本在 `~/Projects/omarchy-on-niri/split-lock/`（含 `install.sh`、测试、`face-pam.sh`） | 分屏锁屏，`clonedFrom: omarchy.lock`；在 `shell.json` 的 `plugins[]` 里常驻 |
 
 三者都**没有 `.git`**，所以 `omarchy plugin update` 不会碰它们（更新只收有 `.git` 的目录）。
 ⚠ 后两个的源码改动要**同时**同步到 `~/.config/omarchy/plugins/` 那份才生效（install.sh 负责拷贝）。
@@ -251,6 +288,18 @@ journalctl -t omarchy-shell --since "-10min" | tail -50
 - 生效/验收：QML 不热更 → `omarchy-restart-shell`；`debugBarGeometry` 里 `jianlongliu.workspaces` 宽度
   只有 ws1 时 **~104 → 52**；肉眼数点子用 `grim -g "0,0 200x40" /tmp/bar.png`。
 - 回退：`cp Workspaces.qml.bak-20260920-capsuledots Workspaces.qml && omarchy-restart-shell`。
+
+### 5.6 `io.github.claudsondouglas.arcdock` —— macOS 风格 dock
+
+- **干什么**：macOS 式磨砂 dock —— 指针下放大、每个 app 一格（manifest 自述 "A dock for the Omarchy
+  shell that looks like the macOS dock"）。`kinds: [service, panel]`，入口 `Arcdock.qml`（服务）+
+  `ArcSettings.qml`（设置面板），另有 `ArcGlass/ArcHyprland/ArcLauncher/ArcMenu/ArcShadow/ArcSlot` 等子文件。
+- **怎么启用**：**不在 `bar.layout` 里** —— 它是独立表面，靠 `shell.json` 顶层 `plugins[]` 常驻（§1 那三个顶层键）。
+- **上游**：`https://github.com/claudsondouglas/arc.dock.git`，v0.4.1 / MIT / author `Claudson`。
+  有 `.git` → 走 §6 的 `omarchy plugin update` 流程。
+- **本地改动**：**无**（工作树干净，`plugin-patches/` 里没有它的 patch）。
+- **跟本移植的关系**：纯壳层 QML，不碰合成器；名字里的 "Hyprland" 只是它内部对 compositor 的封装文件名，
+  在 niri 上照跑（这类调用由 `~/bin/hyprctl` 垫片兜，见 `docs/shims.md`）。
 
 ## 6. 更新与本地改动（重要）
 
@@ -296,14 +345,18 @@ omarchy-restart-shell                               # QML 不热更，必须重�
 
 | 路径 | 说明 |
 |---|---|
-| `~/.config/omarchy/plugins/` | 第三方 / 自研插件 |
-| `~/.config/omarchy/shell.json` | 插件开关 + bar 布局 + 内联设置 |
-| `~/.config/omarchy/niri-port/plugin-patches/` | 第三方插件的本地魔改存档 |
-| `~/omarchy-on-niri/split-lock/` | `jianlongliu.split-lock` 源码正本 |
-| `docs/plugins.md` | 本文档正本（`~/Documents/omarchy-niri-plugins.md` 是指向它的软链） |
+| `~/.config/omarchy/plugins/` | 第三方 / 自研插件（8 个） |
+| `~/.config/omarchy/shell.json` | 插件开关 + bar 布局 + 内联设置；**实际取值已进仓库** `local-config/omarchy/shell.json` |
+| `~/.config/omarchy/shell.toml` | 字号 / 通透度（`[bar] icon-font` 要 `Style.qml` 白名单）；仓库 `local-config/omarchy/shell.toml` |
+| `~/.config/omarchy/extensions/omarchy-menu.jsonc` | 菜单 override；仓库 `local-config/omarchy/extensions/omarchy-menu.jsonc` |
+| `~/.config/omarchy/niri-port/plugin-patches/` | 第三方插件的本地魔改存档（4 个 patch + README） |
+| `~/Projects/omarchy-on-niri/plugins/jianlongliu.arch-logo/` | 自研插件源码正本（仓库 `plugins/` 下仅此一份） |
+| `~/Projects/omarchy-on-niri/split-lock/` | `jianlongliu.split-lock` 源码正本 |
+| `docs/plugins.md` | 本文档正本 |
 | `docs/omarchy-on-niri-port.md` | 主文档（当前事实 + 模块映射表）；本卷末附 §8.11，§8.17 在 `docs/behavior.md`，blur 全栈在 `docs/visual.md` |
 | `$OMARCHY_PATH/shell/services/PluginRegistry.qml` | 壳层实际执行的插件注册与启用规则 |
 | `$OMARCHY_PATH/bin/omarchy-plugin-*` | §3 那些 CLI 的实现 |
+
 ---
 
 ## 附：bar 插件层（胶囊工作区 / Arch logo / 浮栏）—— 原文 `§8.11`

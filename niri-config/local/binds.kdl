@@ -19,7 +19,7 @@ Mod+Shift+Slash { show-hotkey-overlay; }
 // 终端类统一走 Omarchy 自己的包装器 omarchy-launch-terminal（它会用「默认终端」设置、
 // 并跟随当前终端的 cwd，跟菜单里那些入口是同一条路）。它以前在这台机器上是哑的，
 // 因为内部走 `setsid uwsm-app` 而本机没有 uwsm-app —— 已由 ~/bin/uwsm-app 垫片统一解决，
-// 见 ~/omarchy-on-niri/docs/omarchy-on-niri-port.md §8 第 22 条。
+// 见 ~/Projects/omarchy-on-niri/docs/omarchy-on-niri-port.md §8 第 22 条。
 Mod+Return hotkey-overlay-title="Terminal (default)" { spawn-sh "omarchy-launch-terminal"; }
 Mod+D hotkey-overlay-title="Apps menu" { spawn-sh "omarchy-menu toggle apps"; }
 Mod+Space hotkey-overlay-title="Omarchy Menu" { spawn-sh "omarchy-menu toggle"; }
@@ -265,7 +265,11 @@ Mod+M { maximize-window-to-edges; }
 // Makes the column "fill the rest of the space".
 Mod+Ctrl+F { expand-column-to-available-width; }
 
-Mod+C { center-column; }
+// Mod+C 让给 Omarchy 的「通用复制」(Super+C)，center-column 挪到 Mod+Shift+C。
+// niri 没有 Hyprland 的 send_shortcut 那种按键注入能力，所以这里的做法是「不占键」：
+// Super+C/V 不被 niri 抓走，直接落到终端，由 ghostty 自己的 keybind 处理。
+// 见 ~/.local/share/omarchy/default/hypr/bindings/clipboard.lua（上游原版）。
+Mod+Shift+C { center-column; }
 
 // Center all fully visible columns on screen.
 Mod+Ctrl+C { center-visible-columns; }

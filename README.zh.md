@@ -36,8 +36,7 @@ Arch + niri 登录会话、并且**已经装好 Omarchy**（或者你会先装 O
   以及 greetd 只有一格 `configuring` 的陷阱。
 
 各卷**沿用原章节编号**（`§8 第 N 条`、`§8.x`、`§11.x`），主文档里有「原编号 → 卷」的映射表；
-文档只有一份正本，就在 `docs/` 里；`~/Documents/omarchy-niri-*.md` 是指向它的软链，
-`scripts/check-doc-links.sh` 守这一点。
+文档只有一份正本，就在 `docs/` 里。
 
 ## 仓库结构
 
@@ -64,13 +63,13 @@ omarchy-on-niri/
 ├── docs/INSTALL.zh.md   <- 手动执行安装流程
 ├── docs/omarchy-on-niri-port.md <- 主文档（当前事实 + 模块映射表，中文）
 ├── docs/{visual,behavior,plugins,shims,upstream,migration,lock,local-overrides}.md <- 各模块卷（中文）
-├── scripts/             <- check-doc-links.sh、kdl-sync.sh、local-files-sync.sh
+├── scripts/             <- kdl-sync.sh、local-files-sync.sh
 └── README.md / README.zh.md
 ```
 
 ## 依赖 / 前置条件
 
-在目标 Arch 机器上装下面这些。以下全部已在移植机上实测使用（2026-03 / Arch rolling、systemd 261、niri 26.04）；
+在目标 Arch 机器上装下面这些。以下全部已在移植机上实测使用（2026-09 / Arch rolling、systemd 261、niri 26.04）；
 请在你自己机器上确认包的可得性。
 
 ### 必需 —— 外壳引擎

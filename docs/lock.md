@@ -1,6 +1,6 @@
 # 锁屏与登录 — Omarchy on niri 卷 II
 
-> 文档只有一份：本文件（`docs/lock.md`）。`~/Documents/omarchy-niri-lock.md` 是指向它的软链。
+> 文档只有一份：本文件（`docs/lock.md`）。
 > 本卷 2026-09-20 从 `docs/omarchy-on-niri-port.md` 抽出：**章节编号沿用原号**（`§8.18`、`§11.10–§11.14`、`§11.16–§11.25`），
 > 原处留有同名指针，所以 `docs/INSTALL.md`、`split-greeter/README.md`、`split-lock/` 里既有的
 > "§11.13"、"§8.18" 之类引用继续解析得到。
@@ -119,7 +119,7 @@ pkexec ~/.local/share/omarchy/bin/omarchy-apply-lock     # 或 sudo omarchy-appl
 
 ### 11.11 登录界面：自研 Quickshell greeter「Split Greeter」（Split 设计，多账户 + 人脸）
 
-§11.10 的三条路里选了"自研"：**直接复用锁屏插件的 Split 设计当 DM**，既不依赖 dms-shell，也不依赖会话内 shell。代码在仓库 `split-greeter/`（本机 `~/omarchy-on-niri/greeter/`，**只在本地提交，未推远端**）。顺带确认：`greetd-dms-greeter-bin` 只依赖 `greetd quickshell qt6-declarative`，**不依赖 dms-shell**，与 DMS 的唯一耦合是 `dms-greeter sync` 把 DMS 主题/壁纸拷进 `/var/cache/dms-greeter`（0750 `greeter:greeter`，普通用户读不到）。
+§11.10 的三条路里选了"自研"：**直接复用锁屏插件的 Split 设计当 DM**，既不依赖 dms-shell，也不依赖会话内 shell。代码在仓库 `split-greeter/`（本机 `~/Projects/omarchy-on-niri/greeter/`，**只在本地提交，未推远端**）。顺带确认：`greetd-dms-greeter-bin` 只依赖 `greetd quickshell qt6-declarative`，**不依赖 dms-shell**，与 DMS 的唯一耦合是 `dms-greeter sync` 把 DMS 主题/壁纸拷进 `/var/cache/dms-greeter`（0750 `greeter:greeter`，普通用户读不到）。
 
 **结构**——greetd 拉起一个只跑本 greeter 的 niri 实例：
 
@@ -493,6 +493,70 @@ Omarchy 的锁层从 `hyprctl -j monitors` 读两个字段，shim 之前都在�
 **验证**：`bridge/test-bridge.py` 12 用例全过；**改前**有 3 条断言专抓此 wedge 而红（`retry after a failure`、`fresh helper after an abandoned face`、`cancels the stale conversation first`）；`tests/smoke.sh` **34 → 39 项全过**，新增 `enter-twice-while-scanning`（扫脸中再按回车：第二次不许开新会话、不许出现 wedge 文案、最后仍要在那条已开的会话上登成功）。另外 15:30:57 那次 `systemctl restart greetd` 现场验证了恢复路径：`terminate()` 会把 `configuring` 一并 cancel，用户随后在 tty1 **一次就登进去了**（卡死期间同样的操作只会拿到 `already being configured`）。
 
 **注意**：重启 greetd 只带走它自己的子进程（greeter + 半途会话）。本机用户会话挂在 `login`/systemd 下（`login -- $USER` → `niri --session`），因此安全；但若哪天用户会话是 greetd 起的，`systemctl restart greetd` 会把它一起带走。
+
+---
+
+### §11.26 交接过渡：密码到桌面之间那段文字，以及两头各一段淡入（2026-09-21）
+
+**现象**（用户原话：「在开机输入完密码确认后, 和启动完成之间可以加个过渡动画掩盖吗? 有文字, 虽然说无伤大雅」）：认证通过到桌面出来之间会闪一段文字。
+
+**根因（实测，不是猜）**：**greetd 给会话的 stdout/stderr 就是那块 VT** —— `pgrep -af niri-session` 拿到 pid 后 `ls -l /proc/<pid>/fd/{0,1,2}` 三个 fd 全指向 `/dev/tty1`。而 `/usr/local/bin/split-greeter`（以及它的 `niri.kdl`）只把**壳**（quickshell）的输出重定向进 `greeter.log`，**niri 自己没重定向**：niri 是 Rust、日志走 stderr，于是它的 INFO/DEBUG 行（`starting version 26.04`、`loaded config from …`、`using as the render node` …）全部写进 tty1 的**文本缓冲区**。niri 用 DRM 接管屏幕时（VT 处于 `KD_GRAPHICS`）这些行看不见，**greeter 的 niri 一退出、VT 回到 `KD_TEXT`，整屏文字立刻现形**，一直挂到用户那份 niri 抢到 DRM —— 本机这段窗口实测约 1.5~2 秒（本 boot 的 journal：00:19:42 `Login approved`、00:19:43 用户会话打开、00:19:44.5 用户的 niri 起）。
+
+**可复查的两条证据**：本 boot `journalctl -b | grep -c "INFO niri: starting version"` = **1**（只有用户会话那份 niri，它挂在 `niri.service` 下、stdout 进用户 journal）；`journalctl -b -u greetd | grep -c niri` = **0** —— greeter 那份 niri 的启动日志**不在 journal 里**，只可能落在它继承的 VT 上。**顺带**：既然"在图形模式下写 tty1 会更新缓冲区"是文字露出的原因，同一机制反过来就能**盖掉**它——趁 niri 还掌着屏先刷黑，niri 退出时露出来的就是黑的。
+
+**两头都堵（4 处，用户要求"连桌面淡入一起做"）**：
+
+1. **greeter 入口**（`install.sh` 生成的 `/usr/local/bin/split-greeter`）：先 `printf '\033[2J\033[H' >&1`（此刻 fd 1 还是那块 VT）刷黑缓冲，再 `exec >>/var/lib/greeter/greeter.log 2>&1`（**绝对路径**：greeter 用户的 HOME 是 `/`）。日志写不进去就 `if : >>"$log"` 判掉、退回原样 —— 这一步绝不能挡住登录。
+2. **会话命令换包装**：新增 `split-greeter/session.sh` → 装成 `/etc/greetd/split-greeter/session`，`niri.kdl` 的 `GREETER_SESSION` 指向它。同样先刷黑再用 `exec >>$HOME/.local/state/omarchy/session.log 2>&1` 收走 `niri-session` 链路（登录 shell、systemctl、未来任何新输出）的字，最后 `exec niri-session "$@"`（`$@` 原样透传，`-l` 的登录 shell 语义不变）。它还 `: > "$XDG_RUNTIME_DIR/omarchy-boot-splash"` —— **桌面壳层靠这个标记区分"真登录"和"重启壳层"**（见 4）。
+3. **登录面淡出**：`Greetd.qml` 在 `auth_ok` 后**不再立刻**向 greetd 要会话：先让 `handoffHintMs`（缺省 250ms，`GREETER_HANDOFF_HINT_MS` 可调，0 = 立刻交接）把 "Starting your session…" 停留住，再把 `handoffVeil` 置 1；`shell.qml` 那块黑幕矩形用 `Behavior on opacity`（`handoffFadeMs` = 260ms）淡到全黑，淡完 +40ms 才发 `start`。`start_failed`/`error` 会把黑幕收起来、登录面回来（黑幕留住 = 看起来像卡死）。
+4. **桌面 bar 的入场（最终形态：加载期不上屏，到点整块出现）**：omarchy shell 侧**不放任何全屏遮罩**（黑幕/壁纸幕都试过、都废弃，理由见 `docs/visual.md` 第 33 条）。`shell/shell.qml` 启动时读标记 `$XDG_RUNTIME_DIR/omarchy-boot-splash`（读完即 `rm`，所以 `omarchy-restart-shell` 不重放）→ `bootRevealArmed`，再由 `pushBootReveal()` 推给"当前被配置成 bar 的那个对象"（**插件拿不到标记**，只能宿主推）。**在用的浮动 bar**：armed 时把 `PanelWindow.visible` 关掉（surface 完全不上屏，也就没有霜化）、等到**壳层真正组装完**才整块打开——2026-09-21 起不再是固定时长：宿主把 `omarchy.background` 服务里的 `paintedOnce`（壁纸第一帧解码上屏，见 `shell/plugins/background/Background.qml`）推给 bar，控件等它 + 地板 600ms / 天花板 6000ms（`bootHoldMs` / `bootHoldMaxMs`）。**不做滑入**，理由是实测出来的：霜化是 niri 按"区域"**自己画的**（不看客户端画了什么、也不看 alpha），滑入时屏幕上必然先出现一块**空的磨砂矩形**、再有个 bar 追下来 —— 用户原话「屏幕顶部有个 blur 的 bar, 然后再浮下来一个 bar」；而且那块 region 也跟不上位移（跟了就在屏外采样、整块丢霜化，见 `docs/visual.md` 33b ④）。**内置 `shell/plugins/bar/Bar.qml` 保留旧的"停屏外 + 滑入"写法（本机不在用，换回内置 bar 时才用得上）。**
+
+   **关于"动画时长名义值"的教训（2026-09-21，先错后对）**：早先实测到"名义 1500+900 却在 ~0.9s 内一次落位、中途抓不到中间帧"，当时归因为"壳层启动期主线程太忙把动画帧吃掉"。**方向错了**：那轮测的其实是**内置 `plugins/bar/Bar.qml`**——而且它的做法是把 surface 停到屏幕外，surface 不在屏上时压根不出帧，钟照走、画面不同步；而屏幕上真正在显示的是第三方插件 `charlieras262.floating-bar`（见下）。后来改成"**普通 Timer 做 hold + 每帧按墙钟算进度**"，在**真正生效的那个 bar** 上实测节拍稳定 **16ms/次**、`bootReveal` 逐帧平滑 0.001→0.999。教训：① "先停屏外再进场"这类动画别用 `PauseAnimation`/`NumberAnimation` 排（surface 停屏外时它只走钟不出帧）；② 动手测任何"屏幕上该有的东西"之前，先确认你改的文件就是屏幕上那个（`~/.config/omarchy/shell.json` 的 `bar.id`）。
+
+**改动落点**：`split-greeter/{install.sh,niri.kdl,Greetd.qml,shell.qml,README.md}` + 新增 `split-greeter/session.sh` + `$OMARCHY_PATH/shell/shell.qml`（标记 + `pushBootReveal()` 把 `bootRevealArmed`/`bootRevealPainted` 推给当前 bar + `bootRevealWallpaperPainted` 读服务）+ `$OMARCHY_PATH/shell/plugins/background/Background.qml`（**新增 `property bool paintedOnce`**，首帧壁纸解码就位时latch，2026-09-21）+ `~/.config/niri/effects.kdl`（`^omarchy-osd$` → `^omarchy-(osd|boot-banner)$`，让卡片同款霜化）+ `$OMARCHY_PATH/shell/plugins/bar/Bar.qml`（内置 bar 的滑入，**本机不在用**）+ **`~/.config/omarchy/plugins/charlieras262.floating-bar/Bar.qml` → `niri-port/plugin-patches/charlieras262.floating-bar.patch`（本机在用的浮动 bar；**加载期 surface 不上屏、到点整块出现**，见 `docs/visual.md` §33）**；`niri.patch` 现在是 **22 文件/48 hunk**，md5 `6138cc1bece9a94312572d8685c845a4`；重生成照 §8.7 限路径，**新文件必须显式补进路径表**，否则下次重放会漏。备份：`~/.config/omarchy/niri-port/niri.patch.bak-20260921-192644`（46 hunk 的上一版 —— 活体已改出 `paintedOnce`/`pushBootReveal()` 增补而补丁没跟上，repatch 一度 exit 2）、`…bak-20260921-bootreveal`（再上一版 `…bootcurtain2`，黑幕版 `…bootcurtain`）。
+
+**验证**：
+- **判据 = `tests/state.sh` 对账**（离屏、不开合成器，可随时跑）：本树与 `git archive HEAD` 的干净副本**各 7 项 FAIL、输出逐字节一致**（`diff` 全等）⇒ 本机那 7 项本来就红，本次改动**没有新增失败**。
+- `tests/smoke.sh` **不作判据**：它**在当前会话里**跑、每个用例还要**独占键盘几秒**（靠 wtype 注入），本机拿不到键盘焦点时注入类必然 FAIL —— 那次半轮里 `no QML errors` 全绿（说明改后的 `Greetd.qml`/`shell.qml` 在真壳里起得来），但 9 项 FAIL 全是"键没落到密码框"这一类，与本次改动无关。要跑它请在能拿到键盘焦点时跑，**用户在场时别跑**。
+- 桌面 bar 滑入**真机验过**（等价于真登录里壳层启动那一段）：写标记 → kill 旧壳 + `niri msg action spawn -- omarchy-launch-shell`（`omarchy-restart-shell` 也行）→ 逐帧 `grim -t ppm` 并把**顶部条带**裁出来拼图看（`magick -crop 2560x75+0+0` + `montage`，这一步不能省：**亮度数字很容易被别的窗口污染**）—— 抓到"无 bar → 半透明中间态 → 落位"三态，标记被消费，journal 无 QML 错误；**不写标记直接重启后条带立刻是落位值 0.509075**（不滑、不藏 bar）。`niri msg layers | grep -c omarchy-bar` 不作为判据：parking 是**改 margin、surface 一直 mapped**，图层计数不变。
+- `qmllint` 对带 Quickshell 导入的文件只会静默失败（干净 HEAD 版同样 exit 255），别拿它当验证。
+
+**验证/状态**：整条链已在一次**真登录**里目视确认过（用户认可动画与时机；随后指出两个观感问题——"没 blur"与"顶部一块空 blur + 一个 bar 追下来"，都已修掉 ⇒ 最终形态是上面的"整块出现"）。`omarchy-restart-shell` 只能验桌面侧那一段（而且锁屏期间会被拒）。greeter 侧四处改动**已装**（`sudo ~/Projects/omarchy-on-niri/split-greeter/install.sh` 跑过了，回退件 `/etc/greetd/config.toml.backup-*`）。
+
+**还没做的两件事**（2026-09-21 只评估，下次研究）：见 §11.27。
+### §11.27 交接那段黑：方向 A（底部 `Thinking…` 卡片）已实施，方向 B（plymouth 盖交接）仍搁置（2026-09-21）
+
+**现状**：这次只做到"把那段 VT 文字变干净"——greeter 侧刷黑、桌面侧 bar 的入场（§11.26）。屏幕上仍是**黑 ≈1.5~2s**（greeter 的 niri 退出 → VT 回到文本控制台 → 用户的 niri 抢到 DRM，实测见 §11.26 根因段），之后壁纸才随壳层首帧出现。下面两条能进一步盖住它，**今天只评估、没实施**。
+
+**决议（2026-09-21）：plymouth 这一路先搁置。** 用户原话：「我这个系统和 omarchy 关系都不是特别大了，主要是蹭他的插件」⇒ 本机（niri + greetd + 自绘 quickshell greeter）与上游（Hyprland + SDDM）已不是同一套，**上游"plymouth/SDDM 主题统一"的思路对本机没有参考价值**；且 plymouth 的 mkinitcpio 钩子是按 `plymouth-set-default-theme` 把主题目录**拷进 initramfs** ⇒ **换主题要重建 initramfs（本机走 UKI）**，换壁纸还得再重建一次。收益只是把 0.4~0.6s 的结构性黑换成一张图（B2），却要冒 root 单元 + 抢 DRM 的锁门风险 ⇒ **B1/B2 均搁置**。真要动时最省事一档：保持现状 `bgrt`，或 `omarchy-plymouth-set <背景色> <文字色> <logo.png>` 一次性生成主题（**不做"壁纸 splash"**）。本机只借上游的**壳层与插件**（`omarchy-shell`/`omarchy-restart-shell`、`~/.config/omarchy/plugins/*`、`omarchy-osd` 一类工具）。
+
+**上游 Omarchy 怎么做（2026-09-21 查本机 Omarchy 树，非猜测）**：登录器是 **SDDM**（主题化 `/usr/share/sddm/themes/omarchy`，素材只有 `Main.qml`/`logo.png`/输入框一类、**没有壁纸图** ⇒ 登录屏大概率是纯色底 + logo，**此处是推断**）、会话走 **systemd 用户会话**（`uwsm-app`）。它处理交接观感的办法**不是盖住，而是让两头长得一样**：`bin/omarchy-plymouth-set <background-hex> <text-hex> <logo.png>`（另有 `--refresh-default` / `--refresh-sddm-default`）**一次把 plymouth 主题与 SDDM 主题刷成同一背景色 + 同一个 logo**。⇒ 三点结论：① 那段"没人画"的物理窗口**上游同样没解决**（SDDM 是 Wayland greeter、自己管 VT，所以它不会遇到我们这套"greeter 的 niri 日志漏到 VT"的毛病）；② 我们其实更连贯——greeter 的背景**就是账户壁纸**（`Greetd.qml` 的 `accountWallpaper()` + `/var/lib/greeter/{theme,wallpaper}`），两头都是壁纸；③ 值得抄的是 **plymouth 主题本身**：本机现在是 `bgrt`（厂商 logo），换成"背景色 + 自己的 logo"（用 `omarchy-plymouth-set` 或自写）**零风险**——plymouth 本来就只在 boot 期显示、DM 起来即 quit；**有风险的只是把 plymouth 拉起来盖登录交接**（= 方向 B 的后半段）。⇒ **方向 B 可拆成 B1（换 plymouth 主题，零风险）与 B2（用 plymouth 盖交接，需防锁门）。**
+
+**`osd` 实操补充（2026-09-21 实机验过）**：`omarchy-osd -i <icon> -m <text> -p <0-100> -d <ms>` 只是把 payload 转给 `omarchy-shell -q osd show`（字段 `{icon,message,value,progressText,max,duration}`，默认 `duration` 1200ms）；**`-p` 一旦非空，脚本就把 `progressText` 填成 `"N%"`** ⇒ 想要"无数字的跑马灯"必须**绕过 `omarchy-osd` 直接** `omarchy-shell -q osd show '{"message":"Thinking…","value":"30","progressText":"","max":"100","duration":"1500"}'`（实测可用）。吐司是单块表面，连发就地替换（进度条 `Behavior on width` 140ms 缓动）⇒ 循环 0→100 大约每 150~200ms 发一次最顺。图标名走 `plugins/osd/OsdModel.js`。
+
+**实测拆解（2026-09-21，01:39:50 那次真登录，系统 journal 与用户 journal 对齐）**：从 greetd PAM 打开用户会话算起 —— +47ms logind 建会话、**+205ms 才 `Starting niri.service`**（会话建立本身只 ~0.2s，greetd/systemd 不是瓶颈）、+765ms niri 进程起来（DRM/connector 就绪再 ~0.35s）、**+965ms quickshell 开始加载 `shell.qml`**（niri→壳层 ~0.75s），之后才是壳层解码壁纸出首帧。**开机那次还要多 ~0.5s**：systemd 用户管理器冷启动（`loginctl show-user … -p Linger` = `Linger=no`；从建会话到 `user@1000` 的 default target 约 0.7s），登录过一次再登就快。
+
+⇒ 可分成三层：① **结构性黑（消不掉）** greeter 的 niri 退出 → 用户 niri 拿到 DRM 并画首帧 ≈ **0.4~0.6s**（VT/DRM 同一时刻只能一个客户端持有，这段没人画，只有 root 级 framebuffer 能盖 = 方向 B）；② **可打的部分 ~0.6~1.0s**：niri 已经能画、但壳层还没出壁纸，屏幕上是 niri 的空画面 ⇒ **✅ 2026-09-21 晚已实施**：niri `spawn-at-startup` 挂原生壁纸客户端 **`swaybg`**（本机新装，extra 仓库）先铺同一张图，壳层自己的 `Background.qml` 上来盖住它 —— 两份**逐像素一致**（130 个纯壁纸区块差 0.01/255），故无缝；`-m fill` 实测 = 源图 cover 居中；**必须排在 `omarchy-launch-shell` 之前**（同一 background 层内后映射的在上）。细节与回退见 `docs/local-overrides.md` §4。比 plymouth 便宜得多、风险也低 ✓；③ 开机独有的 ~0.5s：用户管理器冷启动，`linger` 可省（有副作用，需权衡）。
+
+**方向 A：底部 `Thinking…` 卡片（2026-09-21 已实施）**
+- 形态（用户点名）：**底部居中的深色卡片，脑形图标（menu 的 `learn` 用的 U+F09D1）+ `Thinking…`**，加载期占住观感。
+- **`omarchy-osd` 路线实测被否**：真登录路径下 `osd` 图层 **@2073ms** 才上屏，而标记在 **891ms** 已被读走 ⇒ 晚 ~1.2s、落在 bar 现身之后，只停 0.39s。探针证明**命令本身成功执行**（`rc=0`）⇒ 不是失败，而是**会话里第一次 `osd show` 要付 ~1s 的插件加载费**（对照：预热过之后手动发一发 54ms 上屏、`-d 1200` 停满 1200ms）。顺带否掉下面 (a)(b) 两条：两种做法都要付这笔首屏钱。
+  - (a) 壳层小循环发 `-p`（0→100，每 ~100ms 一次 IPC，不改上游代码）—— 仍要付首屏钱；
+  - (b) 给 `Osd.qml` 加 indeterminate 模式（几行，它在 `niri.patch` 里，要按 §8.7 重生成补丁）—— 同样。
+- **最终形态**（浮动 bar 插件里加第二个窗口，全部落在 `plugin-patches/charlieras262.floating-bar.patch`）：`Variants{model:Quickshell.screens}` + `component BootBannerPanel: PanelWindow`，**必须逐屏 + 显式 `screen: modelData`**（照抄同文件 `BarPanel` 的写法；不写 `screen` 的 `PanelWindow` 在这个宿主里**根本不建、还不报错**）；`exclusionMode: Ignore` + `mask: Region{}`（不占位、不吃点击）；卡片本体**照 OSD 关机吐司那套尺寸做**（`pad = Style.space(16)`、字距 `round(pad*2/3)`、字形 `Style.font.displayLarge`、消息 `Style.font.title` **加粗**、离底 `Style.space(67)`、高 = 边框 + pad + displayLarge + pad + 边框、图标列按**墨迹**宽度量而不是字格宽度），表面**不是全宽条**而是**卡片本身大小**（左右用 `margins` 居中），这样它才能借用 `~/.config/niri/effects.kdl` 里 `^omarchy-(osd|boot-banner)$` 那条 `blur true` 规则、和关机吐司**一样是霜化的**（`blur true` 磨的是整块 surface，全宽表面会磨满屏；底填 `Color.menu.background` 原样不压平，靠这条规则撑）。
+- **常驻映射、藏在屏下**（`margins.bottom` 取负值）：因为**首次上屏要付 ~800ms**（建 layer surface + 塑字形）。实测：`visible` 开关版在 822ms 读到标记、**1798ms 才上屏**；改成停屏外后只剩 ~20ms 的 margin 变化（bar 自己就是这么做的）。
+- **触发与实测时序**（2026-09-21 冷启动，探针 + 逐帧 `grim` 小区域对表）：`bannerUp = root.bootRevealArmed && !root.bootRevealShown` 驱动 margins；壳层起来后 bar 插件在 **~350ms** 上屏（层在）、**~1059ms** 收到 armed（卡片升上来，此刻底子是 niri 的灰底、壁纸还没画）、宿主 **~1348ms** 报"壁纸已画"（独立像素对表：壁纸区亮度在 **1335~1443ms** 之间从 0.251 跳到 0.751 ⇒ 信号准到 100ms 内）、**~1782ms** 卡片收回 + bar 整块出现。即**卡片只在真正的空窗期（灰底 → 壁纸）里挂着**，bar 永远落在壁纸之后；固定时长做不对这件事——同一台机器各次冷启动差几百毫秒，开机那次还要多 ~0.5s。
+- **顺带修掉一个把前面所有实测都带偏的坑**：`BarPanel` 里 `visible:` 被写了两次（插件自带的 `visible: !remapGuard.remapping` + 之前种进去的 `visible: root.bootRevealShown`）⇒ Qt 报 `Property value set multiple times`（**致命**，不是警告）⇒ **整个插件加载失败**，宿主 `shell.qml` 静默 `bar option charlieras262.floating-bar failed to load, falling back to omarchy.bar` ⇒ 屏幕上换成了**内置 bar**。于是"改插件毫无反应"，而此前测到的各种时长/上屏时间全是内置 bar 的。**现已合并成 `visible: root.bootRevealShown && !remapGuard.remapping`。排查口诀：改插件没反应 ⇒ 先 `journalctl --user -t omarchy-shell | grep -E "failed to load, falling back|Property value set multiple times"`；同一个对象里一个属性只能赋值一次（`visible`/`color`/`implicitWidth` 这类）。**
+- **两个尺寸/配色坑（2026-09-21，用户当场抓包）**：① **`Style.space(n)` 是像素直通、不是间距档位**（`space(11)` = 11px）⇒ 我按档位算，卡片做出来只有 **23px 高**（`Style.font.body` 12 + 11），再加上 `space(6)` 的"内边距"= 每边 3px、`space(2)` 的字距 ⇒ 一条又扁又挤的细条；截图缩到 0.5x 时我还判成"小巧、没问题"。真实尺寸应为：药丸高 = 字形 24 + `space(24)`、左右各 `space(18)`、字距 `space(8)`（`Style.spaceReal(px)` 是同一个东西的浮点版）。② **底色必须压成不透明**：主题的 `Color.menu.background` / `Color.tooltip.background` 都带 alpha，平时靠 **niri 的磨砂**撑着——而本图层没有 blur 规则 ⇒ 卡片半透明、背后的 dock 图标直接透出来。改成抄 OSD 那套 `BorderSurface` + `Color.menu.background`（用 `Qt.rgba(...,1)` 压平）+ `Color.popups.text/border` 之后正常。
+- 仍未做的观感项：**`arc-dock` 也是加载期整块出现**，而且它和卡片同处"底部居中"⇒ 卡片会压住 dock 图标（可选：给 dock 同一套 reveal 处理，或把卡片抬到 dock 之上）。
+
+**方向 B：用 plymouth 盖交接空窗（大工程，单独立项）**
+- **机体现状（2026-09-21 实测）**：plymouth 已装（`26.134.222-2`）且**已在用**——`/etc/mkinitcpio.conf` 的 `HOOKS` 含 `plymouth`、内核 cmdline（`/etc/kernel/cmdline`，走 UKI）含 `splash`、`/etc/plymouth/plymouthd.conf` 的 `Theme=bgrt`（厂商 logo）、`plymouth-poweroff.service` / `plymouth-reboot.service` 是 static（关机画面就是它）；本 boot journal 有 `Show Plymouth Boot Screen`。**（本卷早先记的"装了没配"是错的。）**
+- **机制**：照抄关机那套 —— 交接瞬间用 root 单元重新拉起 `plymouthd --mode=…` + `plymouth show-splash`（换成**壁纸主题**：全屏壁纸 + 一个指示器），等会话的合成器要 DRM 时 `plymouth quit --retain-splash`（画面**原地保留**，直到 niri 第一帧才被替换）。
+- **能盖多少**：盖掉 greetd 交接后、systemd 用户会话起来的那 1~1.5s；盖不掉 **niri 起来到壳层画出壁纸之间的 ~0.3~0.7s**（那时 plymouth 已让位，niri 自己在画黑底）。净效果 **黑 1.5~2s → ~0.3~0.7s**，且中间不再有"壁纸突然冒出来"。**不是零。**
+- **前置与风险**：① 要做一个 plymouth 主题（`bgrt` 是厂商 logo，不能用）；② 登录链路多一个 **root systemd 单元**；③ 与 greetd/niri 抢 DRM 的时机必须对齐 —— **plymouthd 不让位 = niri 起不来 = 把自己锁在门外**。所以必须：先备份（initramfs / `/etc/kernel/cmdline` / greetd 配置 / `plymouthd.conf`）、留 TTY（Ctrl+Alt+F2）回退路、先做**不进登录链路**的干跑验证，再改一处验一处。
+- **结论**：先做 A（零风险）；B 等"那 0.3~0.7s 尾巴仍旧碍眼"再立项，顺带可把开机的 `bgrt` logo 一起换掉。
+
 ---
 
 ## 附：两条锁屏路线并存与收敛（原文 `§8 第 6 条`，2026-08-24 前后）

@@ -14,7 +14,8 @@
 > （32 条编号条目 + 14 个 `§8.x` 子节），现按模块拆成独立卷。**编号一个字都没改** —— `§8 第 N 条`、
 > `§8.x`、`§11.x` 都是原号，原处只留指针与映射表，仓库里既有的引用继续解析得到。
 > 2026-09-20 深夜**文档归一**：取消「母本 + 仓库镜像」双写 —— `docs/` 就是唯一正本，
-> `~/Documents/omarchy-niri-*.md` 全部改成指向它的软链；校验器随之改名 `scripts/check-doc-links.sh`。
+> `~/Documents/omarchy-niri-*.md` 改成了指向它的软链（2026-09-21 那九个软链、连同守它们的
+> `scripts/check-doc-links.sh` 一并删掉：正本在 `docs/`，不需要入口层）。
 
 ---
 
@@ -36,15 +37,15 @@
 | 锁屏 / 登录 | `docs/lock.md` | 锁面、greeter、人脸、greetd wedge |
 | 本机改动总账 | `docs/local-overrides.md` | 这台机器相对仓库**多出/改过**的一切与回退方式 |
 
-文档只有一份，就在仓库里（上表第三列）：`~/Documents/omarchy-niri-*.md` 都是指向它们的软链，
-改哪边都一样。`scripts/check-doc-links.sh` 守这个 —— 软链被人换成真副本、或指错地方就报红
-（本来就没有 `~/Documents` 副本的机器会 skip）。
+文档只有一份，就在仓库里（上表第三列），没有第二处副本；`~/Documents` 下曾有的那九个软链
+（2026-09-20 文档归一的产物）与守它们的 `scripts/check-doc-links.sh` 于 2026-09-21 一并删掉。
 
 ---
 
 ## 1. 硬性约束（不可违背）
 
-1. **不破坏隔壁主账户（uid 1000）**，用户仍在使用。
+1. ~~**不破坏隔壁主账户（uid 1000）**，用户仍在使用。~~ —— **迁移前（实验账户时代）的约束，2026-09-19 起自然失效**：
+   移植现在**就是** uid 1000 的会话本身，`/home/<dev-user>/` 一律等于 `~`。原文留档：
    - 所有改动只落在 `/home/<dev-user>/`（`~/.config`, `~/.local`, `~/bin`）。
    - 不写 `~`，不运行影响全系统的安装。
 2. **系统底层不做变动**：
@@ -115,7 +116,7 @@ hyprctl 调用面有界、可直接映射。
 | `~/bin/omarchy-display-text-size` (+x) | bar 的 Display 面板 TEXT SIZE 滑块垫片：官方脚本只管 shell `[font]`/GTK factor/终端 pt，这个补 GTK dconf+settings.ini、Qt(qt6ct)、fcitx5、XSETTINGS 各层（§8.19）。仓库 `port-bin/omarchy-display-text-size` |
 | `~/.config/omarchy/hooks/theme-set.d/10-niri-border` | 换 style 时自动 `omarchy-niri-apply-theme`（只写不重载，保护 SCALE）|
 | `~/.config/omarchy/hooks/post-update.d/10-niri-repatch` | `omarchy update` 后自动重放覆盖层 |
-| `~/.config/omarchy/niri-port/`（`niri.patch` + `Niri.qml` + `plugins/` + `plugin-patches/` + `backups/`）| 移植覆盖层产物（仓库外，重放用）。**当前：`niri.patch` 21 文件 / 38 hunk**，`--reverse --check` 通过、repatch 幂等，md5 `047e5866a03228e30ae6069e9b2b9dd9`（2026-09-20 深夜核，与仓库 `niri-port/niri.patch` 一致）|
+| `~/.config/omarchy/niri-port/`（`niri.patch` + `Niri.qml` + `plugins/` + `plugin-patches/` + `backups/`）| 移植覆盖层产物（仓库外，重放用）。**当前：`niri.patch` 22 文件 / 48 hunk**，`--reverse --check` 通过、repatch 幂等，md5 `6138cc1bece9a94312572d8685c845a4`（2026-09-21 晚重导出核，与仓库 `niri-port/niri.patch` 一致）；本次重导出是把活体先改、补丁没跟上的两处（`Background.qml` 的 `paintedOnce`、`shell.qml` 的 `pushBootReveal()` 增补）补进补丁 —— 补上之前 repatch 判 exit 2，安全网是断的；本机在用的浮动 bar 的改动在 `niri-port/plugin-patches/charlieras262.floating-bar.patch`（无自动重放器）|
 | `~/.ante/projects/-home-<user>/memory/`（`omarchy-niri-migration.md` 等） | 项目记忆（旧实验账户侧那份已废弃） |
 
 ### 3.2 修改
@@ -124,10 +125,11 @@ hyprctl 调用面有界、可直接映射。
 |---|---|
 | `~/.local/share/omarchy/shell/Commons/qmldir` | 加一行 `singleton Niri 1.0 Niri.qml` |
 | `~/.local/share/omarchy/shell/Commons/Style.qml` | `applyShellValues()` 的 `[bar]` 分支原来只认 `scale-with-font` + 两个 size 键、**其余键静默丢弃**；扩成 `Style.bar` 全部整型 token，于是 `[bar] icon-font = 12` 这类调法能从 `shell.toml` 热改（见 §8 第 31 条） |
+| `~/.local/share/omarchy/shell/shell.qml` | 标记读取：真登录时（`$XDG_RUNTIME_DIR/omarchy-boot-splash`，由 `split-greeter/session.sh` 落、读完即 `rm`）把 `bootRevealArmed` 置真，`omarchy-restart-shell` 不重放（§8 第 33 条） |
 | `~/.local/share/omarchy/shell/plugins/bar/widgets/Workspaces.qml` | 去掉 `import Quickshell.Hyprland`；`Hyprland.workspaces`→`Niri.workspaces`、`Hyprland.focusedWorkspace`→`Niri.focusedWorkspace` |
 | `~/.local/share/omarchy/shell/plugins/menu/Menu.qml` | 加 `import Quickshell.Wayland._BackgroundEffect`；根 `PanelWindow` 挂 `BackgroundEffect.blurRegion: Region { item: card; radius: root.cornerRadius }`（只磨砂菜单卡片，不全屏，见 §8.8）|
 | `~/.local/share/omarchy/shell/Ui/KeyboardPanel.qml` | 加 `import Quickshell.Wayland._BackgroundEffect`；根 `PanelWindow` 挂 `BackgroundEffect.blurRegion: Region { item: card; radius: Style.cornerRadius }`（覆盖所有 bar 弹窗面板，见 §8.8）|
-| `~/.local/share/omarchy/shell/plugins/bar/Bar.qml` | 去掉 import；`Hyprland.focusedMonitor`→`Niri.focusedMonitor` |
+| `~/.local/share/omarchy/shell/plugins/bar/Bar.qml` | 去掉 import；`Hyprland.focusedMonitor`→`Niri.focusedMonitor`；**boot reveal**：`bootRevealArmed` → `bootReveal` 归 0 → `BarPanel` 用 `margins` 把 bar surface 停屏外（alpha/opacity 一起 0），1500ms 后 900ms `OutCubic` 滑入（§8 第 33 条） |
 | `~/.local/share/omarchy/shell/plugins/osd/Osd.qml` | OSD 改"卡片大小 surface" + 磨砂（§8.8） |
 | `~/.local/share/omarchy/shell/plugins/notifications/Service.qml` | 加 `import Quickshell.Wayland._BackgroundEffect`；吐司根 `PanelWindow` 挂 `BackgroundEffect.blurRegion: Region { item: popupColumn; radius: service.cornerRadius }`。**注意它与 OSD 相反：吐司 surface 必须保持全屏**（免得增删吐司时缩放着形），所以那条 namespace 不能再给 `blur true`（§8 第 32 条 / §8.8）|
 | `~/.local/share/omarchy/shell/services/AppLibrary.qml` | 加 `command -v uwsm-app` 回退（niri 无 uwsm-app，§8 第 14 条） |
@@ -176,6 +178,13 @@ hyprctl 调用面有界、可直接映射。
 > `~/.local/share/omarchy/shell/plugins/notifications/Service.qml.bak-20260920-notifblur`、
 > `~/.config/niri/effects.kdl.bak-20260920-blurnotif`、
 > `~/.config/omarchy/niri-port/niri.patch.bak-20260920-notifblur`。
+>
+> 2026-09-21（交接过渡，`docs/visual.md` 第 33 条 / `docs/lock.md` §11.26）新留几个：
+> `~/.local/share/omarchy/shell/shell.qml.bak-20260921-bootcurtain`（= 上游 HEAD 版，单文件回退用）、
+> `~/.config/omarchy/niri-port/niri.patch.bak-20260921-bootcurtain`（= 21 文件/38 hunk 那版）、
+> `~/.config/omarchy/niri-port/niri.patch.bak-20260921-bootcurtain2`（= 22 文件/40 hunk 的黑幕版）、
+> `~/.config/omarchy/niri-port/niri.patch.bak-20260921-bootreveal`（= 22 文件/45 hunk 的"内置 bar 滑入"版；当前版在其上加了宿主推送，并把真正生效的浮动 bar 挪进插件补丁）。
+> `~/.config/omarchy/niri-port/niri.patch.bak-20260921-192644`（= 22 文件/46 hunk 版；活体已经改出 `paintedOnce` / `pushBootReveal()` 增补而补丁没跟上，repatch 一度 exit 2，当晚重导出为 48 hunk 版）。
 
 ---
 
@@ -377,7 +386,7 @@ output "eDP-1" {
   fallback 回 4K 并报 `GL_INVALID_VALUE`，也更耗电。
 - `scale 2.0` 是整数缩放 → X11 应用锐利，且比 1.5/1.6 更大更舒适；逻辑分辨率
   = 2560/2 × 1600/2 = 1280×800。
-- 参考邻居主账户的 `~/Documents/README-vantage.md`（pkexec 可读）：vantage `res`
+- 参考邻居主账户的 `~/Projects/vantage/README.md`（pkexec 可读；2026-09-21 项目统一收进 `~/Projects/`）：vantage `res`
   三档为 **原生 4K/2.25、均衡 2560×1600/1.5、省电 1920×1200/1.25**。本机最终用
   「均衡模式 + scale 2.0」。
 
@@ -574,6 +583,7 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
 | `§8 第 30 条` | 菜单卡片"过于黑" | `docs/visual.md` |
 | `§8 第 31 条` | [bar] 段只认 3 个键 → 让 shell.toml 能覆盖全… | `docs/visual.md` |
 | `§8 第 32 条` | 吐司"一来通知整屏变糊" | `docs/visual.md` |
+| `§8 第 33 条` | 交接过渡的桌面侧（壁纸铺底 + bar 从顶边滑下来） | `docs/visual.md`（登录侧全案见 `docs/lock.md` §11.26） |
 | `§8.6` | A 层 | `docs/behavior.md` |
 | `§8.7` | 更新覆盖层 | `docs/upstream.md` |
 | `§8.8` | 视觉磨砂 | `docs/visual.md` |
@@ -633,7 +643,7 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
 - [x] **logout/reboot/shutdown** 统一标准化：`~/bin/omarchy-niri-system` 单一入口（logout→niri quit、reboot/shutdown→logind D-Bus `Manager.Reboot/PowerOff`；`loginctl` 无该 verb 是本 bug，已改；`pkcheck` 免密 exit 0 验证）。
 - [x] **电源 profile**：`~/bin/omarchy-powerprofiles-list` 返回 3 个 profile、active 标记正确；set 经 TLP D-Bus 生效（异步应用，恢复为 power-saver）。
 - [x] **Ghostty 磨砂模糊**：`window-rules.kdl` 给 `com.mitchellh.ghostty` 加 `background-effect {xray true; blur true}` + `draw-border-with-background false`；ghostty `background-opacity = 0.85`、`background-blur-radius = 0`；焦点环穿透"诡异"问题已解（§5.8）。
-- [ ] **账户迁移到主账户（§11）**：快照 → 卸 DMS（保留 greeter）→ 原版 niri 默认配置当基座 → 整目录搬运 → 改写 `config.kdl` 三处硬编码路径 → 自检。方案已成文，**尚未执行**（主账户侧需用户本人在场）。
+- [x] **账户迁移到主账户（§11）**：快照 → 卸 DMS（保留 greeter）→ 原版 niri 默认配置当基座 → 整目录搬运 → 改写 `config.kdl` 三处硬编码路径 → 自检。**2026-09-19 已执行**（真人锁屏/解锁那一项见 §11.20；现状核对 2026-09-21：`dms-shell` / `dms-shell-niri` / `dankcalendar` 已不在包列表，`/etc/greetd/config.toml` 指向自研 `split-greeter`）。
 - [ ] 运行实测：注销、关机、重启（会结束会话/重启，交给用户）。
 - [x] **overview 背景统一**：`shell/plugins/blurwallpaper/`，图层**常驻映射**、由 niri 只在 overview 内合成（见 §3.1、§6、§8.16）。
 - [x] **菜单 override label+icon 修复（2026-08-27）**：`extensions/omarchy-menu.jsonc` 的 3 个 setup 项补全 label+icon，合并后显示 "Monitors"/"Keybindings"/"Input" 且图标正常（不再显示 raw id `setup.monitors` 之类）；根因是 `normalizeItem` 的 `label: value.label || id` 把 action-only override 的 label 退化成 id 并覆盖默认项。
@@ -654,7 +664,7 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
 - [x] **bar 部件（2026-09-19）**：胶囊工作区（聚焦点拉伸 2.6×、四级 alpha）与 Arch logo 渲染正常，点击经 `hyprctl` 垫片走通（见 §8.11）。
 - [x] **bar 电量百分比 + 去掉中间更新部件（2026-09-20）**：`omarchy.power` 加 `showPercentage: true`、`layout.center` 摘掉 `omarchy.system-update`；bar 条内笔画像素最右端 684 → 939（多出数字）、中间带 1371 → 1213（部件消失 + 居中组位移）；shell.json 热监听、免重启（见 §8 第 28 条）。**同日再改 `panels/power/Panel.qml`** 把 `text` 换成 `图标 + 数字%` 让数字落在最右（上游默认是数字在左）：字形高度指纹确认 h23 的图标块 x 2493..2515 → 2431..2454；`niri.patch` 因此 18 文件/34 hunk → **19 文件/35 hunk**（`--reverse --check` 通过、repatch 幂等）。
 - [x] **窗口缝隙 16 → 8（2026-09-20）**：`~/.config/niri/layout.kdl` 的 `gaps`；实测窗口上缘物理 112 → 96、右缘 +16、整屏 22.6% 像素重排，`tile_size` 616×728 → 628×744、`window_size` 612×724 → 624×740（本机 `tile_pos_in_workspace_view` 仍为 null，验收看像素边缘，见 §8 第 29 条）。
-- [x] **菜单卡片不再近黑（2026-09-20）**：`~/.config/omarchy/shell.toml` 覆盖 `[menu] background = "#2a2a22"`（本主题 `lighter_background`）→ 卡片中位色 (45,38,38) → (60,53,54)；该文件热生效；代价是**写了字面值后不再随主题变**，`menu.scrim-alpha` 才是"整屏变暗"的旋钮（见 §8 第 30 条）。
+- [x] **菜单卡片不再近黑（2026-09-20，2026-09-21 改法换代）**：9-20 先在 `~/.config/omarchy/shell.toml` 覆盖 `[menu] background = "#2a2a22"`（当时绿调主题的 `lighter_background`）→ 卡片中位色 (45,38,38) → (60,53,54)，该文件热生效；代价是**写了字面值后不再随主题变**。9-21 用户又报"omarchy menu 咋又变黑了"，复查确认覆盖链没坏（临时改成 `#ff00ff`，整块卡片变洋红），是 `#2a2a22` 本身仍暗（亮度 42）+ 主题已在 03:33 换成冷调 `tonal-spot`，于是**删掉底色键、只留 `background-alpha 0.45`**（与 `[bar]` 同档），底色重新走主题的 `[menu] background`（matugen 出的 `colors.toml` `background`）→ 卡片中位色 (59,53,62) → (64,62,68)。⚠ `[menu]` 是共享 token，剪贴板 / emoji / 提醒 / OSD 会一并变透（OSD 有 `^omarchy-osd$` 磨砂规则撑着，实测可读）；`menu.scrim-alpha` 仍是"整屏变暗"的旋钮（见 §8 第 30 条）。
 - [x] **主题精简（2026-09-19）**：仓库自带主题删剩 `catppuccin`（含 `catppuccin-latte` 共删 21 个），用户层保留 `tonal-spot`；`omarchy-theme-list` → 只有 Catppuccin / Tonal Spot；覆盖层 `--reverse --check` 仍通过、当前主题与壁纸无断链（见 §8.7）。
 - [x] **菜单空白的成因与自愈（2026-09-19）**：截断 `default/omarchy/omarchy-menu.jsonc` 能复现
   "Nothing here yet"（恢复即好）；`Menu.qml` 自愈守卫进 patch（17 文件 / 32 hunk），实测健康 6 项 /
@@ -694,7 +704,7 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
 
 ## 10. 关键环境信息
 
-- 两个账户**同属用户本人**：主账户（uid 1000）是**日用账户**（当前跑**原生 DMS**：`dms-shell` / `dms-shell-niri` / `dankcalendar-bin` / `greetd-dms-greeter-bin`），实验账户（uid 1001, gid 1003, groups `wheel` / `video`）是**专门给本移植做实验**的账户。`$DEV_HOME` 是 `drwx------`、`~` 是 `drwxr-x---` → 两边户目录互不可读，跨账户操作只能在各自账户内执行（迁移见 §11）。
+- 两个账户**同属用户本人**。**移植现在就跑在主账户（uid 1000）上** —— 2026-09-19/20 按 §11 从实验账户迁回，本文档里 `$DEV_HOME`、`/home/<dev-user>` 这类写法是迁移前的历史记号，迁移后一律等于 `~`。实验账户（uid 1001 `yvonne`）还在，但已不参与本移植（其户目录仍是 0700，读不到）。迁移后 `dms-shell` / `dms-shell-niri` / `dankcalendar` **已不在包列表**，`/etc/greetd/config.toml` 的 `default_session` 指向自研 `/usr/local/bin/split-greeter`（`greetd-dms-greeter-bin` 包仍在，只是不再当登录会话）。
 - niri 26.04 (8ed0da4) 位于 `/usr/bin/niri`。
 - 显示管理器：greetd / dms-greeter（DMS 自家 greeter，`/etc/greetd/config.toml` / `niri/dms.kdl` 归主账户所有）。包管理器 paru。
 - 电源后端：**TLP**（`tlp` + `tlp-pd` 1.10.2，D-Bus `net.hadess.PowerProfiles`），**无** power-profiles-daemon（`powerprofilesctl` 缺失）。

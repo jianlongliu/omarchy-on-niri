@@ -1,0 +1,93 @@
+{
+  "bar": {
+    "centerAnchor": "omarchy.clock",
+    "cornerRadius": 10,
+    "floatGap": 8,
+    "id": "charlieras262.floating-bar",
+    "layout": {
+      "center": [
+        {
+          "id": "omarchy.indicators"
+        },
+        {
+          "format": "dddd HH:mm",
+          "formatAlt": "d MMMM 'W'ww yyyy",
+          "id": "omarchy.clock",
+          "verticalFormat": "HH\n—\nmm"
+        },
+        {
+          "id": "omarchy.weather"
+        }
+      ],
+      "left": [
+        {
+          "id": "jianlongliu.arch-logo"
+        },
+        {
+          "id": "jianlongliu.workspaces"
+        },
+        {
+          "id": "meviusisback.ai-subs",
+          "barDisplay": "Icon",
+          "defaultSub": "commandcode",
+          "refreshIntervalSec": 900
+        }
+      ],
+      "right": [
+        {
+          "id": "omarchy.tray",
+          "hidden": [
+            "Fcitx"
+          ]
+        },
+        {
+          "id": "jrmmhm.pocket"
+        },
+        {
+          "id": "ronald.input-sources",
+          "showSourceName": false
+        },
+        {
+          "id": "omarchy.agents"
+        },
+        {
+          "id": "omarchy.bluetooth"
+        },
+        {
+          "id": "omarchy.network"
+        },
+        {
+          "id": "omarchy.audio"
+        },
+        {
+          "id": "omarchy.monitor"
+        },
+        {
+          "id": "omarchy.power",
+          "showPercentage": true
+        }
+      ]
+    },
+    "position": "top",
+    "transparent": false
+  },
+  "idle": {
+    "lock": 300,
+    "screensaver": 150
+  },
+  "plugins": [
+    {
+      "id": "jianlongliu.split-lock"
+    },
+    {
+      "id": "io.github.claudsondouglas.arcdock"
+    }
+  ],
+  "version": 1,
+  "disabledPlugins": [
+    "omarchy.lock"
+  ],
+  "cloneSourceRestores": [
+    "jianlongliu.split-lock"
+  ]
+}

@@ -26,6 +26,19 @@ Item {
   property string errorMessage: ""
   property int failedAttempts: 0
 
+  // Handoff choreography (2026-09-21). greetd only starts the user's session
+  // once this whole tree is gone, and the other side is not instant: the
+  // wrapper repaints the console, niri-session runs, niri takes the screen.
+  // Holding the hint for a moment and then fading the login screen to black
+  // turns that gap into a transition instead of a flicker; the desktop fades
+  // back in from black on the other side (the shell reads the marker the
+  // session wrapper writes). Set to 0 to hand over immediately.
+  property int handoffHintMs: Number(Quickshell.env("GREETER_HANDOFF_HINT_MS")) || 250
+  property int handoffFadeMs: 260
+  // 0 while the hint is up, 1 once the curtain should be black; shell.qml owns
+  // the rectangle and fades it over handoffFadeMs.
+  property real handoffVeil: 0
+
   // Face scan in progress: PAM has not asked for a secret yet.
   property bool faceAttempt: false
   // PAM is waiting for a secret (howdy missed, or there is no howdy at all).
@@ -224,7 +237,9 @@ Item {
       root.awaitingSecret = false
       root.queuedPassword = ""
       root.sessionStarting = true
-      root.command({ op: "start", epoch: root.epoch, cmd: [root.session], env: [root.sessionEnv] })
+      // Not straight to greetd: let the hint be readable, black out the login
+      // screen, and only then ask for the session (see handoffHintMs above).
+      handoffTimer.restart()
       break
     case "auth_fail":
       root.busy = false
@@ -246,6 +261,11 @@ Item {
     case "error":
       root.busy = false
       root.sessionStarting = false
+      // The session never came up, so put the login screen back: a curtain
+      // that stays down would look like a hang.
+      handoffTimer.stop()
+      handoffStartTimer.stop()
+      root.handoffVeil = 0
       root.errorMessage = event.description || "Could not start the session"
       break
     }
@@ -255,6 +275,25 @@ Item {
     id: attemptWatchdog
     interval: root.attemptTimeoutMs
     onTriggered: root.onAttemptTimeout()
+  }
+
+  // Handoff: hint first, curtain second, greetd third. The extra 40ms on the
+  // last step is the fade's last frames -- asking for the session tears this
+  // tree down, and a curtain that is still animating when the screen goes away
+  // would cut the fade short.
+  Timer {
+    id: handoffTimer
+    interval: root.handoffHintMs
+    onTriggered: {
+      root.handoffVeil = 1
+      handoffStartTimer.restart()
+    }
+  }
+
+  Timer {
+    id: handoffStartTimer
+    interval: root.handoffFadeMs + 40
+    onTriggered: root.command({ op: "start", epoch: root.epoch, cmd: [root.session], env: [root.sessionEnv] })
   }
 
   // The helper needs a moment to die and release the socket before a new one

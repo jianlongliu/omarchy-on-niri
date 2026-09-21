@@ -138,8 +138,10 @@ GREETER_SELFTEST_PASSWORD=x GREETER_SELFTEST_OPEN_PICKER=1 qs -n -p .
 **没有** `mode` 行；圆角走 `GREETER_CORNER_RADIUS`。
 
 登录用户 / 会话命令在 `niri.kdl` 的 `environment` 段（`GREETER_USER` / `GREETER_SESSION`）；
+**会话命令是 `/etc/greetd/split-greeter/session`（包装脚本，见下），不是 `niri-session`**；
 `GREETER_ACCOUNTS_DIR` 覆盖每个账户的取色与壁纸目录（只在测试里用，缺省 `/var/lib/greeter/users`）；
-`GREETER_FACE=1` 声明"这台机装了人脸工具"，决定回车是触发扫脸还是死键；`GREETER_AUTOBEGIN=1` 开机自动扫脸（测试用）。
+`GREETER_FACE=1` 声明"这台机装了人脸工具"，决定回车是触发扫脸还是死键；`GREETER_AUTOBEGIN=1` 开机自动扫脸（测试用）；
+`GREETER_HANDOFF_HINT_MS` 调交接前"Starting your session…"停留多久（缺省 250ms，0 = 立刻交接）。
 
 主题/壁纸由 `sync.sh`（`split-greeter-sync`）拷进 `/var/lib/greeter`：`/data` 壁纸库对
 greeter 用户不可读，所以是拷贝而非软链。布局：
@@ -177,6 +179,24 @@ python3 vendor.py     # 插件升级或 omarchy update 之后重跑
 `Commons/qmldir`、`Ui/qmldir` 由 `vendor.py` 生成，**必须**保留 `singleton` 关键字
 （丢了会让 `Color.lock.*` 全变 undefined）。
 
+## 交接过渡（2026-09-21）
+
+greetd 把**会话的 stdout/stderr 直接接在 VT 上**（实测 `niri-session` 的 fd 0/1/2 → `/dev/tty1`），
+而 greeter 那份 niri 的日志原本没有被重定向（`niri.kdl` 只重定向了壳）：那些行写进 tty1 的文本缓冲区，
+niri 在 KD_GRAPHICS 下看不见，**niri 一退出、VT 回到文本模式就整屏现形**，一直挂到用户 niri 抢到 DRM
+（约 1.5~2 秒）——这就是"输完密码到桌面之间那段文字"。两头都堵：
+
+- `/usr/local/bin/split-greeter`（`install.sh` 生成）：先把缓冲区刷黑（`printf '\033[2J\033[H' >&1`，
+  此刻 fd 1 还是 VT），再把 niri 的输出落到 `/var/lib/greeter/greeter.log`。写日志失败就保持原样，不会挡住登录。
+- `/etc/greetd/split-greeter/session`（本仓 `session.sh`）：会话命令的包装脚本，先刷黑再
+  `exec >>$HOME/.local/state/omarchy/session.log 2>&1`，最后 `exec niri-session "$@"`。
+  它还会在 `$XDG_RUNTIME_DIR/omarchy-boot-splash` 落一个标记——**桌面壳层靠这个标记决定"这次是真的登录"**。
+
+视觉效果由两段动画接起来：登录面在 `GREETER_HANDOFF_HINT_MS` 之后用黑幕淡出（`shell.qml` 的
+`handoffVeil` + `Greetd.qml` 的两个 Timer，淡出 260ms 后才真正向 greetd 要会话），桌面壳层再从这个
+标记淡入（`shell.qml` 的 boot curtain，Overlay 层，220ms 后 520ms 淡出，另有 2.5s 保险）。
+`omarchy-restart-shell` 不会重放淡入——标记只认一次。
+
 ## 已知边界
 
 - 单输出假设：greeter 合成器只配了 `eDP-1`。
@@ -184,7 +204,7 @@ python3 vendor.py     # 插件升级或 omarchy update 之后重跑
   与共享缺省），换字体请改 `niri.kdl` 或共享缺省。
 - 选择器以鼠标为主；键盘上下/回车/Esc 只在它获得焦点时有效。
 - 指纹/FIDO2 没有专门 UI：它们会作为 PAM 消息出现，而不是被单独渲染成一个图标。
-- `start_session` 固定 `niri-session`（`GREETER_SESSION` 可改），没有会话选择器。
+- `start_session` 走固定会话命令（`GREETER_SESSION`，现为 `/etc/greetd/split-greeter/session` 包装脚本），没有会话选择器。
 - 密码只经由 bridge 的 stdin 传递（不进 argv、不落盘）；PAM 与日志会话创建始终在 greetd 里完成。
 
 ## Diagnosing a login that "does nothing"

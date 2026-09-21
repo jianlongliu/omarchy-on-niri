@@ -1,0 +1,25 @@
+[font]
+base-size = 12
+
+[bar]
+size-horizontal = 32
+size-vertical = 34
+background-alpha = 0.45
+# 内置部件的图标与数字字号（上游默认 13）。降到 12 = 跟 bar 上的纯文本（[font] base-size 12）
+# 及自研/第三方插件的正文同档，整条 bar 只有一个字号；调大回去就删这行。
+icon-font = 12
+
+[popups]
+background-alpha = 0.65
+
+[notifications]
+background-alpha = 0.85
+
+[menu]
+# 卡片底色不再写死色值，跟 [bar] / [popups] 同一色源（主题的 [menu] background），
+# 只靠 alpha 决定通透度：0.45 = 跟 bar 同档的半透明磨砂。卡片底下还有 menu.scrim
+# 再压一层暗，所以真正要"更亮"时调 scrim-alpha，不是把底色往亮里写死。
+background-alpha = 0.45
+
+[tooltip]
+background-alpha = 0.85

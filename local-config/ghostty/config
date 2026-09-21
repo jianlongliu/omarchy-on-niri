@@ -28,6 +28,15 @@ confirm-close-surface = false
 app-notifications = no-clipboard-copy,no-config-reload
 
 # Key bindings for common actions
+# Omarchy 风格通用剪贴板：Super+C/V/X 由 ghostty 自己接管。
+# 上游 Hyprland 版是把 Ctrl+Insert / Shift+Insert 注入终端（send_shortcut），
+# niri 没有注入能力，所以改成「niri 不占键 + 终端自己绑」——两边都要成立才有效。
+keybind = super+c=copy_to_clipboard
+keybind = super+v=paste_from_clipboard
+keybind = super+x=text:\x18
+# 上游 ghostty 配置里的备用键位（Insert 系）
+keybind = control+insert=copy_to_clipboard
+keybind = shift+insert=paste_from_clipboard
 #keybind = ctrl+c=copy_to_clipboard
 #keybind = ctrl+v=paste_from_clipboard
 keybind = ctrl+shift+n=new_window

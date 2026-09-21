@@ -1,6 +1,6 @@
 # 垫片 — Omarchy on niri 卷（shims）
 
-> 文档只有一份：本文件（`docs/shims.md`）。`~/Documents/omarchy-niri-shims.md` 是指向它的软链。
+> 文档只有一份：本文件（`docs/shims.md`）。
 > 本卷 2026-09-20 从 `docs/omarchy-on-niri-port.md` 抽出（模块化拆分），**编号一律沿用原号** ——
 > `§4`、`§8 第 N 条`、`§8.x`、`§11.x` 都是原号，原处留同名指针，所以仓库里既有的
 > "§8 第 22 条"、"§11.13" 之类引用继续解析得到。

@@ -1,6 +1,6 @@
 # 账户迁移 — Omarchy on niri 卷（migration）
 
-> 文档只有一份：本文件（`docs/migration.md`）。`~/Documents/omarchy-niri-migration.md` 是指向它的软链。
+> 文档只有一份：本文件（`docs/migration.md`）。
 > 本卷 2026-09-20 从 `docs/omarchy-on-niri-port.md` 抽出（模块化拆分），**编号一律沿用原号** ——
 > `§4`、`§8 第 N 条`、`§8.x`、`§11.x` 都是原号，原处留同名指针，所以仓库里既有的
 > "§8 第 22 条"、"§11.13" 之类引用继续解析得到。
@@ -21,7 +21,7 @@
 ### 11.0 背景与目标
 
 - 两个账户同属一人：主账户（uid 1000）是**日用账户**，实验账户（uid 1001）是**专门给本移植做实验**的账户。本节是把移植整体搬进主账户的 runbook。
-- **新 session 从哪读**：文档正本随仓库走 —— `git clone https://github.com/jianlongliu/omarchy-on-niri`（公开仓，主账户无需凭据），正文在 `docs/omarchy-on-niri-port.md`，§11 就是本节。正本随仓库走，权限 0644、**两个账户都读得到**（2026-09-20 文档归一：`~/Documents/omarchy-niri-*.md` 现在只是软链，0600 那件旧事见 §11.2）；`/var/tmp` 里的摘录重启就没了，不要当唯一来源。
+- **新 session 从哪读**：文档正本随仓库走 —— `git clone https://github.com/jianlongliu/omarchy-on-niri`（公开仓，主账户无需凭据），正文在 `docs/omarchy-on-niri-port.md`，§11 就是本节。正本随仓库走，权限 0644、**两个账户都读得到**（2026-09-20 文档归一、2026-09-21 连那九个软链也删掉之后，正本只此一处；0600 那件旧事见 §11.2）；`/var/tmp` 里的摘录重启就没了，不要当唯一来源。
 - 主账户现状：**原生 DMS**（打包的 `dms-shell 1.6.2` + `dms-shell-niri 1.6.2` + `dankcalendar-bin` + `greetd-dms-greeter-bin`，登录界面是 dms-greeter）。
 - 目标形态：主账户跑本移植（Omarchy 壳层 + niri），**卸掉 DMS**，niri 配置以**原版默认**为基座（不是从 DMS 那套改）。
 
@@ -178,7 +178,7 @@ omarchy plugin list | grep lock     # 应只有 jianlongliu.split-lock enabled
 **这份文档在哪**（主账户怎么拿到）：公开仓库
 <https://github.com/jianlongliu/omarchy-on-niri/blob/quattro/docs/omarchy-on-niri-port.md>（`git clone` 或浏览器都行，主账户可读）；
 §11 的纯摘录在 `/var/tmp/omarchy-migrate-to-main-account.md`（重启会被清，别当唯一副本）。
-（2026-09-20 前）本机的 `~/Documents/omarchy-on-niri.md` 曾是 0600，主账户读不到 —— **现在不必了**：文档正本在仓库里，`~/Documents` 那九个名字都是软链。
+（2026-09-20 前）本机的 `~/Documents/omarchy-on-niri.md` 曾是 0600，主账户读不到 —— **现在不必了**：文档正本在仓库里（`~/Documents` 那九个软链 2026-09-21 也已删，本机只此一处）。
 
 **0. 前置**
 - 全程要 root 或 `sudo`：`$DEV_HOME` 是 0600，主账户自己读不到源。
@@ -220,7 +220,7 @@ omarchy plugin list | grep lock     # 应只有 jianlongliu.split-lock enabled
 `sudo chown -R "$USER:$USER" ~`（或只对搬进来的子目录逐个 chown，别撒到别处）。
 
 **5. 登录界面（Split Greeter）与锁屏门禁**
-- 装机：`sudo ~/omarchy-on-niri/split-greeter/install.sh`（→ `/etc/greetd/split-greeter`、`/usr/local/bin/split-greeter{, -sync}`），
+- 装机：`sudo ~/Projects/omarchy-on-niri/split-greeter/install.sh`（→ `/etc/greetd/split-greeter`、`/usr/local/bin/split-greeter{, -sync}`），
   greetd `config.toml` 的 `command` 指到 `/usr/local/bin/split-greeter`。
 - **PAM 门禁别漏**：`pkexec ~/.local/share/omarchy/bin/omarchy-apply-lock`——漏了就是"锁屏点不动 / `lock()` 返回 `missing-pam`"（§11.12）。
 - `sudo usermod -aG video "$USER"`（howdy/摄像头要用）。

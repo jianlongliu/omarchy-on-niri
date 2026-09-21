@@ -36,8 +36,13 @@ blur {
 // tailscale/weather/dropbox/wifiqr/speedtest/...) plus the wallpaper and lock
 // preview are deliberately NOT matched, so a niri-side blur never frosts the
 // entire display.
+// (2026-09-21) omarchy-boot-banner is the floating bar plugin's "Thinking…"
+// card, shown while the shell boots. It borrows this rule so it is frosted
+// exactly like the osd card it copies; its surface is card-sized for the same
+// reason the osd one is -- `blur true` frosts everything the rule's surface
+// covers.
 layer-rule {
-    match namespace="^omarchy-osd$"
+    match namespace="^omarchy-(osd|boot-banner)$"
     background-effect {
         blur true
         // xray false: frost the LIVE content behind, not the wallpaper alone

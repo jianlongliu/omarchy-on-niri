@@ -1,6 +1,6 @@
 # 视觉调整 — Omarchy on niri 卷（visual）
 
-> 文档只有一份：本文件（`docs/visual.md`）。`~/Documents/omarchy-niri-visual.md` 是指向它的软链。
+> 文档只有一份：本文件（`docs/visual.md`）。
 > 本卷 2026-09-20 从 `docs/omarchy-on-niri-port.md` 抽出（模块化拆分），**编号一律沿用原号** ——
 > `§4`、`§8 第 N 条`、`§8.x`、`§11.x` 都是原号，原处留同名指针，所以仓库里既有的
 > "§8 第 22 条"、"§11.13" 之类引用继续解析得到。
@@ -12,12 +12,14 @@
 
 
 - 8.8 视觉磨砂（frosted Quickshell / 状态栏面板毛玻璃）
+- 33. **交接过渡的桌面侧：加载期什么都不显示，bar 到点整块出现（boot reveal，2026-09-21；起因 "输入完密码确认后…有文字" → "能掩盖 quickshell 的启动过程吗? 那个有点丑了" → 用户否决黑幕与一切全屏遮罩 "不黑, 先放壁纸不行吗?" → 一度定稿 "bar 从上面慢慢浮下来"，最终因霜化的机制问题改成"到点整块出现"，过程见 33b ④⑤⑥）**：登录交接到桌面之间隔着一段文本 VT（根因与另外三处改动见 `docs/lock.md` §11.26）。做法：**壁纸照原样铺底、不加任何遮罩**，桌面壳层启动时把标记 `$XDG_RUNTIME_DIR/omarchy-boot-splash` 当作"这次是真登录"，据此让 bar 的 surface 先不上屏、**等壳层真正组装完**再整块出现——2026-09-21 起这个"组装完"由宿主播报：`omarchy.background` 服务里新增 `paintedOnce`（壁纸首帧解码上屏；实测冷启动 ~1.35s，是整条启动链上最晚的一件事），宿主读它并推给 bar（地板 600ms / 天花板 6000ms 兜底），**不再用固定时长**（同一台机器各次冷启动差几百毫秒，开机那次还要多 ~0.5s）（**不做滑入**：霜化是 niri 按区域自己画的，滑入会先露一块空磨砂矩形，见 33b ⑥），重启壳层不重放。**关键事实：本机在用的 bar 是第三方插件 `charlieras262.floating-bar`，不是内置 `plugins/bar/Bar.qml`**——插件只拿到受限 shell API、看不到标记，所以标记由宿主**推**过去（`shell.qml` 新增 `pushBootReveal()`，在 `configureBar` 与标记 `onLoaded` 两处调用）；推给"谁被配置成 bar"，内置/插件都适用。**落点**：`shell/shell.qml`（标记 + 推送）+ `shell/plugins/bar/Bar.qml`（内置 bar：整块 surface 停屏外再滑入）+ **`~/.config/omarchy/plugins/charlieras262.floating-bar/Bar.qml`（真正生效的那个，见 `niri-port/plugin-patches/charlieras262.floating-bar.patch`）**：浮动 bar 用 **`PanelWindow.visible` 开关**（加载期整块不上屏、到点整块出现；不再有 `barVisual` 位移），`blurRegion` 指向不动的 `barBlurAnchor`（region 跟位移对象走会丢霜化，见 33b ④）。**`niri.patch` 22 文件/48 hunk、md5 `6138cc1bece9a94312572d8685c845a4`（2026-09-21 晚重导出核，把活体先改、补丁没跟上的 `paintedOnce`/`pushBootReveal()` 增补补进来）；插件补丁 md5 `0d36c626a9992de5a457e3f2880bc99a`（7 hunk，2026-09-21 核）**；**加载期底部居中的 `Thinking…` 卡片（脑形 U+F09D1，插件自带的第二个 `PanelWindow`，常驻映射、藏在屏下，arming 后立刻上屏；表面是**卡片大小 + 借 `^omarchy-osd$` 那条霜化规则**，尺寸/字体/离底照 OSD 关机吐司）已实施，收卡等宿主推的"壁纸已画"而不是固定时长；plymouth 盖交接空窗仍搁置 —— 两条都见 `docs/lock.md` §11.27**；**2026-09-21 晚补：那 ~1.4s 空窗已被 `swaybg` 填掉**（niri `spawn-at-startup` 先铺同一张图、几十 ms 上屏，与插件那份逐像素一致 ⇒ 无缝），平色底色现在只剩头 ~100ms 的台阶 —— 见 `docs/local-overrides.md` §4
+- 33b. **boot reveal 的三个坑（2026-09-21，全是实测）**：① **别用 QML 动画排片**——bar 停屏外时 surface 不在屏上，动画的钟照走但不出版本帧，名义 1800+1400 的 `PauseAnimation+NumberAnimation` 实测在 0.9s 内一次落位；改用**普通 Timer 做 hold + 每帧按墙钟算进度的 Timer 做滑入**（实测节拍稳定 16ms/次，`bootReveal` 逐帧平滑 0.001→0.999）。② **`anchors.fill: parent` 会接管 x/y**，包一层 `Item` 做位移时必须写 `width/height`，否则只剩淡入、位移被静默忽略。③ **bar 的可见内容要包在同一个 Item 里**再位移：只动 surface 会带着独占区一起动，屏幕上的窗口跟着上下跳。④ **`BackgroundEffect.blurRegion` 不能跟会被位移的 item**：包上 `barVisual` 之后霜化整块消失（用户："没blur"）——niri 磨的是**它拿到的那块矩形**，而 reveal 开始时 bar 停在上边之外，区域采样在屏外，frost 就跟着没了；改成指向一个**不动的替身**（`barBlurAnchor`：`anchors.fill: parent` + 同 `radius` + `color: "transparent"`，只当形状不画画），几何与静止时的 bar 相同（bar 填满 surface）。⑤ **"只有 opacity" 是缓动的锅，不是位移没生效**：surface 高只到 bar 的底边，**顶边以上全是被裁掉的**，能看见的只有"裸露高度 = barSize − offset"这一段 ⇒ **缓动决定看得见多少下降**：InOutCubic 的前一半在爬坡时 bar 还只是顶边一条，又跟淡入同速，眼睛只读到"淡"；换 **OutCubic** 并把淡入提前结束（`Math.min(1, bootReveal * 3.5)`，约 100ms 就全不透明），让下降当主角。另：offset 满值 50 逻辑像素 > bar 高 32 ⇒ 前约 14% 的位移是看不见的（等价于把 hold 稍微延长，正常）。⑥ **滑入方案最终废弃（2026-09-21）**：霜化是 **niri 按它拿到的 region 自己画的**（不看客户端画了什么、也不看 alpha），所以任何「bar 滑进来」的做法都会先露出一块**空的磨砂矩形**、再有个 bar 追下来（用户原话：「屏幕顶部有个 blur 的 bar, 然后再浮下来一个 bar」），而 region 又跟不上位移（④）⇒ 最终改成「surface 先不上屏（`PanelWindow.visible`）、到点整块出现」，两个问题一起消失；⑤ 那段缓动/淡入的调试过程留作记录。
 - 32. **吐司"一来通知整屏变糊"：全屏 surface 撞上 niri 侧 `blur true`（2026-09-20，用户 "我的吐司通知,
 - 27. **不透明 app 的磨砂：只写 `background-effect { blur true }` 是看不见的（2026-09-20，用户要求「微信加上 blur，
 - 8.19 全桌面字号 / DPI 一致性：一切向 bar 的 Display 面板看齐（2026-09-20）
 - 31. **`[bar]` 段只认 3 个键 → 让 `shell.toml` 能覆盖全部 bar 整型令牌（2026-09-20，起因："bar 上字体是不是有的大有的小" →
 - 28. **bar 的内联部件设置：电量百分比与摘掉 `omarchy.system-update`（2026-09-20，用户 "bar的电池加百分比, 去掉中间的
-- 30. **菜单卡片"过于黑"：底色 = 主题 `[menu] background`（2026-09-20，用户 "omarchy menu过于黑了"）**：卡片底色不是
+- 30. **菜单卡片"过于黑"：底色 = 主题 `[menu] background`（2026-09-20 "omarchy menu过于黑了" → 写死 `#2a2a22`；2026-09-21 "omarchy menu 咋又变黑了" → 删掉写死色值、只留 `background-alpha 0.45` 跟 bar 同档，底色重新跟主题走）**
 - 29. **窗口缝隙 16 → 8（2026-09-20，用户 "窗口缝隙过大调小些"）**：`~/.config/niri/layout.kdl` 的 `gaps`（逻辑像素，
 - 18. **弹窗未给浮栏让位（TODO，下次修）**：toast（`shell/plugins/notifications/Service.qml` 的
 - 8.10 主题动态取色（tonal-spot / matugen / materal-update）
@@ -56,8 +58,14 @@ niri 26.04 的 `background-effect` + Quickshell 的 `ext_background_effect` 形�
   `anchors { left; right; bottom }` + `margins`（左右按 `Quickshell.screens[0].width` 居中、底部
   `Style.space(67)`）+ `implicitHeight: card.height`，让 layer surface 本身就是卡片大小，
   卡片 `BorderSurface` 保留显式宽高、去掉居中 anchors，背景 `Color.menu.background`（透明度跟随
-  `shell.toml [menu] background-alpha 0.7`）。这样 `effects.kdl` 的 blur 天然只磨砂卡片。
+  `shell.toml [menu] background-alpha`，2026-09-21 起本机为 0.45）。这样 `effects.kdl` 的 blur 天然只磨砂卡片。
   实测（scale 2.0 物理 px）：屏幕主体 0 差异、卡片 556×130 物理（278×65 逻辑）居中底部、磨砂生效。
+- **本机浮动 bar 的圆角 region（2026-09-19 起；插件侧，不在 `niri.patch` 内）**：`charlieras262.floating-bar`
+  的 `PanelWindow` 挂 `BackgroundEffect.blurRegion: Region { item: …; radius: root.effectiveCornerRadius }`，
+  `effects.kdl` 给 `^omarchy-bar$` 设 `xray false`，霜化只落在圆角矩形内（不设的话矩形外会糊成亮晕，§11）。
+  **该 region 跟踪的是 item 的几何**：把 item 位移到屏外，区域跟着出屏 ⇒ 霜化整块消失
+  （2026-09-21 boot reveal 实测，用户："没blur"；见第 33 条 33b ④）。所以它指向一个**不动的替身**
+  `barBlurAnchor`，而不是会滑动的 `barVisual`。
 
 **仓库外 Layer-1 配置（pull 安全，不在 `niri.patch` 内）**：
 - `~/.config/niri/effects.kdl`（被 `config.kdl` `include`）：全局
@@ -85,7 +93,7 @@ niri 26.04 的 `background-effect` + Quickshell 的 `ext_background_effect` 形�
     （真透出背后并被模糊）；blur 开/关平均差 3.68、最大 26，同一状态连拍两次差仅 0.07（可复现）。
     透明度是唯一的手感旋钮：`shell.toml [bar] background-alpha`（0.45 现值；调高更暗更清晰、调低更透更糊）。
 - `~/.config/omarchy/shell.toml`：`[bar]` background-alpha 0.45、`[popups]` 0.65（原 0.8，
-  只为透出磨砂；越低越糊、越高字越清晰）、`[menu]` 0.7、`[notifications]` 0.85、`[tooltip]` 0.85。
+  只为透出磨砂；越低越糊、越高字越清晰）、`[menu]` 0.45、`[notifications]` 0.85、`[tooltip]` 0.85。
   这些喂给 `Color.*.background`（`Color.qml` 的 `composed(...-alpha...)`）。
 
 **热重载**：niri `blur`/layer-rule 经 `niri msg action load-config-file`（热）；QML 改动需重启
@@ -126,6 +134,35 @@ quickshell：`pkill -x quickshell && niri msg action spawn -- quickshell -n -p $
     排查顺带否掉两个错误猜想（都不是这次的原因）：通知吐司本身是**图层表面**（`PanelWindow`），
     结构上造不出 `xdg_popup must have parent before mapping`；锁屏期间吐司照收照 map，只是 niri 不渲染
     非锁面所以看不见。
+
+---
+
+33. **交接过渡的桌面侧：bar 从顶边滑下来（boot reveal，2026-09-21）**：原来的现象是"输完密码到桌面之间会闪一段文字"
+    —— 那是 **greeter 那份 niri 的日志漏在 tty1 的文本缓冲区**里（greetd 把会话的 stdout/stderr 直接接在 VT 上；
+    根因、两条可复查证据、另外三处堵法见 `docs/lock.md` §11.26）。视觉侧这一半要解决的是"桌面别突然跳出来"。
+    做法（**最终版，黑幕方案已废弃**）：
+    - 标记：`shell/shell.qml` 启动时读 `$XDG_RUNTIME_DIR/omarchy-boot-splash`（由 `split-greeter/session.sh` 落，
+      读完即 `rm`）→ `shell.bootRevealArmed = true`。读不到就是普通重启，什么都不做。
+    - 揭示：`shell/plugins/bar/Bar.qml` 看到 `shell.bootRevealArmed` 就把 `root.bootReveal` 置 0 ——
+      `BarPanel` 的 `margins` 把**整块 bar surface 停到屏幕外**（复用"隐藏 bar"那套 parking，连带 `color` 的 alpha 与
+      内容 `Loader.opacity` 一起归零），停 1500ms 名义值后 900ms `OutCubic` 滑入。**壁纸全程原样铺底，没有盖任何东西。**
+    - **为什么不做全屏遮罩**：盖壁纸就得决定"盖什么亮度"——实测遮罩画原图是全亮的 0.4466，而桌面上的壁纸被 bar/窗口
+      压暗过（区域比 0.29~0.65 不等），淡出时必然有亮度跳变；不盖就没有这个问题。用户原话："不黑, 先放壁纸不行吗?"
+    - **名义值 ≠ 实际时长（2026-09-21 真机实测）**：壳层刚起来时主线程正忙（壁纸解码、插件装载、菜单模型重读），
+      QML 的 `Timer`/`PauseAnimation`/`NumberAnimation` 都挂在同一线程上。实测结果：**bar 从"真登录开始"约 +0.7s 武装、
+      ~+1.6s 就已经在位**（比 1500+900 的名义值快），且中间只抓到 1 帧半透明中间态 —— 忙线程会把动画帧吃掉，
+      所以指望"慢慢滑动"只在主线程空下来之后才成立。别把设计值当承诺。
+    - 安全网：`SequentialAnimation` 末尾的 `ScriptAction { root.bootReveal = 1 }` —— 动画万一被吃掉，bar 也绝不停在屏外。
+    - **别拿"桌面比源图暗一半"当结论**：那是我自己的采样窗口压在两个终端窗口上（深色）导致的；取无窗口区域、
+      或对比遮罩帧与源图（0.4466 vs 0.4468）才能得出"壳层忠实呈现原图"的结论。
+    - 起点天然是黑的（真登录后 niri 先接管屏幕），所以不需要额外的 scrim 或"先黑再淡"。
+    - **验证（真机，等价于真登录中壳层启动那一段）**：写标记 → kill 旧壳 + `niri msg action spawn -- omarchy-launch-shell`
+      → 逐帧 `grim -t ppm`，把**顶部条带**裁出来拼图看（`magick -crop 2560x75+0+0` + `montage`）：
+      抓到"无 bar → 半透明中间态 → 落位"三态，标记被消费（文件已不存在），壳层 journal 无 QML 错误。
+      **不写标记直接重启**：条带立刻就是落位值 `0.509075` ⇒ bar 不滑、不藏。
+      注意 **`niri msg layers | grep -c omarchy-bar` 不是判据**（parking 是改 margin，surface 一直 mapped），
+      而且**别只看亮度数字**：采样窗口经常压在终端窗口上，得出"桌面比源图暗一半"这种假结论。
+      整链目视确认（登录面淡出 → 黑 → 壁纸 → bar 滑下来）仍要一次真登录。
 
 ---
 
@@ -277,18 +314,36 @@ GTK/Qt 应用**重启后才生效**（截图核对：Nautilus 与 bar 文字同�
 30. **菜单卡片"过于黑"：底色 = 主题 `[menu] background`（2026-09-20，用户 "omarchy menu过于黑了"）**：卡片底色不是
     菜单代码里的常量，而是 `Commons/Color.qml` 从主题 `shell.toml` 的 `[menu] background` 取（模板
     `default/themed/shell.toml.tpl` 里 = `{{ background }}`，本主题即 `colors.toml` 的 `background = #14140c`），
-    再乘用户层的 `background-alpha`（现 0.7）。所以"黑"是**底色本身近黑**，跟模糊没关系。改法：在
+    再乘用户层的 `background-alpha`（当时 0.7）。所以"黑"是**底色本身近黑**，跟模糊没关系。改法：在
     `~/.config/omarchy/shell.toml` 覆盖 `[menu] background = "#2a2a22"`（本主题的 `lighter_background`）——
     卡片中位色**（45,38,38）→（60,53,54）**，与模型吻合（0.7×底色 + 0.3×背后模糊壁纸，反推出背后 ≈ (103,80,98)）。
     **这个文件同样是热监听**（`userShellFile` `watchChanges: true` → `reload()`），存盘即变色。
     两个坑：① **颜色 token 只认 `foreground` / `background` / `accent` / `urgent` / `muted` / `text` / `transparent`
     和 shell.toml 里的 `section.key`**（如 `hyprland.active-border-foreground`）—— `colors.toml` 的
     `lighter_background` 之类**不在解析表里**（`loadColors` 只提取 foreground/background/accent/muted/colorN），
-    所以这里只能写字面值，而写了字面值**就不再随主题变**（换主题/换壁纸重取色后要回来改）；想要"跟着主题走"就得改
-    模板 `shell.toml.tpl` 的 `[menu] background` 为 `{{ lighter_background }}`（会进 patch，需重新生成主题）；
+    （**此条的结论已被下面 2026-09-21 那半段更正：不写 `background` 键就已经是"跟着主题走"**）；
     ② 打开菜单时**整屏变暗来自 `menu.scrim`**（`scrim = {{ background }}` + `scrim-alpha 0.5`：亮壁纸区
     220 → 120，正好压掉一半亮度）——嫌"菜单一开整屏黑"就调 `[menu] scrim-alpha`，别去动卡片底色。
     回退：`~/.config/omarchy/shell.toml.bak-20260920-menu`。
+
+    **2026-09-21 再修（用户 "omarchy menu 咋又变黑了"）——把写死的底色删掉，改走主题值**：
+    先复查"是不是覆盖失效了"：临时把 `[menu] background` 改成 `#ff00ff`，卡片整个变洋红、bbox
+    x 984..1574 / y 202..1398（物理，DPR 2 ⇒ 卡片宽 590 = 295 逻辑，居中）⇒ **`userShellFile` 覆盖链完全正常**。
+    所以黑不是失效，是 `#2a2a22` 本身只有亮度 42，仍属暗灰；而主题在 **2026-09-21 03:33 被重设为冷调
+    `tonal-spot`**（`colors.toml`：`background = #101417`、`lighter_background = #262a2e`），9-20 为**绿调**主题挑的
+    暖绿 `#2a2a22` 与它既不搭、也不随主题更新。最终做法（比 9-20 那版更彻底）：
+    **`~/.config/omarchy/shell.toml` 的 `[menu]` 段只留 `background-alpha = 0.45`，删掉 `background` 键**——
+    卡片底色于是走主题的 `[menu] background`（tpl 里 = `{{ background }}` = matugen 从壁纸出的 `colors.toml`
+    `background`，本主题 `#101417`），alpha 0.45 与 `[bar]` 同档 ⇒ 半透明磨砂、透出霜化壁纸。
+    **更正 ① 的说法：想"跟着主题走"并不需要改 tpl** —— 不写 `background` 键就已经走主题值（`background` 在解析表里）；
+    改 tpl 为 `{{ lighter_background }}` 只是想把值调亮一档，可本主题的 `lighter_background`（`#262a2e`，均 42）
+    比 `#2a2a22`（均 39）**还暗**，所以"走主题值 + 降 alpha"才是正解，tpl 不必动。
+    实测（同一张壁纸）：卡片中位色 **(59,53,62) → (64,62,68)**、卡片顶部条 **(77,87,60)**（开始透出壁纸色）。
+    ⚠ **副作用：这是共享 token** —— `grep "Color.menu.background"` 有 5 处消费者（`menu/`、`clipboard/`、
+    `emojis/`、`reminders/`、`osd/`），所以 0.45 同时让剪贴板 / emoji / 提醒 / OSD 的卡片更透。
+    OSD 有 `effects.kdl` 的 `^omarchy-osd$` 磨砂规则撑着，实测音量 OSD 仍清晰可读（卡片附近中位 (82,83,84)）；
+    boot banner 那份底填用 `Qt.rgba(...,1)` 压平（见 `docs/lock.md` §11.27），不受影响。
+    还嫌黑就调 `[menu] scrim-alpha`（现 0.5）。回退：`~/.config/omarchy/shell.toml.bak-20260921-menu`（= 9-20 版，`#2a2a22` @ 0.7）。
 
 ---
 

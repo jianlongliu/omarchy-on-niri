@@ -308,10 +308,24 @@ index b2fb218..c64a57e 100644
    WlrLayershell.layer: WlrLayer.Overlay
    // Keyboard focus follows `open` (NOT `visible`). The window remains
 diff --git a/shell/plugins/background/Background.qml b/shell/plugins/background/Background.qml
-index dea93a4..0a06db4 100644
+index dea93a4..96b26b6 100644
 --- a/shell/plugins/background/Background.qml
 +++ b/shell/plugins/background/Background.qml
-@@ -152,7 +152,15 @@ Item {
+@@ -27,6 +27,13 @@ Item {
+   property string pendingColorsRaw: ""
+   property string pendingShellRaw: ""
+   property real revealProgress: 1
++  // Latched true the first time a wallpaper frame is actually decoded and on
++  // screen. A cold session spends most of its startup here -- every layer
++  // exists long before this image is painted -- so anyone holding something
++  // back until the shell has settled can wait on this instead of guessing a
++  // duration. Latched rather than live: a later theme switch must not read as
++  // "the shell is still starting".
++  property bool paintedOnce: false
+ 
+   // Injected by the first-party service loader; used to reach the lock and idle
+   // services so playback can stop whenever nothing can see the wallpaper.
+@@ -152,7 +159,15 @@ Item {
      id: readlinkProc
      command: ["readlink", "-f", root.currentBackgroundLink]
      stdout: StdioCollector {
@@ -328,8 +342,16 @@ index dea93a4..0a06db4 100644
      }
    }
  
+@@ -267,6 +282,7 @@ Item {
+         playbackEnabled: !root.sessionObscured && !root.powerSaverActive && !panel.fullscreenHere
+         audioEnabled: panel.firstScreen
+         onReadyChanged: {
++          if (ready) root.paintedOnce = true
+           if (ready && root.finishingTransition) {
+             root.incomingBackground = ""
+             root.oldBackground = ""
 diff --git a/shell/plugins/bar/Bar.qml b/shell/plugins/bar/Bar.qml
-index be9fece..87d561b 100644
+index be9fece..dee17ed 100644
 --- a/shell/plugins/bar/Bar.qml
 +++ b/shell/plugins/bar/Bar.qml
 @@ -1,5 +1,4 @@
@@ -338,7 +360,89 @@ index be9fece..87d561b 100644
  import Quickshell.Io
  import Quickshell.Wayland
  import QtQuick
-@@ -714,7 +713,7 @@ Item {
+@@ -40,6 +39,81 @@ Item {
+   // without an exclusion zone; updated by the FileView watcher further down.
+   property bool barHidden: false
+   property string home: Quickshell.env("HOME")
++
++  // Boot reveal. The host shell arms this only for a real login (the session
++  // wrapper drops a marker and shell.qml consumes it), so restarting the shell
++  // while working never moves the bar. At 0 the bar is parked past the screen
++  // edge and see-through; it falls into place at 1. See BarPanel.
++  // The host pushes this (see shell.qml pushBootReveal), so a bar never has to
++  // know whether it is the built-in one or a third-party plugin -- a plugin's
++  // `shell` is a restricted API that cannot see the marker.
++  property bool bootRevealArmed: false
++  onBootRevealArmedChanged: if (bootRevealArmed) root.armBootReveal()
++
++  property bool bootRevealStarted: false
++  property real bootReveal: 1
++  readonly property int bootHoldMs: 1400
++  readonly property int bootSlideMs: 1000
++  property double bootSlideStart: 0
++
++  function armBootReveal() {
++    if (root.bootRevealStarted) return
++    root.bootRevealStarted = true
++    root.bootReveal = 0
++    bootHoldTimer.start()
++  }
++
++  // Both ends gentle: it has to read as the bar floating down, not snapping.
++  function bootEase(t) {
++    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
++  }
++
++  // The hold is a plain timer, not an animation, and for a reason worth
++  // remembering: while the bar is parked its surface is not on screen, and an
++  // animation scheduled there is not "slow", it is invisible -- the clock runs,
++  // the frames do not, and the bar lands in one step (measured: a nominal
++  // 1800 + 1400 animation showed the bar at +0.9s). A timer has no such clock.
++  Timer {
++    id: bootHoldTimer
++    interval: root.bootHoldMs
++    onTriggered: {
++      root.bootSlideStart = Date.now()
++      bootSlideClock.start()
++    }
++  }
++
++  // The slide keeps its own clock for the same reason: every tick works the
++  // progress out from wall time, so a busy main thread can cost frames but
++  // never the duration.
++  Timer {
++    id: bootSlideClock
++    interval: 16
++    repeat: true
++    onTriggered: {
++      const t = (Date.now() - root.bootSlideStart) / root.bootSlideMs
++      if (t >= 1) {
++        bootSlideClock.stop()
++        root.bootReveal = 1
++      } else {
++        root.bootReveal = root.bootEase(t)
++      }
++    }
++  }
++
++  // Safety net: whatever happens above, the bar must never stay parked.
++  Timer {
++    interval: root.bootHoldMs + root.bootSlideMs + 400
++    running: root.bootRevealStarted
++    onTriggered: {
++      bootSlideClock.stop()
++      root.bootReveal = 1
++    }
++  }
++
++  // The arming arrives as a property the host sets, so it can land before or
++  // after this component is born; onBootRevealArmedChanged above catches it.
++
++
+   property string stateHome: home + "/.local/state"
+   property string omarchyConfigDir: home + "/.config/omarchy"
+   property var fallbackBarConfig: ({
+@@ -714,7 +788,7 @@ Item {
    // belongs. Empty until Hyprland reports one, which leaves panel routing on
    // its per-monitor fallback rather than guessing at an output.
    function focusedScreenName() {
@@ -347,6 +451,63 @@ index be9fece..87d561b 100644
      return monitor ? String(monitor.name || "") : ""
    }
  
+@@ -805,7 +879,10 @@ Item {
+     return source ? Util.fileUrl(source) : ""
+   }
+ 
+-  Component.onCompleted: applyBarConfig()
++  Component.onCompleted: {
++    applyBarConfig()
++    if (root.shell && root.shell.bootRevealArmed) root.armBootReveal()
++  }
+ 
+   // Revealing the indicators widens their section, which can slide a neighbour
+   // under a stationary pointer. Collapsing on that un-hover would move it back
+@@ -1248,12 +1325,20 @@ Item {
+     }
+ 
+     margins {
+-      top: root.barHidden && root.position === "top" ? -root.barSize : 0
+-      bottom: root.barHidden && root.position === "bottom" ? -root.barSize : 0
+-      left: root.barHidden && root.position === "left" ? -root.barSize : 0
+-      right: root.barHidden && root.position === "right" ? -root.barSize : 0
++      top: (root.barHidden && root.position === "top" ? -root.barSize : 0)
++           - (root.position === "top" ? bootPark : 0)
++      bottom: (root.barHidden && root.position === "bottom" ? -root.barSize : 0)
++              - (root.position === "bottom" ? bootPark : 0)
++      left: (root.barHidden && root.position === "left" ? -root.barSize : 0)
++            - (root.position === "left" ? bootPark : 0)
++      right: (root.barHidden && root.position === "right" ? -root.barSize : 0)
++             - (root.position === "right" ? bootPark : 0)
+     }
+ 
++    // Boot reveal: same parked-margin trick as hiding, so the bar slides in
++    // from behind the screen edge rather than fading in place.
++    readonly property real bootPark: root.barSize * (1 - root.bootReveal)
++
+     anchors {
+       top: root.position === "top" || root.vertical
+       bottom: root.position === "bottom" || root.vertical
+@@ -1263,7 +1348,10 @@ Item {
+ 
+     implicitWidth: root.vertical ? root.barSize : 0
+     implicitHeight: root.vertical ? 0 : root.barSize
+-    color: root.transparent ? "transparent" : root.background
++    // See-through while parked so the drop-in reads as one motion. At
++    // bootReveal 1 this is exactly root.background again.
++    color: root.transparent ? "transparent"
++      : Util.alpha(root.background, root.background.a * root.bootReveal)
+     surfaceFormat.opaque: false
+     WlrLayershell.namespace: "omarchy-bar"
+     WlrLayershell.layer: WlrLayer.Top
+@@ -1271,6 +1359,7 @@ Item {
+     Loader {
+       anchors.fill: parent
+       sourceComponent: root.vertical ? verticalBar : horizontalBar
++      opacity: root.bootReveal
+ 
+       // A child of the loader, not a sibling of the sections: an ancestor stays
+       // hovered while the pointer is over a widget, where a sibling would lose
 diff --git a/shell/plugins/bar/widgets/Workspaces.qml b/shell/plugins/bar/widgets/Workspaces.qml
 index ec0482a..985d1d9 100644
 --- a/shell/plugins/bar/widgets/Workspaces.qml
@@ -567,3 +728,83 @@ index 738529d..460565c 100644
    }
  
    function remove(desktopId, name) {
+diff --git a/shell/shell.qml b/shell/shell.qml
+index 8208062..27d31e4 100644
+--- a/shell/shell.qml
++++ b/shell/shell.qml
+@@ -2,6 +2,7 @@ import QtQuick
+ import QtQml.Models
+ import Quickshell
+ import Quickshell.Io
++import Quickshell.Wayland
+ 
+ import qs.Commons
+ 
+@@ -224,6 +225,18 @@ ShellRoot {
+     if ("pluginRegistry" in target) target.pluginRegistry = shell.pluginRegistryFor(manifest)
+     if ("barConfig" in target) target.barConfig = shell.barConfigFor(manifest)
+     shell.bar = target
++    shell.pushBootReveal()
++  }
++
++  // The boot reveal is the host's business -- it owns the marker -- so hand the
++  // flag over to whatever bar ends up configured rather than expecting every
++  // bar to reach it through `shell`: a third-party bar plugin only ever sees a
++  // restricted shell API, which has no view of the marker at all.
++  function pushBootReveal() {
++    if (shell.bar && "bootRevealArmed" in shell.bar)
++      shell.bar.bootRevealArmed = shell.bootRevealArmed
++    if (shell.bar && "bootRevealPainted" in shell.bar)
++      shell.bar.bootRevealPainted = shell.bootRevealWallpaperPainted
+   }
+ 
+   Component {
+@@ -263,6 +276,48 @@ ShellRoot {
+     }
+   }
+ 
++  // ------------------------------------------------------------- boot reveal
++  //
++  // The way out of the greeter is not one continuous picture: greetd hands the
++  // screen over through a text console, so niri comes up on black and this
++  // shell appears on top of it a moment later. From there the first seconds are
++  // the shell assembling itself -- bar widgets load one at a time, the menu
++  // model is re-read, the wallpaper decodes -- and watching that is ugly. So
++  // the bar drops in from behind the screen edge instead of appearing already
++  // built (see BarPanel in plugins/bar/Bar.qml), while the wallpaper underneath
++  // is left alone: no cover, nothing to dim, nothing to mismatch.
++  //
++  // Only a real login arms it: the session command (the split-greeter session
++  // wrapper) drops the marker in the runtime directory and the first shell to
++  // see it removes it, so restarting the shell while working neither moves the
++  // bar nor touches the screen.
++  readonly property string bootRevealMarker:
++    (Quickshell.env("XDG_RUNTIME_DIR") || "/run/user/0") + "/omarchy-boot-splash"
++  property bool bootRevealArmed: false
++  // When the shell counts as assembled. Everything structural -- bar, dock,
++  // widget loaders -- is up within a few hundred ms, but the background service
++  // decodes the wallpaper asynchronously and paints it last, so that image is
++  // the real end of startup. Latched inside the service, so a later theme or
++  // wallpaper switch cannot make the shell look like it is still starting.
++  readonly property bool bootRevealWallpaperPainted: {
++    var service = shell.serviceFor("omarchy.background")
++    return service ? service.paintedOnce === true : false
++  }
++  onBootRevealWallpaperPaintedChanged: shell.pushBootReveal()
++
++  FileView {
++    id: bootRevealMarkerFile
++    path: shell.bootRevealMarker
++    watchChanges: false
++    printErrors: false
++    onLoaded: {
++      shell.bootRevealArmed = true
++      shell.pushBootReveal()
++      Quickshell.execDetached(["rm", "-f", shell.bootRevealMarker])
++    }
++    onLoadFailed: shell.bootRevealArmed = false
++  }
++
+   // ------------------------------------------------------------- services
+   //
+   // Generic loader for any enabled plugin that declares kind "service".

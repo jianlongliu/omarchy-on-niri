@@ -17,7 +17,11 @@ environment {
     // here or nothing can find the synced theme.
     HOME "/var/lib/greeter"
     GREETER_USER "jianlongliu"
-    GREETER_SESSION "niri-session"
+    // Not niri-session directly: greetd gives the session the VT as stdout, so
+    // a wrapper gets to repaint the console and move the session's startup
+    // output off the screen before niri takes it over (2026-09-21, see
+    // docs/lock.md §11.26). It execs niri-session, so nothing else changes.
+    GREETER_SESSION "/etc/greetd/split-greeter/session"
     // Wallpaper and avatar come from the selected account's synced artwork
     // (split-greeter-sync); GREETER_ACCOUNTS_DIR moves that directory.
     GREETER_CORNER_RADIUS "10"

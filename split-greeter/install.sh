@@ -45,9 +45,24 @@ cat > /usr/local/bin/split-greeter <<'EOF'
 # greetd entry point for the Omarchy greeter: run the greeter's own niri
 # instance. Login user, session and wallpaper are the GREETER_* values in
 # /etc/greetd/split-greeter/niri.kdl.
+#
+# greetd gives this process the VT as stdout/stderr, and niri logs to stderr:
+# those lines sit in the console buffer while niri owns the screen, then get
+# dumped on it the moment the greeter exits -- the text that used to flash up
+# between the password and the desktop (docs/lock.md §11.26). Paint the buffer
+# black before niri can write to it, then keep our output in the log. Absolute
+# path on purpose: the greeter user's HOME is "/".
+log=/var/lib/greeter/greeter.log
+printf '\033[2J\033[H' >&1 2>/dev/null
+if : >>"$log" 2>/dev/null; then
+  exec >>"$log" 2>&1
+fi
 exec niri -c /etc/greetd/split-greeter/niri.kdl
 EOF
 chmod 755 /usr/local/bin/split-greeter
+
+# 2b. the session command itself (GREETER_SESSION in niri.kdl)
+install -m 755 "$SRC/session.sh" "$DEST/session"
 
 # 3. theme sync command
 install -m 755 "$SRC/sync.sh" /usr/local/bin/split-greeter-sync

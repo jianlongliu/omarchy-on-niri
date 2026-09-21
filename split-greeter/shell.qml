@@ -262,5 +262,26 @@ ShellRoot {
         item.picker = picker
       }
     }
+
+    // Handoff curtain (2026-09-21): the login screen fades to black before
+    // greetd is asked for the session, so the gap between the password and the
+    // desktop reads as a transition (Greetd.qml owns the timing, the desktop
+    // shell fades back in from the marker this handoff leaves behind). z is
+    // explicit because the design and the picker both fill the window.
+    Rectangle {
+      id: handoffVeil
+      anchors.fill: parent
+      color: "black"
+      opacity: greetd.handoffVeil
+      visible: opacity > 0
+      z: 1000
+
+      Behavior on opacity {
+        NumberAnimation {
+          duration: greetd.handoffFadeMs
+          easing.type: Easing.InQuad
+        }
+      }
+    }
   }
 }

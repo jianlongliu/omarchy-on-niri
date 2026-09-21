@@ -27,6 +27,8 @@ cursor {
     xcursor-theme "Bibata-Modern-Amber"
     xcursor-size 20
     hide-when-typing
+    // 开机加载期那根箭头：会话里指针没动过 → 1s 后自己消失（niri 无"立刻藏"接口）。
+    hide-after-inactive-ms 1000
 }
 
 include "monitor.kdl"
@@ -41,6 +43,11 @@ include "layout.kdl"
 // Launch the shell through omarchy's own supervisor (journal logging + relaunch
 // after a crash). Spawning quickshell bare means a dead shell leaves the session
 // stranded on the lock surface's bare background color with no way back.
+// 壁纸从会话第一帧就在：swaybg 几十 ms 就铺上"当前壁纸"软链指向的图，
+// Quickshell 的 omarchy.background 插件要 ~1.4s 才画出图（实测两份逐像素一致 ⇒ 无缝）。
+// ⚠ 必须排在下面 omarchy-launch-shell 之前：同一 background 层里后映射的在上。
+spawn-at-startup "swaybg" "-i" "/home/<user>/.local/state/omarchy/current/background" "-m" "fill"
+
 spawn-sh-at-startup "omarchy-launch-shell"
 
 // To run a shell command (with variables, pipes, etc.), use spawn-sh-at-startup:
