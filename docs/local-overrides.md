@@ -61,7 +61,7 @@
 | 路径 | 内容 | 生效方式 |
 |---|---|---|
 | `shell/` | 移植后的 Omarchy Quickshell 源码（层 1） | `install.sh` 把覆盖层 `git apply` 进 `$OMARCHY_PATH`（幂等），或手工 `~/bin/omarchy-niri-repatch` |
-| `port-bin/*`（8 个） | `hyprctl`、`uwsm-app`、`materal-update`、`omarchy-niri-system`、`omarchy-niri-apply-theme`、`omarchy-niri-repatch`、`omarchy-powerprofiles-{list,set}` | `install.sh` 拷进 `~/bin`（PATH-first） |
+| `port-bin/*`（12 个） | `hyprctl`、`uwsm-app`、`materal-update`、`omarchy-update`、`omarchy-niri-system`、`omarchy-niri-apply-theme`、`omarchy-niri-repatch`、`omarchy-picker-warmup`、`omarchy-display-text-size`、`omarchy-powerprofiles-{list,set}`、`omarchy-sleep-lock-start` | `install.sh` 拷进 `~/bin`（PATH-first） |
 | `niri-port/niri.patch` + `Niri.qml` + `plugins/blurwallpaper` | 覆盖层，挺过 `omarchy update` | `~/bin/omarchy-niri-repatch`（幂等） |
 | `niri-port/plugin-patches/` | 4 个第三方插件的本地魔改补丁（+ README 说明怎么生成/怎么重放） | 手工 `git apply`（无自动重放器） |
 | `scripts/kdl-sync.sh`、`scripts/local-files-sync.sh` | 机器 ↔ 仓库的对账：前者比 `niri-config/local/*.kdl`（家目录占位符），后者比 `local-config/` + `plugins/` + `split-lock/ir-light`（逐字节） | 各自直接跑；不在本机则 `skip` |
@@ -164,7 +164,7 @@
 |---|---|---|
 | `omarchy-crash-watch.service` | 本机版：`ExecStart` 指 `~/.local/share/omarchy/bin/omarchy-crash-watch`，并显式给 `PATH`/`OMARCHY_PATH`（用户管理器环境里没有这两样） | ✅ `default/systemd/user/`（模板指 `/usr/bin/…`，本机包不存在） |
 | `omarchy-picker-warmup.service` | `PICKER_WARMUP_DELAY=45` + `ExecStartPre=/bin/sleep`；`toggles/picker-warmup-off` 存在即跳过 | ✅ `default/systemd/user/`（`%h` 模板，2026-09-20 收进；`install.sh` 第 4 步装并链接） |
-| `omarchy-sleep-lock.service` | **本机版**：上游那份靠 `ConditionEnvironment=OMARCHY_PATH` 才启动，而该条件读的是**用户管理器**环境、**看不见单元自己的 `Environment=`**（2026-09-21 探针实证），本机又没 UWSM 去 import `OMARCHY_PATH` ⇒ 条件永远不成立。本机版删掉那条条件（保留本机确实满足的 `WAYLAND_DISPLAY`）、显式给 `OMARCHY_PATH`/`PATH`（`omarchy-system-sleep-lock` 里是裸 `omarchy-shell`）、`ExecStart` 指 `%h/.local/share/omarchy/bin/omarchy-system-sleep-monitor`。**合盖/挂起锁屏就靠它**，见 `lock.md` §11.28 | ✅ `local-config/systemd/user/`（2026-09-21 收进；装法 `systemctl --user enable --now omarchy-sleep-lock.service`） |
+| `omarchy-sleep-lock.service` | **本机版**：上游那两条 `ConditionEnvironment=` 全删 —— ① `OMARCHY_PATH` 那条读的是**用户管理器**环境、**看不见单元自己的 `Environment=`**（2026-09-21 探针实证），本机又没 UWSM 去 import 它；② 另一条 `WAYLAND_DISPLAY` 看着满足，但**条件是单元被拉起那刻评估的，而单元由 `graphical-session.target` 拉起、那会儿会话还没把环境发布进用户管理器**（2026-09-21 重启实证：20:10:17 被跳过、20:10:18 niri 才起来）⇒ 抑制剂挂不上、合盖不锁。本机版显式给 `OMARCHY_PATH`/`PATH`（`omarchy-system-sleep-lock` 里是裸 `omarchy-shell`），`ExecStart` 指包装器 `%h/bin/omarchy-sleep-lock-start`（`port-bin/omarchy-sleep-lock-start`：有界等会话环境发布 → 采纳 `WAYLAND_DISPLAY`/`XDG_RUNTIME_DIR`/`NIRI_SOCKET` 等 → `exec` 上游 monitor）。**合盖/挂起锁屏就靠它**，见 `lock.md` §11.28 | ✅ `local-config/systemd/user/` + `port-bin/`（2026-09-21 收进） |
 | `materal-recolor.{path,service}` | **是本移植的一部分**（不是无关物件）：`.path` 盯 Omarchy 壁纸文件，一变就拉起 oneshot `.service` 跑 `%h/bin/materal-update`（`port-bin/` 里的 matugen 包装，机制见主文档 §8.10）。上游没有、也没有包认领 | ✅ `local-config/systemd/user/`（2026-09-20 收进；装法 `systemctl --user enable --now materal-recolor.path`） |
 | `wechat-clipboard-sync`、`wl-clip-persist`、`wl-gammarelay`、`xsettingsd` | 与本移植无关（第一个是私人物件，后三个是通用 Wayland 守护进程；四者都无包认领），仅共存 | — |
 

@@ -1,0 +1,40 @@
+#!/bin/sh
+# Start the suspend-time lock monitor with the *graphical session's* environment.
+#
+# Why this wrapper exists instead of a bare ExecStart: our unit is pulled in by
+# graphical-session.target, which niri reaches about a second BEFORE it exports
+# WAYLAND_DISPLAY / XDG_SESSION_TYPE / NIRI_SOCKET into the user manager (measured
+# on this machine 2026-09-21: unit evaluated 20:10:17, niri up 20:10:18). A unit
+# started at that moment gets an environment snapshot with none of it, and the
+# monitor's later `omarchy-shell lock lock` then cannot reach the shell. So: wait
+# (bounded) for the session to publish its environment, adopt the few variables
+# the lock path needs, then hand over to the upstream monitor.
+#
+# Upstream guards this with ConditionEnvironment=WAYLAND_DISPLAY, which reads the
+# *user manager's* environment -- exactly the one that is not ready yet at that
+# point, so on boot the unit was silently skipped and closing the lid suspended
+# without locking. The condition is dropped from the unit; the wait lives here.
+#
+# See docs/lock.md §11.28, docs/local-overrides.md §6.
+
+set -u
+
+MONITOR="${OMARCHY_PATH:-$HOME/.local/share/omarchy}/bin/omarchy-system-sleep-monitor"
+VARS="WAYLAND_DISPLAY XDG_RUNTIME_DIR XDG_SESSION_TYPE NIRI_SOCKET XDG_CURRENT_DESKTOP DBUS_SESSION_BUS_ADDRESS"
+DEADLINE=$(($(date +%s) + 30))
+
+while :; do
+    env_dump=$(systemctl --user show-environment 2>/dev/null || true)
+    case "$env_dump" in
+        *WAYLAND_DISPLAY=*) break ;;
+    esac
+    [ "$(date +%s)" -ge "$DEADLINE" ] && break
+    sleep 0.5
+done
+
+for v in $VARS; do
+    val=$(printf '%s\n' "$env_dump" | sed -n "s/^$v=//p")
+    if [ -n "$val" ]; then export "$v=$val"; fi
+done
+
+exec "$MONITOR" "$@"
