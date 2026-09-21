@@ -152,7 +152,7 @@ hyprctl 调用面有界、可直接映射。
 ### 3.3 备份（重要，可回滚）
 
 > ⚠ 现状核对（2026-08-30）：下列两个 `config.kdl.bak-*` 文件**已不存在**（随后续重构清理）。
-> 当前 niri 配置的回滚手段为：`~/bin/hyprctl.bak-20260825-211843`（垫片旧版）、
+> 当前 niri 配置的回滚手段为：`~/.local/state/backups/bin/hyprctl.bak-20260825-211843`（垫片旧版）、
 > `~/.config/omarchy/niri-port/`（patch + Niri.qml 覆盖层）、以及 pub 仓库
 > `github.com/jianlongliu/omarchy-on-niri`（移植差分快照）。
 
@@ -161,30 +161,31 @@ hyprctl 调用面有界、可直接映射。
 | `~/.config/niri/config.kdl.bak-20260824-185918` | 最原始 niri 配置（未加 environment/spawn/binds） |
 | `~/.config/niri/config.kdl.bak-port-20260824-193206` | 加了 environment 后、改 spawn/binds 前 |
 
-> 现有 `~/.config/omarchy/niri-port/backups/` 里另有较新的可直接回滚的快照：
-> `shell.json.bak-20260919-013624`（加 bar 部件前）、`shell.json.bak-20260919-014210-prebar`
-> （上浮栏前）、`20260918-pre-merge/`（合并上游前整包）。
+> ⚠ 2026-09-21 复核：本节原先指的那批 `~/.config/omarchy/niri-port/backups/` 快照
+> （`shell.json.bak-20260919-013624` 加 bar 部件前、`shell.json.bak-20260919-014210-prebar` 上浮栏前、
+> `20260918-pre-merge/` 合并上游前整包）**该目录已不在机上**。要回滚就近用
+> `~/.local/state/backups/.config/omarchy/shell.json.bak-*` 或 pub 仓库的历史提交。
 >
-> 2026-09-20 新留的三个（本轮 bar / gaps / 菜单底色，就地放同目录）：`~/.config/omarchy/shell.json.bak-20260920-bar`、
-> `~/.config/omarchy/shell.toml.bak-20260920-menu`、`~/.config/niri/layout.kdl.bak-20260920-gaps`（§8 第 28–30 条）；
-> 电量数字置右那轮另有两个：`~/.local/share/omarchy/shell/plugins/panels/power/Panel.qml.bak-20260920-pctorder`、
-> `~/.config/omarchy/niri-port/niri.patch.bak-20260920-pctorder`。
+> 2026-09-20 新留的三个（本轮 bar / gaps / 菜单底色，就地放同目录）：`~/.local/state/backups/.config/omarchy/shell.json.bak-20260920-bar`、
+> `~/.local/state/backups/.config/omarchy/shell.toml.bak-20260920-menu`、`~/.local/state/backups/.config/niri/layout.kdl.bak-20260920-gaps`（§8 第 28–30 条）；
+> 电量数字置右那轮另有两个：`~/.local/state/backups/.local/share/omarchy/shell/plugins/panels/power/Panel.qml.bak-20260920-pctorder`、
+> `~/.local/state/backups/.config/omarchy/niri-port/niri.patch.bak-20260920-pctorder`。
 >
-> 2026-09-20 下半场（bar 字号统一，§8 第 31 条）新留四个：`~/.local/share/omarchy/shell/Commons/Style.qml.bak-20260920-bartoken`、
-> `~/.config/omarchy/niri-port/niri.patch.bak-20260920-bartoken`、`~/.config/omarchy/shell.toml.bak-20260920-iconfont`、
-> `~/.config/omarchy/shell.json.bak-20260920-bardisplay`（后者是恢复 ai-subs `barDisplay` 前的快照）。
+> 2026-09-20 下半场（bar 字号统一，§8 第 31 条）新留四个：`~/.local/state/backups/.local/share/omarchy/shell/Commons/Style.qml.bak-20260920-bartoken`、
+> `~/.local/state/backups/.config/omarchy/niri-port/niri.patch.bak-20260920-bartoken`、`~/.local/state/backups/.config/omarchy/shell.toml.bak-20260920-iconfont`、
+> `~/.local/state/backups/.config/omarchy/shell.json.bak-20260920-bardisplay`（后者是恢复 ai-subs `barDisplay` 前的快照）。
 >
 > 2026-09-20 晚间（吐司"一有通知整屏变糊"，§8 第 32 条）新留三个：
-> `~/.local/share/omarchy/shell/plugins/notifications/Service.qml.bak-20260920-notifblur`、
-> `~/.config/niri/effects.kdl.bak-20260920-blurnotif`、
-> `~/.config/omarchy/niri-port/niri.patch.bak-20260920-notifblur`。
+> `~/.local/state/backups/.local/share/omarchy/shell/plugins/notifications/Service.qml.bak-20260920-notifblur`、
+> `~/.local/state/backups/.config/niri/effects.kdl.bak-20260920-blurnotif`、
+> `~/.local/state/backups/.config/omarchy/niri-port/niri.patch.bak-20260920-notifblur`。
 >
 > 2026-09-21（交接过渡，`docs/visual.md` 第 33 条 / `docs/lock.md` §11.26）新留几个：
-> `~/.local/share/omarchy/shell/shell.qml.bak-20260921-bootcurtain`（= 上游 HEAD 版，单文件回退用）、
-> `~/.config/omarchy/niri-port/niri.patch.bak-20260921-bootcurtain`（= 21 文件/38 hunk 那版）、
-> `~/.config/omarchy/niri-port/niri.patch.bak-20260921-bootcurtain2`（= 22 文件/40 hunk 的黑幕版）、
-> `~/.config/omarchy/niri-port/niri.patch.bak-20260921-bootreveal`（= 22 文件/45 hunk 的"内置 bar 滑入"版；当前版在其上加了宿主推送，并把真正生效的浮动 bar 挪进插件补丁）。
-> `~/.config/omarchy/niri-port/niri.patch.bak-20260921-192644`（= 22 文件/46 hunk 版；活体已经改出 `paintedOnce` / `pushBootReveal()` 增补而补丁没跟上，repatch 一度 exit 2，当晚重导出为 48 hunk 版）。
+> `~/.local/state/backups/.local/share/omarchy/shell/shell.qml.bak-20260921-bootcurtain`（= 上游 HEAD 版，单文件回退用）、
+> `~/.local/state/backups/.config/omarchy/niri-port/niri.patch.bak-20260921-bootcurtain`（= 21 文件/38 hunk 那版）、
+> `~/.local/state/backups/.config/omarchy/niri-port/niri.patch.bak-20260921-bootcurtain2`（= 22 文件/40 hunk 的黑幕版）、
+> `~/.local/state/backups/.config/omarchy/niri-port/niri.patch.bak-20260921-bootreveal`（= 22 文件/45 hunk 的"内置 bar 滑入"版；当前版在其上加了宿主推送，并把真正生效的浮动 bar 挪进插件补丁）。
+> `~/.local/state/backups/.config/omarchy/niri-port/niri.patch.bak-20260921-192644`（= 22 文件/46 hunk 版；活体已经改出 `paintedOnce` / `pushBootReveal()` 增补而补丁没跟上，repatch 一度 exit 2，当晚重导出为 48 hunk 版）。
 
 ---
 

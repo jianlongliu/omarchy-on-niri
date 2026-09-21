@@ -17,6 +17,8 @@ token
 *subscription*
 mihomo*.yaml
 
-# `.bak-*` 是本机的回退副本（每份配置旁边都留一个），一律只在本地、不进仓库
-# —— 见 docs/local-overrides.md §8 第 3 条与 niri-config/README.md 的改动纪律。
-*.bak-*
+# 备份副本一律只在本地、不进仓库。2026-09-21 起本机备份统一搬进独立目录
+# ~/.local/state/backups/（结构镜像 $HOME，如 ~/.local/state/backups/.config/niri/layout.kdl.bak-20260921-bgcolor），
+# 所以仓库树里本不该再出现备份；下面这条是防手滑的兜底（理由与清单见 docs/local-overrides.md §0.1）。
+# 规则用 `*.bak*` 而不是 `*.bak-*`：后者覆盖不到不带时间戳的 `x.bak` 这类。
+*.bak*

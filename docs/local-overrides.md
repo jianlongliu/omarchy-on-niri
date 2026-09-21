@@ -20,6 +20,42 @@
 
 ---
 
+## 0.1 备份存放约定（2026-09-21 起）
+
+**所有"改前留一份"的备份集中在一个独立目录：`~/.local/state/backups/`，目录结构镜像 `$HOME`。**
+
+```
+原文件                                备份
+~/.config/niri/layout.kdl             →  ~/.local/state/backups/.config/niri/layout.kdl.bak-<后缀>
+~/.config/omarchy/shell.json          →  ~/.local/state/backups/.config/omarchy/shell.json.bak-<后缀>
+~/bin/hyprctl                         →  ~/.local/state/backups/bin/hyprctl.bak-<后缀>
+~/.local/share/omarchy/shell/shell.qml → ~/.local/state/backups/.local/share/omarchy/shell/shell.qml.bak-<后缀>
+```
+
+- **备份文件名 = 原文件名 + `.bak-<后缀>`**（不再加前导点 —— 它已经不在 `ls` 视野里了）。
+- **回退一律一条命令**：`cp <备份> <原位置>`，例如
+  `cp ~/.local/state/backups/.config/niri/layout.kdl.bak-20260921-bgcolor ~/.config/niri/layout.kdl`。
+- **找备份不用翻目录**：`find ~/.local/state/backups -name 'layout.kdl.bak-*'` —— 文档里凡写
+  `xxx.bak-<后缀>` / `.bak-<后缀>`（省了主文件名的简写）的，都按这条到备份根里找。
+- 为什么不是"就地隐藏"（2026-09-21 上半场的做法）：藏起来仍然散在 20 多个目录里，`find ~/.config -name '*bak*'`
+  照样一地；用户当面定的最终方案是"**独立目录 + 镜像树**"（原话："备份到独立目录去"）。
+- **造备份的代码也得照这条写**：`port-bin/omarchy-niri-apply-theme` 原先写可见的
+  `layout.kdl.bak-niri-theme`，而它**每次换主题都会跑** —— 现在走 `backup_path()` 写进备份根
+  （有沙盒测试：临时 `$HOME` 副本 + 制造颜色差异 → 断言备份只落在
+  `<假 HOME>/.local/state/backups/.config/niri/layout.kdl.bak-niri-theme`、内容为改动前原文、config 目录零残留）。
+- **迁移记录**：77 个（`~/.config` + `~/bin`）+ 4 个（上游 checkout `~/.local/share/omarchy`）+ 1 个 dconf dump
+  = 82 个文件搬进备份根，**只搬不改内容**（搬前/搬后 `md5sum` 多重集逐个相同）。旧的整包备份目录
+  `~/.config/omarchy/backups/`（插件改名时的整个插件目录快照）也一并搬进 `~/.local/state/backups/.config/omarchy/backups/`；
+  备份根现共 97 文件 / 1.1 M。
+- **`~/.local/state/` 不会被清缓存**（`~/.cache` 才会），适合放要留着的回退副本。
+- **上游自己的备份逻辑不归本移植管**：`omarchy-refresh-config` 写 `<file>.bak.<epoch>`（可见、就地），
+  `omarchy-plugin-remove` 写 `.<id>.bak.<ts>`。装第三方配置里那批（opencode / DankMaterialShell / gtk / qt6ct /
+  fastfetch / xsettingsd / environment.d / fcitx5）都按本条收进备份根了。
+- 本条只管**备份**。清 `ls` 时顺手挖出的两个"旧版本脚本"与一个"旧时代配置存档"（不是备份）
+  加点隐藏、**没有删**，清单与来历见 §8 第 13 条。
+
+---
+
 ## 1. 仓库内（随 git 走：`~/Projects/omarchy-on-niri`）
 
 | 路径 | 内容 | 生效方式 |
@@ -88,9 +124,9 @@
 ## 4. niri 配置（`~/.config/niri/`）
 
 - 文件：`config.kdl`（只留 include 与会话级设置）、`binds.kdl`、`layout.kdl`、`window-rules.kdl`、
-  `effects.kdl`、`input.kdl`、`monitor.kdl`；每个旁边都有 `.bak-*`（改前必留）。
+  `effects.kdl`、`input.kdl`、`monitor.kdl`；每个都在备份根留了 `.bak-*`（改前必留）。
   **2026-09-20 已收进仓库**：`niri-config/local/`（家目录参数化成 `/home/<user>`，说明见该目录 README）。
-  **2026-09-21 两处新改**：① `layout.kdl` 的 `layout { background-color }` —— 这就是**开机到壁纸画出来之间那一屏的底色**（niri 内建默认 `#404040` 深灰，配置里原本没人设过；实测用 `#FF00FF` 试色当场生效），现设成**当前壁纸的平均色**（`magick <bg> -resize 1x1!` 取，当时 `#BDBDBE`），开机那屏因此从"深灰洞"变成与壁纸亮部接近的平色；换壁纸后可跟着重取。② `config.kdl` 的 `cursor` 块加了 `hide-after-inactive-ms 1000`（原块已有 `hide-when-typing`、`Bibata-Modern-Amber` 20）：想让**开机那根箭头**自己消失——niri 没有"立刻藏"的接口，这是唯一的旋钮；副作用是平时停手 1s 箭头也没。备份 `layout.kdl.bak-20260921-bgcolor`、`config.kdl.bak-20260921-cursor`。
+  **2026-09-21 两处新改**：① `layout.kdl` 的 `layout { background-color }` —— 这就是**开机到壁纸画出来之间那一屏的底色**（niri 内建默认 `#404040` 深灰，配置里原本没人设过；实测用 `#FF00FF` 试色当场生效），现设成**当前壁纸的平均色**（`magick <bg> -resize 1x1!` 取，当时 `#BDBDBE`），开机那屏因此从"深灰洞"变成与壁纸亮部接近的平色；换壁纸后可跟着重取。② `config.kdl` 的 `cursor` 块加了 `hide-after-inactive-ms 1000`（原块已有 `hide-when-typing`、`Bibata-Modern-Amber` 20）：想让**开机那根箭头**自己消失——niri 没有"立刻藏"的接口，这是唯一的旋钮；副作用是平时停手 1s 箭头也没。备份 `config.kdl.bak-20260921-cursor`（`layout.kdl` 那份 `bgcolor` 备份已随后续改动清掉）。
 - **壁纸从会话第一帧就在（2026-09-21 晚，本机新装的包）**：`swaybg`（**extra 仓库 `pacman -S swaybg`，1.2.2-1，非 omarchy 自带**）由 `config.kdl` 的 `spawn-at-startup "swaybg" "-i" "/home/<user>/.local/state/omarchy/current/background" "-m" "fill"` 拉起（走 omarchy 的"当前壁纸"软链 ⇒ 换壁纸自动跟）。
   动机：Quickshell 的 `omarchy.background` 要 ~1.4s 才画出壁纸，这段只有一屏底色（见 `docs/lock.md` §11.27 的"② 可打的部分"）。
   **实测三点**：① `-m fill` = 源图 cover 居中，与插件渲染**逐像素一致**（130 个纯壁纸区块差 0.01/255）⇒ 插件那份上来时无缝；② 杀掉壳层后壁纸仍在（顺带成壳层崩溃时的兜底）；③ **同一 background 层内"后映射的在上"**——把 swaybg 起在壳层之后它就压住插件那份（用一张品红测试图复现：此时换壁纸会看到旧图）。
@@ -115,6 +151,7 @@
 | `/etc/greetd/split-greeter/` | 登录器 shell + bridge（world readable） | 重跑 `split-greeter/install.sh` |
 | `/usr/local/bin/{split-greeter,split-greeter-sync,ir-light}` | 登录器入口、主题/壁纸同步、IR 补光 | 前两个重跑对应 `install.sh`；`ir-light` 仓库副本 `split-lock/ir-light`。**它硬件专属**：写死 `open("/dev/video2")` + UVC 扩展单元 `unit=13 selector=14`（ThinkPad X1 Carbon Gen9 的 Chicony 04f2:b6ea），换机要按自己 IR 摄像头改这两处，否则只是点不亮灯（PAM 里是 `optional`，坏了不会把人锁在外面）。仓库那份必须与 `/usr/local/bin/ir-light` **逐字节相同**（`scripts/local-files-sync.sh` 就守这条），所以说明只能写在这里 |
 | `/usr/local/bin/omarchy-greeter`、`omarchy-greeter-sync` | 兼容软链 → `split-*` | — |
+| `/etc/systemd/logind.conf.d/20-inhibit-delay.conf` | `[Login] InhibitDelayMaxSec=15`（2026-09-21 装，用户拍板）：`omarchy-sleep-lock.service` 的延迟抑制剂窗口上限，给"合盖→锁"留 ~12s 预算（不装只有默认 5s ⇒ 4s 预算）。源件是上游 `$OMARCHY_PATH/etc/systemd/logind.conf.d/20-inhibit-delay.conf`，逐字照抄 | `pkexec rm /etc/systemd/logind.conf.d/20-inhibit-delay.conf && systemctl reload systemd-logind`（**改前本机没有这个文件**；同目录另有更早的 `lid-suspend.conf`，三档合盖都设 `suspend`，2026-05-19 装机写入） |
 
 - 换主题/壁纸后同步到登录页：`sudo split-greeter-sync "$USER"`（还有实验账户时要一起列）。
 - 登录页切换是唯一会把自己锁在外面的步骤，所以 `split-greeter/install.sh` **故意不碰 `config.toml`**。
@@ -127,10 +164,11 @@
 |---|---|---|
 | `omarchy-crash-watch.service` | 本机版：`ExecStart` 指 `~/.local/share/omarchy/bin/omarchy-crash-watch`，并显式给 `PATH`/`OMARCHY_PATH`（用户管理器环境里没有这两样） | ✅ `default/systemd/user/`（模板指 `/usr/bin/…`，本机包不存在） |
 | `omarchy-picker-warmup.service` | `PICKER_WARMUP_DELAY=45` + `ExecStartPre=/bin/sleep`；`toggles/picker-warmup-off` 存在即跳过 | ✅ `default/systemd/user/`（`%h` 模板，2026-09-20 收进；`install.sh` 第 4 步装并链接） |
+| `omarchy-sleep-lock.service` | **本机版**：上游那份靠 `ConditionEnvironment=OMARCHY_PATH` 才启动，而该条件读的是**用户管理器**环境、**看不见单元自己的 `Environment=`**（2026-09-21 探针实证），本机又没 UWSM 去 import `OMARCHY_PATH` ⇒ 条件永远不成立。本机版删掉那条条件（保留本机确实满足的 `WAYLAND_DISPLAY`）、显式给 `OMARCHY_PATH`/`PATH`（`omarchy-system-sleep-lock` 里是裸 `omarchy-shell`）、`ExecStart` 指 `%h/.local/share/omarchy/bin/omarchy-system-sleep-monitor`。**合盖/挂起锁屏就靠它**，见 `lock.md` §11.28 | ✅ `local-config/systemd/user/`（2026-09-21 收进；装法 `systemctl --user enable --now omarchy-sleep-lock.service`） |
 | `materal-recolor.{path,service}` | **是本移植的一部分**（不是无关物件）：`.path` 盯 Omarchy 壁纸文件，一变就拉起 oneshot `.service` 跑 `%h/bin/materal-update`（`port-bin/` 里的 matugen 包装，机制见主文档 §8.10）。上游没有、也没有包认领 | ✅ `local-config/systemd/user/`（2026-09-20 收进；装法 `systemctl --user enable --now materal-recolor.path`） |
 | `wechat-clipboard-sync`、`wl-clip-persist`、`wl-gammarelay`、`xsettingsd` | 与本移植无关（第一个是私人物件，后三个是通用 Wayland 守护进程；四者都无包认领），仅共存 | — |
 
-- 两个 omarchy 单元都软链进 `graphical-session.target.wants/`。
+- 三个 omarchy 单元都软链进 `graphical-session.target.wants/`（**`omarchy-sleep-lock` 是 2026-09-21 才补上的**：本机走 dev-link 装机、绕过上游 first-run 的 `enable-user-units.sh`，所以那批单元集体没装；逐个查过后只有它是真缺口，见 `lock.md` §11.28）。
 
 ---
 
@@ -163,7 +201,7 @@ git apply --reverse --check niri.patch   # 必须通过
 2. ~~`omarchy-picker-warmup.service`~~ **已收进仓库**：`default/systemd/user/omarchy-picker-warmup.service`
    （写成 `%h` 模板；本机那份是写死 `~` 的等价物）
 3. ~~`plugin-patches`~~ **已收进仓库（2026-09-20）**：`niri-port/plugin-patches/`（4 个 patch + README，
-   说明怎么 `git diff` 生成、怎么 `git apply` 重放）；机器上同目录的 `.bak-*` 是历史，仍只在本地。
+   说明怎么 `git diff` 生成、怎么 `git apply` 重放）；机器上这些 patch 的 `.bak-*` 是历史，仍只在本地（备份根里）。
 4. ~~`~/.config/omarchy/{shell.json,shell.toml,extensions/omarchy-menu.jsonc}` 的实际取值~~
    **已收进仓库（2026-09-21）**：`local-config/omarchy/{shell.json,shell.toml,extensions/omarchy-menu.jsonc}`
    （照 `local-config/` 的样子逐字节镜像，`local-files-sync.sh` 自动认，已验 rc=0）。三份复扫过
@@ -200,6 +238,15 @@ git apply --reverse --check niri.patch   # 必须通过
     （此前 §6 把它误判成"与本移植无关"，其实它跑的就是 `port-bin/materal-update`）。
 12. `~/.config/omarchy/{backgrounds,themes}`（壁纸与个人主题，3.3 M）、`~/.config/{Code,Discord,starship.toml,…}`
     —— **不打算收**：个人素材与私人偏好，与本移植无关。
+13. **三个"旧存档"（2026-09-21 清 `ls` 时挖出来的，都不是备份、都没人引用，一律加点隐藏、不删）**：
+    - `~/bin/.clipboard-sync.bad`（762 B，2026-08-13 01:08）：微信剪贴板同步的**死锁版** —— `wl-paste --watch`
+      的回调里再调 `wl-paste`，在 wl-clipboard 2.3 上自己锁自己（活的那份 `~/bin/clipboard-sync.sh` 是 7 分钟后
+      重写的架构：watch 只打标记、独立循环消费 + `flock` 单实例；`wechat-clipboard-sync.service` 用的是它）。
+    - `~/bin/.wechat.plan-b`（283 B，2026-08-13）：微信启动器备用版；活的 `~/bin/wechat` 是 2026-09-20 版，
+      多一个 `--in-process-gpu`。
+    - `~/.config/.niri-dms-retired-20260919/`（15 个文件）：**DMS 时代的 niri 配置存档**
+      （`config.kdl` + `user.kdl` + `dms/*.kdl` 九个 + `gtk-4.0-stale/` 两份，8 月那批），2026-09-19 移植接管时
+      整个退役、留作回滚点。**本文档此前从没记过它**（所以清 `ls` 时才像新发现一样冒出来）。
 
 ---
 
@@ -209,7 +256,7 @@ git apply --reverse --check niri.patch   # 必须通过
 |---|---|
 | 某个 `~/bin` 垫片 | `rm ~/bin/<名字>` |
 | 覆盖层（回到上游 omarchy） | 在 `$OMARCHY_PATH` 里 `git apply -R ~/.config/omarchy/niri-port/niri.patch`（`omarchy-niri-repatch` **没有**反向开关，反向只能手动 `git apply -R`） |
-| 用户级 shell 配置 | 用同目录 `.bak-*` 覆盖回去（热生效，存盘即回） |
+| 用户级 shell 配置 | 从备份根覆盖回去：`cp ~/.local/state/backups/.config/omarchy/<文件>.bak-* ~/.config/omarchy/<文件>`（热生效，存盘即回） |
 | 桌面交接的 bar 滑入（boot reveal） | 反向重放旧覆盖层 `niri.patch.bak-20260921-bootcurtain2`（= 上一版）或 `…bootcurtain`（= 更早的黑幕版），再 `omarchy-restart-shell`；只想关掉动画：删 `$XDG_RUNTIME_DIR/omarchy-boot-splash` 的写入者（`split-greeter/session.sh` 那行）或干脆不装它 |
 | 登录交接的另外三处（刷黑 + 输出改道 + 登录面淡出） | 用仓库 HEAD 覆盖 `split-greeter/{install.sh,niri.kdl,Greetd.qml,shell.qml}` 并删 `session.sh`，`GREETER_SESSION` 改回 `niri-session`，重跑 `pkexec ./install.sh` |
 | 登录页 | 恢复 `/etc/greetd/config.toml.backup-*`，再 `systemctl restart greetd`（**在 TTY 里做**） |

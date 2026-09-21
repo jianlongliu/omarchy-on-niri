@@ -68,9 +68,9 @@ Back up first, then merge. Copy the relevant lines from generating the template 
 path in place of `__HOME__`:
 
 ```sh
-mkdir -p ~/.config/niri
+mkdir -p ~/.config/niri ~/.local/state/backups/.config/niri
 sed "s|__HOME__|$HOME|g" "$REPO/niri-config/omarchy.kdl.template" > ~/.config/niri/omarchy.kdl
-cp ~/.config/niri/config.kdl ~/.config/niri/config.kdl.bak 2>/dev/null || true
+cp ~/.config/niri/config.kdl ~/.local/state/backups/.config/niri/config.kdl.bak 2>/dev/null || true
 ```
 
 Then edit `~/.config/niri/config.kdl`:

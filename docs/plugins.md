@@ -227,7 +227,7 @@ journalctl -t omarchy-shell --since "-10min" | tail -50
   图标比同级数字高一截是 **Nerd Font 的光学对齐，不是错**。测法=**墨高指纹**：`grim` 截 bar 条 →
   逐列减背景取墨 → 按块量字高；`tesseract` 也能读（左组原本字号太小，OCR 一个字都认不出来，提档后能认出）。
 - **回退**：`git -C ~/.config/omarchy/plugins/meviusisback.ai-subs checkout -- Panel.qml` + `omarchy-restart-shell`。
-  备份：`Panel.qml.bak-20260920-fontsize`、旧 patch `…ai-subs.patch.bak-20260920-fontsize`（都在原地）。
+  备份：`Panel.qml.bak-20260920-fontsize`、旧 patch `…ai-subs.patch.bak-20260920-fontsize`（都在备份根，见 `local-overrides.md` §0.1）。
 
 ### 5.2 `ronald.input-sources` —— 输入源徽章
 
@@ -282,12 +282,12 @@ journalctl -t omarchy-shell --since "-10min" | tail -50
   空 ws3 还挂在 `niri msg workspaces` 里），胶囊照样只画 2 个点 —— 否则一逛工作区就永远回不去 2 个点。
 - 聚焦空工作区时也把它算进 `N`（`w.focused` 那半边），不然跳过去的瞬间胶囊会把自己藏掉。
 - 改法：`~/.config/omarchy/plugins/jianlongliu.workspaces/Workspaces.qml` 的 `workspaceIds()`；
-  备份 `Workspaces.qml.bak-20260920-capsuledots`（原地），patch 存档
+  备份 `Workspaces.qml.bak-20260920-capsuledots`（在备份根），patch 存档
   `plugin-patches/jianlongliu.workspaces.patch`（**该目录没有 git**，用 `diff -u --label a/… --label b/…` 生成，
   `git apply --reverse --check` 通过 = 与工作树一致）。它**不进 `omarchy plugin update` 那条流程**（§6 只管有 `.git` 的）。
 - 生效/验收：QML 不热更 → `omarchy-restart-shell`；`debugBarGeometry` 里 `jianlongliu.workspaces` 宽度
   只有 ws1 时 **~104 → 52**；肉眼数点子用 `grim -g "0,0 200x40" /tmp/bar.png`。
-- 回退：`cp Workspaces.qml.bak-20260920-capsuledots Workspaces.qml && omarchy-restart-shell`。
+- 回退：`cp ~/.local/state/backups/.config/omarchy/plugins/jianlongliu.workspaces/Workspaces.qml.bak-20260920-capsuledots ~/.config/omarchy/plugins/jianlongliu.workspaces/Workspaces.qml && omarchy-restart-shell`。
 
 ### 5.6 `io.github.claudsondouglas.arcdock` —— macOS 风格 dock
 
@@ -407,8 +407,9 @@ omarchy-restart-shell                               # QML 不热更，必须重�
   2026-09-19；模糊区域形状由插件下发的圆角 `blurRegion` 决定，原因与实测见视觉调整卷 `docs/visual.md` §8.8）。
 - 第三方部件：`ryuhzk.ime` **2026-09-19 被 `ronald.input-sources` 取代**（macOS 式输入源徽章，见 `docs/behavior.md` §8.17）；
   `charlieras262.omablur` **已于 2026-09-19 从 `shell.json` 的 right 数组摘掉**
-  （插件文件仍留在 `~/.config/omarchy/plugins/`，想加回就把它填回 right 数组；备份
-  `~/.config/omarchy/niri-port/backups/shell.json.bak-20260919-032126-pre-omablur`）。
+  （插件文件仍留在 `~/.config/omarchy/plugins/`，想加回就把它填回 right 数组；那轮的 `shell.json` 备份写在
+  `~/.config/omarchy/niri-port/backups/shell.json.bak-20260919-032126-pre-omablur`，**该 `backups/` 目录
+  2026-09-21 已不在机上**，回退就近用 `~/.local/state/backups/.config/omarchy/shell.json.bak-*` 或 `git log`）。
   **它在 niri 上是空转**（2026-09-19 核）：滑块读的是垫子写死的 `hyprctl -j getoption decoration:*`
   （`{"int":12,...}`），应用走 `hyprctl eval 'hl.config({...})'`——垫子对 `hl.config` 是**空操作**（exit 0、不改
   任何东西），持久化还写 `~/.config/hypr/looknfeel.lua`（niri 上已被降级的 Layer-2）。niri 的真值在

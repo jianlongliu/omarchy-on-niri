@@ -139,7 +139,7 @@ done < run-list.txt
 | 需 root / 改系统底层 | 44 | 保留标记，**不执行** | 会顶掉 systemd-boot（`1789325478` 装 `linux-omarchy` 并设为 Limine 首启动项）、重建 initramfs（`1786482992`/`1784917531`/`1786605598`/`1784476564`）、退役 systemd-networkd（`1782002156`）、关 sshd 密码认证（`1788124236`）、删 `/etc/sudoers.d` 与 `/etc/systemd/system` 下退役文件（`1788025225`）、要求本机未配置的 Omarchy 签名仓库（`1787589206`/`1784672586`/`1787399318`/`1786952219`）——均违反 §1 |
 | 安装额外 CLI | 12 | 保留标记，**不执行** | 用户只要 `cf`；Basecamp 系与各编码 agent 不用 |
 | 交互式提问 | 1（`1786549201`） | 保留标记，**不执行** | 非交互环境会挂起 |
-| 本机不适用 | 1（`1785608166`） | 保留标记，**不执行** | 修 `omarchy-sleep-lock.service` 单元；本机无此单元（Omarchy 的 systemd 集成，niri 侧未使用），永远不可能成功 |
+| 本机不适用 → **2026-09-21 已另行解决** | 1（`1785608166`） | 保留标记，**不执行** | 修 `omarchy-sleep-lock.service` 单元。**原记的理由不准**：不是"niri 侧未使用"，而是①上游单元的 `ConditionEnvironment=OMARCHY_PATH` 在本机永远不成立（该条件读的是用户管理器环境，本机没有 UWSM 去 import 它），②本机 dev-link 装机绕过了 first-run 的 `enable-user-units.sh` ⇒ 这个单元**压根没装过**，合盖直接 suspend、不锁屏。2026-09-21 已用自建单元补上，见 `local-overrides.md` §6 与 `lock.md` §11.28 |
 
 执行结果：**33 条实跑，30 条一次通过**；2 条因缺 `mise` 失败（`1787215483`、`1789095456`），装上
 `mise` 后重跑通过。最终 `omarchy-migrate --pending` 为空，后续 `omarchy update` 不会重放历史。

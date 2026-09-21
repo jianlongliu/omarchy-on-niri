@@ -47,7 +47,7 @@
       `Ctrl+Shift+Esc` → btop（后两个在新终端里跑：`omarchy-launch-terminal yazi|btop`）。
     - **`Mod+Shift+E`（退 niri 会话）不是重复项**，保留——"关窗口"和"退会话"是两件事。
     - 做法：被合并的旧键**就地注释成 `// dropped: …`**（不删行，要恢复取消注释即可），
-      备份 `~/.config/niri/binds.kdl.bak-dedup-*`；`niri validate` 通过、生效行无重复键。
+      备份 `~/.local/state/backups/.config/niri/binds.kdl.bak-dedup-20260920-043728`；`niri validate` 通过、生效行无重复键。
     - **终端类一律走 `omarchy-launch-terminal`**（与菜单同一条路、自带"跟随当前终端 cwd"），不裸调
       `xdg-terminal-exec`——这条依赖垫片在位（§8 第 22 条）。`Mod+Z` 的实测恰好把垫片 v1.0 的 `setsid`
       坑顶了出来（`systemd-run` 路径静默死，见 §8 第 22 条 v1.1），修完 3 秒出 Zen 窗口。
@@ -86,8 +86,8 @@
       （这条是本次自己踩的，改完才 `config is valid`）。② nautilus 是单实例 / D-Bus 激活：**已有窗口时再按 Super+E 只是聚焦**
       （旧窗口当初就没浮动，规则也不会回头改它，规则只作用于新窗口）；要每次开新的浮动窗就把 bind 写成
       `spawn "nautilus" "--new-window"`。手动把当前窗口切浮动是 `Mod+V`。
-    - 回退：还原 `~/.config/niri/binds.kdl.bak-20260920-floatbinds` 与
-      `~/.config/niri/window-rules.kdl.bak-20260920-floatbinds`，再 `niri validate`。
+    - 回退：还原 `~/.local/state/backups/.config/niri/binds.kdl.bak-20260920-floatbinds` 与
+      `~/.local/state/backups/.config/niri/window-rules.kdl.bak-20260920-floatbinds`，再 `niri validate`。
 
 ---
 
@@ -176,7 +176,7 @@
     - **屏蔽（入口）**：用户 override 加 6 条 `when:"false"` —— `system.screensaver`（System 菜单）、
       `trigger.toggle.screensaver`（Trigger→Toggle）、`style.screensaver` 及其 `.text`/`.image`/`.default`
       （Style→Screensaver 那组 branding）。这几条是**唯独带 `force`、能绕过上面那个开关**的入口，
-      不屏蔽就等于开关形同虚设。备份 `~/.config/omarchy/extensions/omarchy-menu.jsonc.bak-20260920-prescreensaver`。
+      不屏蔽就等于开关形同虚设。备份 `~/.local/state/backups/.config/omarchy/extensions/omarchy-menu.jsonc.bak-20260920-prescreensaver`。
     - **别去动 `idle.screensaver`**：计时是 `min(screensaver, lock)` + 差值的两段式，把它调成等于 `lock`
       会让 screensaver 在锁屏那一刻抢跑（`screensaverDelay = 0`），比现在更糟。停掉的功能不需要改超时。
     - 回退：`omarchy-toggle screensaver-off off` + 还原上面那个备份。触发点已全局扫过：没有 systemd 单元、
@@ -220,8 +220,9 @@ ShareInputState=All
 ```
 
 再 `fcitx5-remote -r`。效果：切一次中文后所有输入框都保持中文（接近 macOS），只有 fcitx5 启动后的
-第一个上下文是英文。备份：`~/.config/fcitx5/profile.bak-0428`（加源前）、`~/.config/fcitx5/config.bak-0435`
-（改共享状态前）。一键回到单源（徽章随之隐藏）：
+第一个上下文是英文。备份原为 `~/.config/fcitx5/profile.bak-0428`（加源前）、`~/.config/fcitx5/config.bak-0435`
+（改共享状态前）—— **这两份 2026-09-21 复核已不在机上**，现存同类备份只有
+`~/.local/state/backups/.config/fcitx5/profile.bak-20260919-215213-defaultim`（改默认输入法前）与 `~/.local/state/backups/.config/fcitx5/conf/classicui.conf.bak-*`。一键回到单源（徽章随之隐藏）：
 
 ```
 busctl --user call org.fcitx.Fcitx5 /controller org.fcitx.Fcitx.Controller1 \
@@ -233,7 +234,8 @@ busctl --user call org.fcitx.Fcitx5 /controller org.fcitx.Fcitx.Controller1 \
 在插件徽章存在时纯属重复，于是把 `{"id":"omarchy.keyboard-layout"}` 从 `~/.config/omarchy/shell.json` 的
 `layout.center` 摘掉（`shell.json` 是用户层、热重载、抗 `omarchy update`；**不要**去动 `$OMARCHY_PATH` 里的部件本体）。
 A/B 实测：摘掉后 bar 只有逻辑 x 706..742（宽 36）这一块像素变化——正是那个 `EN`，其余逐像素不动；
-备份 `~/.config/omarchy/niri-port/backups/shell.json.bak-20260919-043957-pre-keyboard-layout`，想加回来就把
+备份写的是 `~/.config/omarchy/niri-port/backups/shell.json.bak-20260919-043957-pre-keyboard-layout`
+（**该 `backups/` 目录 2026-09-21 已不在机上**，回退就近用 `~/.local/state/backups/.config/omarchy/shell.json.bak-*` 或 `git log`），想加回来就把
 `{"id":"omarchy.keyboard-layout"}` 填回 center 数组。
 
 **徽章把 rime 显示成「拼」（2026-09-19）**：fcitx 给 rime 的 label 是 `ㄓ`（肉眼看像"羊"），于是给插件加了一层本地映射——
@@ -256,7 +258,7 @@ fcitx5 自身由 `/etc/xdg/autostart/org.fcitx.Fcitx5.desktop` 在登录时拉�
    而键位已整体搬进被 include 的 `binds.kdl` → 解析为空 → 菜单只剩脚本里写死的 2 条
    static_bindings。修复：垫片加 `_niri_config_lines()` 递归展开 `include`（防再拆文件再断）。
    验证：`hyprctl binds` 129 条记录、`omarchy-menu-keybindings --print` 恢复 131 条、
-   clients/devices 无回归；备份 `~/bin/hyprctl.bak-20260825-211843`。
+   clients/devices 无回归；备份 `~/.local/state/backups/bin/hyprctl.bak-20260825-211843`。
 
 ---
 

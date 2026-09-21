@@ -124,7 +124,7 @@ quickshell：`pkill -x quickshell && niri msg action spawn -- quickshell -n -p $
     （整屏被糊）→ 修后 有吐司 **14.48** / 无吐司 **14.62**（差 1%，远处不受影响）。
     `niri.patch` 20 文件/36 hunk → **21 文件 / 38 hunk**（重生成务必限路径，§8.7；**新增文件要显式补进
     路径表**，否则下次重放会漏）。回退：`Service.qml.bak-20260920-notifblur` +
-    `effects.kdl.bak-20260920-blurnotif` + `niri-port/niri.patch.bak-20260920-notifblur`。
+    `effects.kdl.bak-20260920-blurnotif` + `niri-port/.niri.patch.bak-20260920-notifblur`。
     配置是 Layer-1（改完 `niri validate` 即热加载），仓库内 QML 改完要 `omarchy-restart-shell`。
     两个已知残余：① 区域是**一个矩形**包住整列吐司，所以同时叠两条以上时卡片之间那 8px 缝隙也会被糊到
     （很轻；quickshell 的 `blurRegion` 只收一个矩形）；② §8.8 记过 niri 上 region 几何跟踪会放大
@@ -186,7 +186,7 @@ quickshell：`pkill -x quickshell && niri msg action spawn -- quickshell -n -p $
     - **测量踩的坑**：用户当场在别的 workspace 上干活，微信所在工作区一旦不是"当前显示"的那个，截图里就只有壁纸
       （我第一次取到 `mean=70` 就是这种）。要测就先确认窗口真的在屏幕上（本机没装 xdotool/xwininfo，只能用
       「亮色 UI 掩码扫列」或先看 `niri msg workspaces` 的 `active`/`active_window_id`）。
-    - 回退：`~/.config/niri/window-rules.kdl.bak-20260920-wechatblur`。另两条 niri 配置通用坑见 §8 第 26 条。
+    - 回退：`~/.local/state/backups/.config/niri/window-rules.kdl.bak-20260920-wechatblur`。另两条 niri 配置通用坑见 §8 第 26 条。
 
 ---
 
@@ -200,8 +200,8 @@ quickshell：`pkill -x quickshell && niri msg action spawn -- quickshell -n -p $
 `text-scaling-factor`、终端 `font-size`），**不管** GTK 的 `font-name` 点数、Qt、fcitx5、GTK2、XSETTINGS。
 于是同屏两套量纲：bar 12px vs GTK 应用的 `SF Pro 12` = **16px**（Pango 按 96dpi 折算，12pt=16px）。
 
-**改动全表**（每份配置都有 `.bak-20260920-consistency` 副本；dconf 原值 dump 在
-`~/.config/gsettings-interface.backup-20260920.ini`）：
+**改动全表**（每份配置都在备份根留了 `.bak-20260920-consistency` 副本；dconf 原值 dump 在
+`~/.local/state/backups/.config/gsettings-interface.backup-20260920.ini`）：
 
 | 层 | 之前 | 之后 |
 |---|---|---|
@@ -251,7 +251,7 @@ GTK/Qt 应用**重启后才生效**（截图核对：Nautilus 与 bar 文字同�
 （发键后 shim 日志为空），面板的 IPC 又只暴露 brightness/state/open/close/toggle，所以"滑块 → Process"
 那一跳只能靠上面的日志留痕在真人拖动时核对。
 
-**回退**：恢复各 `.bak-20260920-consistency` + `dconf load /org/gnome/desktop/interface/ < ~/.config/gsettings-interface.backup-20260920.ini` + 删 `~/bin/omarchy-display-text-size`。
+**回退**：恢复各 `.bak-20260920-consistency` + `dconf load /org/gnome/desktop/interface/ < ~/.local/state/backups/.config/gsettings-interface.backup-20260920.ini` + 删 `~/bin/omarchy-display-text-size`。
 
 **2026-09-20 下半场补记（bar 自身的字号档）**：上面管的是"全局字号向 bar 看齐"，bar **自己**的档位也能调了 ——
 上游 `Style.qml` 的 `[bar]` 分支只认两个 size 键，补全后 `shell.toml` 写 `[bar] icon-font = 12` 即可让内置部件的
@@ -278,7 +278,7 @@ GTK/Qt 应用**重启后才生效**（截图核对：Nautilus 与 bar 文字同�
     = `Style.font.body` = 12），同档不同字体面就会差 1–2 物理 px。
     `niri.patch` 因此 19 文件/35 hunk → **20 文件 / 36 hunk**（重生成务必限路径，见 §8.7；`--reverse --check` 通过、
     `omarchy-niri-repatch` 幂等）。仓库内 QML 改动要 `omarchy-restart-shell`。
-    回退：`shell/Commons/Style.qml.bak-20260920-bartoken` + `niri-port/niri.patch.bak-20260920-bartoken`，
+    回退：`shell/Commons/.Style.qml.bak-20260920-bartoken` + `niri-port/.niri.patch.bak-20260920-bartoken`，
     再把 `shell.toml` 里那行 `icon-font` 撤掉（bar 回到 13 档）。
     排查途中另捡到两件事（都与本条无关但会让人误判"部件坏了"）：① `~/.config/omarchy/shell.json` 里 ai-subs 的
     `barDisplay` 被从 `Data` 切成了 `Icon`（面板底部那个 Icon/Data 开关，点一下就会写回 shell.json），
@@ -298,7 +298,7 @@ GTK/Qt 应用**重启后才生效**（截图核对：Nautilus 与 bar 文字同�
     **有待更新包**时才画东西，平时隐形 —— "看不见它"不等于没生效）。**`shell.json` 是热监听**
     （`shell.qml` 的 `userConfigFile`，`watchChanges: true` + `onFileChanged: reload()`），存盘即生效，
     不必 `omarchy-restart-shell`。实测（bar 条内笔画像素）：最右端 684 → 939（多出电量数字）、中间带 1371 → 1213
-    （更新部件消失 + 居中组位移）。回退：`~/.config/omarchy/shell.json.bak-20260920-bar`。
+    （更新部件消失 + 居中组位移）。回退：`~/.local/state/backups/.config/omarchy/shell.json.bak-20260920-bar`。
     **同日追加（用户 "百分比放最右边视觉效果更好"）**：上游 `panels/power/Panel.qml` 的 `text` 本来是
     `Math.round(fraction*100) + "% " + batteryIcon()` —— **数字在左、图标在右**（这就是 Omarchy 的默认样子，
     所以 bar 最右那格是电池图标）。改成 `root.batteryIcon() + " " + Math.round(...) + "%"` → 数字落到最右端。
@@ -307,7 +307,7 @@ GTK/Qt 应用**重启后才生效**（截图核对：Nautilus 与 bar 文字同�
     （2026-09-20 晚再补 `[bar]` 令牌后为 **20 文件/36 hunk**，见第 31 条。）
     验收用**字形高度指纹**：电池图标比数字高一档（墨高 23 vs 19 物理像素）——改前 h23 块在 x 2493..2515（右端），
     改后落到 x 2431..2454（左端），右端只剩三个 h19 块（`5`/`0`/`%`）。
-    回退：`shell/plugins/panels/power/Panel.qml.bak-20260920-pctorder` + `niri-port/niri.patch.bak-20260920-pctorder`。
+    回退：`shell/plugins/panels/power/.Panel.qml.bak-20260920-pctorder` + `niri-port/.niri.patch.bak-20260920-pctorder`。
 
 ---
 
@@ -324,7 +324,7 @@ GTK/Qt 应用**重启后才生效**（截图核对：Nautilus 与 bar 文字同�
     （**此条的结论已被下面 2026-09-21 那半段更正：不写 `background` 键就已经是"跟着主题走"**）；
     ② 打开菜单时**整屏变暗来自 `menu.scrim`**（`scrim = {{ background }}` + `scrim-alpha 0.5`：亮壁纸区
     220 → 120，正好压掉一半亮度）——嫌"菜单一开整屏黑"就调 `[menu] scrim-alpha`，别去动卡片底色。
-    回退：`~/.config/omarchy/shell.toml.bak-20260920-menu`。
+    回退：`~/.local/state/backups/.config/omarchy/shell.toml.bak-20260920-menu`。
 
     **2026-09-21 再修（用户 "omarchy menu 咋又变黑了"）——把写死的底色删掉，改走主题值**：
     先复查"是不是覆盖失效了"：临时把 `[menu] background` 改成 `#ff00ff`，卡片整个变洋红、bbox
@@ -343,7 +343,7 @@ GTK/Qt 应用**重启后才生效**（截图核对：Nautilus 与 bar 文字同�
     `emojis/`、`reminders/`、`osd/`），所以 0.45 同时让剪贴板 / emoji / 提醒 / OSD 的卡片更透。
     OSD 有 `effects.kdl` 的 `^omarchy-osd$` 磨砂规则撑着，实测音量 OSD 仍清晰可读（卡片附近中位 (82,83,84)）；
     boot banner 那份底填用 `Qt.rgba(...,1)` 压平（见 `docs/lock.md` §11.27），不受影响。
-    还嫌黑就调 `[menu] scrim-alpha`（现 0.5）。回退：`~/.config/omarchy/shell.toml.bak-20260921-menu`（= 9-20 版，`#2a2a22` @ 0.7）。
+    还嫌黑就调 `[menu] scrim-alpha`（现 0.5）。回退：`~/.local/state/backups/.config/omarchy/shell.toml.bak-20260921-menu`（= 9-20 版，`#2a2a22` @ 0.7）。
 
 ---
 
@@ -354,7 +354,7 @@ GTK/Qt 应用**重启后才生效**（截图核对：Nautilus 与 bar 文字同�
     **坑：`window_size` 是"减过窗口边框"的数**（`window_offset_in_tile [2,2]` → 每边 2 逻辑），别拿它直接套
     "屏幕 − 2×gaps" 的公式；对几何起疑时以**像素边缘**为准（本机 `tile_pos_in_workspace_view` 恒为 null）。
     `gaps` 只存在于 `layout.kdl` 且不随主题重写（`omarchy-niri-apply-theme` 只插 `focus-ring`/`border` 的颜色块）。
-    回退：`~/.config/niri/layout.kdl.bak-20260920-gaps`。
+    回退：`~/.local/state/backups/.config/niri/layout.kdl.bak-20260920-gaps`。
 
 ---
 

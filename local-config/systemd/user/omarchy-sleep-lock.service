@@ -1,0 +1,29 @@
+[Unit]
+Description=Lock Omarchy before suspend
+# The monitor calls into the running Omarchy shell, so it must start with the
+# session. Keeps the default target ordering (no Before=) deliberately.
+After=dbus.socket
+Requires=dbus.socket
+PartOf=graphical-session.target
+# Upstream ships two conditions here. Only WAYLAND_DISPLAY survives: niri imports
+# it into the user manager, so it is actually satisfiable. OMARCHY_PATH can never
+# pass on this machine -- ConditionEnvironment reads the *user manager's*
+# environment, not the unit's own Environment= (verified with a probe unit,
+# 2026-09-21), and nothing imports OMARCHY_PATH here because there is no UWSM.
+# Hence OMARCHY_PATH is set under [Service] and the condition is dropped.
+ConditionEnvironment=WAYLAND_DISPLAY
+
+[Service]
+Type=simple
+# %h rather than a literal path: the unit lives in the repo as a template.
+Environment=OMARCHY_PATH=%h/.local/share/omarchy
+# ~/bin first: the port's hyprctl shim lives there and omarchy-system-sleep-lock
+# reaches it through omarchy-hyprland-monitor-clamshell. $OMARCHY_PATH/bin is
+# needed because that script calls bare `omarchy-shell` for the lock IPC.
+Environment=PATH=%h/bin:%h/.local/share/omarchy/bin:/usr/local/bin:/usr/bin
+ExecStart=%h/.local/share/omarchy/bin/omarchy-system-sleep-monitor
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

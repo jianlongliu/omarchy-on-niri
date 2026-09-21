@@ -32,10 +32,20 @@ import shutil
 import subprocess
 import sys
 
+HOME = os.path.expanduser("~")
 THEME_LUA = os.path.expanduser("~/.local/state/omarchy/current/theme/hyprland.lua")
 THEME_SHELL = os.path.expanduser("~/.local/state/omarchy/current/theme/shell.toml")
 NIRI_CFG = os.path.expanduser("~/.config/niri/config.kdl")
+# Every "copy before you change it" backup in the port lives under one root,
+# mirroring $HOME, so the config dirs stay free of .bak litter:
+#   ~/.local/state/backups/.config/niri/layout.kdl.bak-niri-theme
+BACKUP_ROOT = os.path.join(HOME, ".local/state/backups")
 INVISIBLE = "#00000000"
+
+
+def backup_path(original: str) -> str:
+    """Map an absolute path under $HOME to its slot inside BACKUP_ROOT."""
+    return os.path.join(BACKUP_ROOT, os.path.relpath(original, HOME))
 
 
 def normalize(color: str):
@@ -331,7 +341,9 @@ def main():
             print("omarchy-niri-apply-theme: colours already up to date (%s)"
                   % describe(active, inactive, gradient, single))
         else:
-            shutil.copy2(path, path + ".bak-niri-theme")
+            backup = backup_path(path + ".bak-niri-theme")
+            os.makedirs(os.path.dirname(backup), exist_ok=True)
+            shutil.copy2(path, backup)
             with open(path, "w") as fh:
                 fh.write(patched)
             print("omarchy-niri-apply-theme: wrote %s to %s"

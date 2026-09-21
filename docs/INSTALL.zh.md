@@ -60,9 +60,9 @@ for f in "$REPO"/port-bin/*; do install -m 0755 "$f" ~/bin/; done
 先备份，再合并。用你的 home 路径替换 `__HOME__`，从模板生成如下行：
 
 ```sh
-mkdir -p ~/.config/niri
+mkdir -p ~/.config/niri ~/.local/state/backups/.config/niri
 sed "s|__HOME__|$HOME|g" "$REPO/niri-config/omarchy.kdl.template" > ~/.config/niri/omarchy.kdl
-cp ~/.config/niri/config.kdl ~/.config/niri/config.kdl.bak 2>/dev/null || true
+cp ~/.config/niri/config.kdl ~/.local/state/backups/.config/niri/config.kdl.bak 2>/dev/null || true
 ```
 
 然后编辑 `~/.config/niri/config.kdl`：

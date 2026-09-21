@@ -30,5 +30,6 @@ git apply ~/Projects/omarchy-on-niri/niri-port/plugin-patches/<id>.patch
 `omarchy plugin update` does not touch them; their patches are made with
 `diff -u --label a/<file> --label b/<file>` instead.
 
-The `.bak-*` files that sit next to the live patches in `~/.config/omarchy/niri-port/plugin-patches/`
-are machine-local history and are deliberately not tracked here.
+Machine-local history for these patches lives in the shared backup root
+(`~/.local/state/backups/.config/omarchy/niri-port/plugin-patches/`, see `docs/local-overrides.md` §0.1)
+and is deliberately not tracked here.

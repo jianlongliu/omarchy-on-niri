@@ -25,6 +25,9 @@
 - §11.23 锁屏补上人脸（howdy）与头像（2026-09-20，用户指定）
 - §11.24 提示行换行 + 头像改成账户入口（2026-09-20，用户指定）
 - §11.25 tty1 登录被**永久**锁死：greetd 只有一格 `configuring`（2026-09-20，真机定位并修复）
+- §11.26 交接过渡：密码到桌面之间那段文字，以及两头各一段淡入（2026-09-21）
+- §11.27 交接那段黑：方向 A（底部 `Thinking…` 卡片）已实施，方向 B（plymouth 盖交接）仍搁置（2026-09-21）
+- §11.28 合盖/挂起不锁屏：单元**从没装过**（2026-09-21，用户点名修）
 
 ## 另见（锁屏相关的东西分住哪几处）
 
@@ -513,7 +516,7 @@ Omarchy 的锁层从 `hyprctl -j monitors` 读两个字段，shim 之前都在�
 
    **关于"动画时长名义值"的教训（2026-09-21，先错后对）**：早先实测到"名义 1500+900 却在 ~0.9s 内一次落位、中途抓不到中间帧"，当时归因为"壳层启动期主线程太忙把动画帧吃掉"。**方向错了**：那轮测的其实是**内置 `plugins/bar/Bar.qml`**——而且它的做法是把 surface 停到屏幕外，surface 不在屏上时压根不出帧，钟照走、画面不同步；而屏幕上真正在显示的是第三方插件 `charlieras262.floating-bar`（见下）。后来改成"**普通 Timer 做 hold + 每帧按墙钟算进度**"，在**真正生效的那个 bar** 上实测节拍稳定 **16ms/次**、`bootReveal` 逐帧平滑 0.001→0.999。教训：① "先停屏外再进场"这类动画别用 `PauseAnimation`/`NumberAnimation` 排（surface 停屏外时它只走钟不出帧）；② 动手测任何"屏幕上该有的东西"之前，先确认你改的文件就是屏幕上那个（`~/.config/omarchy/shell.json` 的 `bar.id`）。
 
-**改动落点**：`split-greeter/{install.sh,niri.kdl,Greetd.qml,shell.qml,README.md}` + 新增 `split-greeter/session.sh` + `$OMARCHY_PATH/shell/shell.qml`（标记 + `pushBootReveal()` 把 `bootRevealArmed`/`bootRevealPainted` 推给当前 bar + `bootRevealWallpaperPainted` 读服务）+ `$OMARCHY_PATH/shell/plugins/background/Background.qml`（**新增 `property bool paintedOnce`**，首帧壁纸解码就位时latch，2026-09-21）+ `~/.config/niri/effects.kdl`（`^omarchy-osd$` → `^omarchy-(osd|boot-banner)$`，让卡片同款霜化）+ `$OMARCHY_PATH/shell/plugins/bar/Bar.qml`（内置 bar 的滑入，**本机不在用**）+ **`~/.config/omarchy/plugins/charlieras262.floating-bar/Bar.qml` → `niri-port/plugin-patches/charlieras262.floating-bar.patch`（本机在用的浮动 bar；**加载期 surface 不上屏、到点整块出现**，见 `docs/visual.md` §33）**；`niri.patch` 现在是 **22 文件/48 hunk**，md5 `6138cc1bece9a94312572d8685c845a4`；重生成照 §8.7 限路径，**新文件必须显式补进路径表**，否则下次重放会漏。备份：`~/.config/omarchy/niri-port/niri.patch.bak-20260921-192644`（46 hunk 的上一版 —— 活体已改出 `paintedOnce`/`pushBootReveal()` 增补而补丁没跟上，repatch 一度 exit 2）、`…bak-20260921-bootreveal`（再上一版 `…bootcurtain2`，黑幕版 `…bootcurtain`）。
+**改动落点**：`split-greeter/{install.sh,niri.kdl,Greetd.qml,shell.qml,README.md}` + 新增 `split-greeter/session.sh` + `$OMARCHY_PATH/shell/shell.qml`（标记 + `pushBootReveal()` 把 `bootRevealArmed`/`bootRevealPainted` 推给当前 bar + `bootRevealWallpaperPainted` 读服务）+ `$OMARCHY_PATH/shell/plugins/background/Background.qml`（**新增 `property bool paintedOnce`**，首帧壁纸解码就位时latch，2026-09-21）+ `~/.config/niri/effects.kdl`（`^omarchy-osd$` → `^omarchy-(osd|boot-banner)$`，让卡片同款霜化）+ `$OMARCHY_PATH/shell/plugins/bar/Bar.qml`（内置 bar 的滑入，**本机不在用**）+ **`~/.config/omarchy/plugins/charlieras262.floating-bar/Bar.qml` → `niri-port/plugin-patches/charlieras262.floating-bar.patch`（本机在用的浮动 bar；**加载期 surface 不上屏、到点整块出现**，见 `docs/visual.md` §33）**；`niri.patch` 现在是 **22 文件/48 hunk**，md5 `6138cc1bece9a94312572d8685c845a4`；重生成照 §8.7 限路径，**新文件必须显式补进路径表**，否则下次重放会漏。备份：`~/.local/state/backups/.config/omarchy/niri-port/niri.patch.bak-20260921-192644`（46 hunk 的上一版 —— 活体已改出 `paintedOnce`/`pushBootReveal()` 增补而补丁没跟上，repatch 一度 exit 2）、`…bak-20260921-bootreveal`（再上一版 `…bootcurtain2`，黑幕版 `…bootcurtain`）。
 
 **验证**：
 - **判据 = `tests/state.sh` 对账**（离屏、不开合成器，可随时跑）：本树与 `git archive HEAD` 的干净副本**各 7 项 FAIL、输出逐字节一致**（`diff` 全等）⇒ 本机那 7 项本来就红，本次改动**没有新增失败**。
@@ -556,6 +559,27 @@ Omarchy 的锁层从 `hyprctl -j monitors` 读两个字段，shim 之前都在�
 - **能盖多少**：盖掉 greetd 交接后、systemd 用户会话起来的那 1~1.5s；盖不掉 **niri 起来到壳层画出壁纸之间的 ~0.3~0.7s**（那时 plymouth 已让位，niri 自己在画黑底）。净效果 **黑 1.5~2s → ~0.3~0.7s**，且中间不再有"壁纸突然冒出来"。**不是零。**
 - **前置与风险**：① 要做一个 plymouth 主题（`bgrt` 是厂商 logo，不能用）；② 登录链路多一个 **root systemd 单元**；③ 与 greetd/niri 抢 DRM 的时机必须对齐 —— **plymouthd 不让位 = niri 起不来 = 把自己锁在门外**。所以必须：先备份（initramfs / `/etc/kernel/cmdline` / greetd 配置 / `plymouthd.conf`）、留 TTY（Ctrl+Alt+F2）回退路、先做**不进登录链路**的干跑验证，再改一处验一处。
 - **结论**：先做 A（零风险）；B 等"那 0.3~0.7s 尾巴仍旧碍眼"再立项，顺带可把开机的 `bgrt` logo 一起换掉。
+
+### §11.28 合盖/挂起不锁屏：单元**从没装过**（2026-09-21，用户点名修）
+
+**症状**：合盖 → 直接 suspend，锁不发生。此前只把这条当成"上游单元在本机不适用"的取舍挂着；用户 2026-09-21 要求"盒盖要锁屏"，往下挖的结论比"取舍"严重：
+
+1. **本机根本没有 `omarchy-sleep-lock.service`**：它只躺在 `~/.local/share/omarchy/default/systemd/user/` 里当模板，`systemctl --user status` 返回 not found。正规装机由 `install/user/first-run/enable-user-units.sh`（`systemctl --user enable --now` 一批 6 个单元）拉起，而本机是 **dev-link 装机、绕过 first-run** ⇒ 那批单元集体缺席。逐个查过（2026-09-21）：`bt-agent`（`/usr/bin/bt-agent` 本机不存在）、`omarchy-recover-internal-monitor`（条件是 `toggles/hypr/…`，Hyprland 路径，niri 上永远不成立）、`omarchy-migrate-notify`（迁移已空）、`omarchy-fcitx5`（本机 fcitx5 已在跑，装了双起）**都不需要**；**只有 sleep-lock 是真缺口**。`omarchy-crash-watch` 此前已手工补过（`local-overrides.md` §6）。
+2. **光给上游单元加 `Environment=OMARCHY_PATH` 救不回来**：`ConditionEnvironment=` 读的是**用户管理器**的环境，**看不见单元自己的 `Environment=`**。2026-09-21 探针实证：`Environment=PROBE_VAR=set-by-unit` + `ConditionEnvironment=PROBE_VAR` ⇒ journal 报 `skipped, unmet condition check`。本机没有 UWSM 去 import `OMARCHY_PATH`（`systemctl --user show-environment` 有 `WAYLAND_DISPLAY`/`NIRI_SOCKET`/`XDG_SESSION_TYPE`，**没有** `OMARCHY_PATH`）⇒ 那条条件永远不成立。
+3. **合盖在本机只有 logind 一条路**：上游另有"合盖即锁"的优化 `omarchy-system-lid-close`，但它由 **Hyprland 绑定** `switch:on:Lid Switch`（`default/hypr/bindings/utilities.lua`）拉起，niri 没有等价物 ⇒ 在本机是死代码。本机 `/etc/systemd/logind.conf.d/lid-suspend.conf`（root，2026-05-19 装机写入）把 `HandleLidSwitch` / `…ExternalPower` / `…Docked` **三个全设 suspend**。
+4. **机制本身是好的，缺的只是接线**。`omarchy-system-sleep-monitor`：先 `systemd-inhibit --what=sleep --mode=delay` 拿**延迟抑制剂**，再以 `--inhibited` 重跑自己，用 `dbus-monitor --system` 听 logind 的 `PrepareForSleep`；见 `boolean true` 就执行 `omarchy-system-sleep-lock`（在预算内反复 `omarchy-shell lock lock` 并轮询 `lock status` 直到 `secure`）然后退出 ⇒ **释放抑制剂 ⇒ logind 才继续 suspend**。上游自带三个 mock 测试本机全 PASS（`test/shell.d/{sleep-lock,sleep-monitor,lid-close}-test.sh`）。
+
+**落点**：自建 `~/.config/systemd/user/omarchy-sleep-lock.service`（仓库副本 `local-config/systemd/user/omarchy-sleep-lock.service`，靠 `scripts/local-files-sync.sh` 守）。相对上游只有三处差异，理由都写在单元注释里：① 删掉永不成立的 `ConditionEnvironment=OMARCHY_PATH`（保留 `WAYLAND_DISPLAY` 那条——本机确实满足，实测 `ConditionResult=yes`）；② 显式 `Environment=OMARCHY_PATH=%h/.local/share/omarchy` 与 `Environment=PATH=%h/bin:%h/.local/share/omarchy/bin:/usr/local/bin:/usr/bin`（`omarchy-system-sleep-lock` 里是裸 `omarchy-shell lock lock`，而用户管理器的 PATH 里没有 `$OMARCHY_PATH/bin`；`~/bin` 排第一是因为它经 `omarchy-hyprland-monitor-clamshell` 会摸到本移植的 `hyprctl` 垫片）；③ `ExecStart` 指 `%h/.local/share/omarchy/bin/omarchy-system-sleep-monitor`。装法：`systemctl --user enable --now omarchy-sleep-lock.service`。
+
+**验收（已验）**：`active (running)`、`ConditionResult=yes`；`systemd-inhibit --list` 出现 `who=Omarchy / what=sleep / mode=delay / why=Lock screen before suspend`；进程链 `systemd-inhibit → omarchy-system-sleep-monitor --inhibited → dbus-monitor(PrepareForSleep)` 齐。**没验的只有"真合盖那一下"**（要真把机器挂起，得用户配合）——链路每一段都单独验过，端到端只差这一次物理合盖。
+
+**回退**：`systemctl --user disable --now omarchy-sleep-lock.service` ⇒ 回到"合盖不锁"（2026-09-21 之前的样子）。
+
+**余量已补齐（2026-09-21，用户拍板「装就装了」）**：上游另有 `etc/systemd/logind.conf.d/20-inhibit-delay.conf`（`[Login] InhibitDelayMaxSec=15`），本机原先没装 ⇒ 只有 logind 默认 5s ⇒ 脚本预算 ≈4s。**现已用 `pkexec` 装上**（root 文件，源件就是 `$OMARCHY_PATH/etc/systemd/logind.conf.d/20-inhibit-delay.conf`，逐字照抄；`systemctl reload systemd-logind` 生效）。
+
+- 验收（三条都实测）：`busctl get-property … InhibitDelayMaxUSec` 从 `5000000` 变 `15000000`；拿脚本**自己的** `derive_budget_ms()` 单独跑（补上文件顶部的 `budget_cap_ms`）得 **12000 ms**；reload 后 logind 仍 `active`、2 个会话都在。
+- 回退：`pkexec rm /etc/systemd/logind.conf.d/20-inhibit-delay.conf && systemctl reload systemd-logind` ⇒ 回到 5s/4s 预算（锁照常能锁，只是余量小）。
+- 上游原件的注释也解释了为什么是 15s 而不是「足够大就行」：延迟抑制剂只是**计时器不是承诺**，窗口一过 logind 照睡（可能锁还没 secure）；而合盖往往还伴随显示器重配，Quickshell 要等屏集稳定才锁得上。
 
 ---
 

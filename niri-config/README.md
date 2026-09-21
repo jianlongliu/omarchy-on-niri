@@ -47,7 +47,9 @@ niri validate                                      # 必须通过；见下面的
 
 ## 改动纪律（踩过的坑，都在 `docs/` 里）
 
-1. **改前必留 `.bak-*`**，本机每个文件旁边都有历史版本。
+1. **改前必留备份**：备份统一写进独立目录 `~/.local/state/backups/`（结构镜像 `$HOME`），
+   如 `~/.local/state/backups/.config/niri/layout.kdl.bak-20260921-bgcolor`（2026-09-21 起，理由与清单见
+   `docs/local-overrides.md` §0.1）。回退是 `cp <备份> <原位置>`，**绝不在配置目录里留 `.bak`**。
 2. **bind 里不能写开窗属性**（`open-floating` 之类）：niri 对整份 `config.kdl`（含 `include`）
    做事务性校验，一处失败**整体丢弃、继续跑旧配置、桌面零提示**。改完必须 `niri validate`，
    再看 `journalctl | grep 'niri\['`。
