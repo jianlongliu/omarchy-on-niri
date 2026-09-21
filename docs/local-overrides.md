@@ -151,6 +151,7 @@
 | `/etc/greetd/split-greeter/` | 登录器 shell + bridge（world readable） | 重跑 `split-greeter/install.sh` |
 | `/usr/local/bin/{split-greeter,split-greeter-sync,ir-light}` | 登录器入口、主题/壁纸同步、IR 补光 | 前两个重跑对应 `install.sh`；`ir-light` 仓库副本 `split-lock/ir-light`。**它硬件专属**：写死 `open("/dev/video2")` + UVC 扩展单元 `unit=13 selector=14`（ThinkPad X1 Carbon Gen9 的 Chicony 04f2:b6ea），换机要按自己 IR 摄像头改这两处，否则只是点不亮灯（PAM 里是 `optional`，坏了不会把人锁在外面）。仓库那份必须与 `/usr/local/bin/ir-light` **逐字节相同**（`scripts/local-files-sync.sh` 就守这条），所以说明只能写在这里 |
 | `/usr/local/bin/omarchy-greeter`、`omarchy-greeter-sync` | 兼容软链 → `split-*` | — |
+| ~~`/etc/systemd/system/flclash-helper.service`~~ **2026-09-21 已删**（用户点名） | FlClash 的 TUN 特权助手：`ExecStart="/usr/lib/flclash/FlClashHelperService"`、`RuntimeDirectory=flclash`、`Environment=FLCLASH_HELPER_OWNER_{UID,GID}=1000`、`WantedBy=multi-user.target`。**FlClash 卸载后单元还留着 `enabled`**，于是每次开机 `203/EXEC`（可执行文件没了）重试 5 次 → `start-limit-hit`，白刷一屏红字（`--since "-3 days"` 里 12 次）。删前核过：`/usr/lib/flclash`、`~/.config/FlClash`、`/run/flclash` **都不存在**（FlClash 包也没装），残留为零；同目录 `vpn-hotspot.service` 只在 Description 文字里提 flclash、**没有任何 `Requires=`/`After=` 依赖**（且它自己 `disabled`+`inactive`，本轮没动）。代理已由系统级 `mihomo` 接管 | `pkexec cp ~/.local/state/backups/etc/systemd/system/flclash-helper.service.bak-20260921-deleted /etc/systemd/system/ && pkexec systemctl daemon-reload && pkexec systemctl enable --now flclash-helper.service`（**前提是 FlClash 重新装上**，否则又是 203/EXEC） |
 | `/etc/systemd/logind.conf.d/20-inhibit-delay.conf` | `[Login] InhibitDelayMaxSec=15`（2026-09-21 装，用户拍板）：`omarchy-sleep-lock.service` 的延迟抑制剂窗口上限，给"合盖→锁"留 ~12s 预算（不装只有默认 5s ⇒ 4s 预算）。源件是上游 `$OMARCHY_PATH/etc/systemd/logind.conf.d/20-inhibit-delay.conf`，逐字照抄 | `pkexec rm /etc/systemd/logind.conf.d/20-inhibit-delay.conf && systemctl reload systemd-logind`（**改前本机没有这个文件**；同目录另有更早的 `lid-suspend.conf`，三档合盖都设 `suspend`，2026-05-19 装机写入） |
 
 - 换主题/壁纸后同步到登录页：`sudo split-greeter-sync "$USER"`（还有实验账户时要一起列）。
@@ -242,6 +243,12 @@ git apply --reverse --check niri.patch   # 必须通过
     - `~/bin/.clipboard-sync.bad`（762 B，2026-08-13 01:08）：微信剪贴板同步的**死锁版** —— `wl-paste --watch`
       的回调里再调 `wl-paste`，在 wl-clipboard 2.3 上自己锁自己（活的那份 `~/bin/clipboard-sync.sh` 是 7 分钟后
       重写的架构：watch 只打标记、独立循环消费 + `flock` 单实例；`wechat-clipboard-sync.service` 用的是它）。
+      **⚠ 但活的那份 2026-09-21 查出同样是坏的**：`flock -w 3 "$LOCK"` 只给了**路径、没给命令** ⇒ util-linux 2.42.3
+      的 `flock` 把唯一参数当 **fd 号**、直接 `flock: bad file descriptor: '/tmp/clip-sync.lock'` rc=64（本机实测复现）
+      ⇒ 循环里那行**永远走 `|| { sleep 0.3; continue; }`**，后面的 `rm -f "$FLAG"` 和真正的同步代码**从没执行过**
+      ⇒ **微信剪贴板同步实际早已失效**，只剩 0.3s 一圈空转、每圈 fork 一个 flock 子进程刷 journal
+      （systemd 的 `SyslogIdentifier` 让这些子进程都署名 `clipboard-sync.sh`，所以看着像"脚本在被反复重启"）。
+      修法（**还没落地**，等用户点头）：删掉循环里那行，改成循环外 `exec 9>"$LOCK"; flock -n 9 || exit 0`（真单实例）。
     - `~/bin/.wechat.plan-b`（283 B，2026-08-13）：微信启动器备用版；活的 `~/bin/wechat` 是 2026-09-20 版，
       多一个 `--in-process-gpu`。
     - `~/.config/.niri-dms-retired-20260919/`（15 个文件）：**DMS 时代的 niri 配置存档**
@@ -261,6 +268,8 @@ git apply --reverse --check niri.patch   # 必须通过
 | 登录交接的另外三处（刷黑 + 输出改道 + 登录面淡出） | 用仓库 HEAD 覆盖 `split-greeter/{install.sh,niri.kdl,Greetd.qml,shell.qml}` 并删 `session.sh`，`GREETER_SESSION` 改回 `niri-session`，重跑 `pkexec ./install.sh` |
 | 登录页 | 恢复 `/etc/greetd/config.toml.backup-*`，再 `systemctl restart greetd`（**在 TTY 里做**） |
 | 锁屏人脸 | `sudo split-lock/face-pam.sh --remove` |
+| 删掉的 `flclash-helper.service`（其实没必要恢复） | 见 §5 那行；备份在 `~/.local/state/backups/etc/systemd/system/flclash-helper.service.bak-20260921-deleted` |
+| 合盖/挂起锁屏 | `systemctl --user disable --now omarchy-sleep-lock.service`（回到"合盖不锁"；日志排查法见 `lock.md` §11.28） |
 | screensaver 恢复 | 删 `~/.local/state/omarchy/toggles/screensaver-off` + 复原 `omarchy-menu.jsonc.bak-20260920-prescreensaver` |
 | 选择器预热 | `touch ~/.local/state/omarchy/toggles/picker-warmup-off`（或 `systemctl --user disable --now omarchy-picker-warmup`） |
 | 插件本地魔改 | 在该插件目录 `git apply -R ~/.config/omarchy/niri-port/plugin-patches/<id>.patch` |
