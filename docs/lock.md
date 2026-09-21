@@ -27,7 +27,7 @@
 - §11.25 tty1 登录被**永久**锁死：greetd 只有一格 `configuring`（2026-09-20，真机定位并修复）
 - §11.26 交接过渡：密码到桌面之间那段文字，以及两头各一段淡入（2026-09-21）
 - §11.27 交接那段黑：方向 A（底部 `Thinking…` 卡片）已实施，方向 B（plymouth 盖交接）仍搁置（2026-09-21）
-- §11.28 合盖/挂起不锁屏：单元**从没装过**（2026-09-21，用户点名修；当晚重启又暴露 `WAYLAND_DISPLAY` 条件在开机那刻也不成立 —— 两条条件都删了，改用 `omarchy-sleep-lock-start` 包装器等会话环境）
+- §11.28 合盖/挂起不锁屏：单元**从没装过** → 2026-09-21 修好并**合盖实测通过**（当晚重启又暴露 `WAYLAND_DISPLAY` 条件在开机那刻也不成立 ⇒ 两条条件都删了，改用 `omarchy-sleep-lock-start` 包装器等会话环境）
 
 ## 另见（锁屏相关的东西分住哪几处）
 
@@ -574,7 +574,11 @@ Omarchy 的锁层从 `hyprctl -j monitors` 读两个字段，shim 之前都在�
 装法：`install -m 755 port-bin/omarchy-sleep-lock-start ~/bin/` + `install -m 644 local-config/systemd/user/omarchy-sleep-lock.service ~/.config/systemd/user/` + `systemctl --user daemon-reload && systemctl --user enable --now omarchy-sleep-lock.service`。
 **诚实的边界**：实测 `omarchy-shell lock status` **只靠 `XDG_RUNTIME_DIR` 也能连上**（`env -i … XDG_RUNTIME_DIR=/run/user/1000 omarchy-shell lock status` 有正常 JSON），垫片链 `hyprctl → niri msg` 同样能自寻 socket ⇒ 包装器的"采纳环境"是**兜底不是决定性修复**；**决定性的是删掉那条条件**。留着包装器是因为监视器活一整场会话、悬起时才被调用，环境与当次会话对齐更稳妥（且死线到点一定放行，绝不挂死）。
 
-**验收（已验）**：① `active (running)`；② `systemd-inhibit --list` 出现 `who=Omarchy / what=sleep / mode=delay / why=Lock screen before suspend`；③ 进程链 `systemd-inhibit → omarchy-system-sleep-lock-start → omarchy-system-sleep-monitor --inhibited → dbus-monitor(PrepareForSleep)` 齐；④ 包装器两条沙盒测试（stub `systemctl`：前两次不给 `WAYLAND_DISPLAY` → 第 3 次给 ⇒ 监视器收到 `WAYLAND_DISPLAY=wayland-9` 且 `--inhibited` 原样转发；一直不给 ⇒ 死线 3s 到点照常交接、`set -u` 下空值不炸）。**没验的仍是"真合盖那一下"**（要真把机器挂起，得用户配合；2026-09-21 重启后抑制剂已就位，随时可合盖实测）。
+**验收（已验）**：① `active (running)`；② `systemd-inhibit --list` 出现 `who=Omarchy / what=sleep / mode=delay / why=Lock screen before suspend`；③ 进程链 `systemd-inhibit → omarchy-system-sleep-lock-start → omarchy-system-sleep-monitor --inhibited → dbus-monitor(PrepareForSleep)` 齐；④ 包装器两条沙盒测试（stub `systemctl`：前两次不给 `WAYLAND_DISPLAY` → 第 3 次给 ⇒ 监视器收到 `WAYLAND_DISPLAY=wayland-9` 且 `--inhibited` 原样转发；一直不给 ⇒ 死线 3s 到点照常交接、`set -u` 下空值不炸）。**没验的仍是"真合盖那一下"** → **2026-09-21 20:15:40 已实测通过**，见下。
+
+**真合盖实测：2026-09-21 20:15:40 首测通过**（用户合盖 ~30 秒）。锁的就是本移植那套 —— 锁屏插件是 `jianlongliu.split-lock`（`omarchy.lock` 在 `disabledPlugins` 里）、解锁走**自建的 PAM 服务** `/etc/pam.d/omarchy-lock-face`（howdy 人脸）；**greeter（`split-greeter/`）不在这条路上**：挂起只调 `omarchy-shell lock lock`，进的是锁屏插件而不是登录管理器（见 §8）。日志时间线：
+`20:15:40.348` shell `lock-requested` → `lock-pending: screen-stabilizing`；`20:15:40.854` niri `locking session`；`20:15:40.926` **`secure=true`**（请求后 0.58s）；`20:15:41` kernel `PM: suspend entry (deep)` ⇒ **先 secure 才挂起**；`20:16:10` 开盖 `suspend exit`；`20:16:12` PAM 起会话 `omarchy-lock-face`；`20:16:13` `Identified face as jianlongliu` → `Login approved` → `secure=false`/`unlocked`。
+三个**看着吓人但无害**的日志：① `omarchy-sleep-lock-start` 那条 `dbus-monitor: unable to enable new-style monitoring: org.freedesktop.DBus.Error.AccessDenied`（system bus 不允许非 root 用 BecomeMonitor）—— dbus-monitor 退回 match 式监听，**照样收到 `PrepareForSleep`**（证据：合盖后 0.35s 就有锁请求）；② 单元在 thaw 后 `restart counter is at 1` —— 设计内（monitor 处理完就退出以释放抑制剂，`Restart=always` 再挂上）；③ `clipboard-sync.sh: flock: bad file descriptor: '/tmp/clip-sync.lock'`（私人物件，与本移植无关，恢复后刷屏）。
 
 **回退**：`systemctl --user disable --now omarchy-sleep-lock.service` ⇒ 回到"合盖不锁"（2026-09-21 之前的样子）。
 
