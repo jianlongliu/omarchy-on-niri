@@ -167,7 +167,7 @@
 | `omarchy-picker-warmup.service` | `PICKER_WARMUP_DELAY=45` + `ExecStartPre=/bin/sleep`；`toggles/picker-warmup-off` 存在即跳过 | ✅ `default/systemd/user/`（`%h` 模板，2026-09-20 收进；`install.sh` 第 4 步装并链接） |
 | `omarchy-sleep-lock.service` | **本机版**：上游那两条 `ConditionEnvironment=` 全删 —— ① `OMARCHY_PATH` 那条读的是**用户管理器**环境、**看不见单元自己的 `Environment=`**（2026-09-21 探针实证），本机又没 UWSM 去 import 它；② 另一条 `WAYLAND_DISPLAY` 看着满足，但**条件是单元被拉起那刻评估的，而单元由 `graphical-session.target` 拉起、那会儿会话还没把环境发布进用户管理器**（2026-09-21 重启实证：20:10:17 被跳过、20:10:18 niri 才起来）⇒ 抑制剂挂不上、合盖不锁。本机版显式给 `OMARCHY_PATH`/`PATH`（`omarchy-system-sleep-lock` 里是裸 `omarchy-shell`），`ExecStart` 指包装器 `%h/bin/omarchy-sleep-lock-start`（`port-bin/omarchy-sleep-lock-start`：有界等会话环境发布 → 采纳 `WAYLAND_DISPLAY`/`XDG_RUNTIME_DIR`/`NIRI_SOCKET` 等 → `exec` 上游 monitor）。**合盖/挂起锁屏就靠它**，见 `lock.md` §11.28 | ✅ `local-config/systemd/user/` + `port-bin/`（2026-09-21 收进） |
 | `materal-recolor.{path,service}` | **是本移植的一部分**（不是无关物件）：`.path` 盯 Omarchy 壁纸文件，一变就拉起 oneshot `.service` 跑 `%h/bin/materal-update`（`port-bin/` 里的 matugen 包装，机制见主文档 §8.10）。上游没有、也没有包认领 | ✅ `local-config/systemd/user/`（2026-09-20 收进；装法 `systemctl --user enable --now materal-recolor.path`） |
-| `wechat-clipboard-sync`、`wl-clip-persist`、`wl-gammarelay`、`xsettingsd` | 与本移植无关（第一个是私人物件，后三个是通用 Wayland 守护进程；四者都无包认领），仅共存 | — |
+| `wechat-clipboard-sync`、`wl-clip-persist`、`wl-gammarelay`、`xsettingsd` | 与本移植无关（第一个是私人物件，后三个是通用 Wayland 守护进程；四者都无包认领），仅共存。**`wechat-clipboard-sync` 2026-09-21 修过脚本里的 flock 写法**（同步链真的死了，详见 §8 第 13 条）；它是 `Type=oneshot`+`RemainAfterExit=yes` 而 `ExecStart` 永不退出 ⇒ 永远停在 `activating`、**`systemctl restart` 会挂住**（要 `stop` 再 `start --no-block`） | — |
 
 - 三个 omarchy 单元都软链进 `graphical-session.target.wants/`（**`omarchy-sleep-lock` 是 2026-09-21 才补上的**：本机走 dev-link 装机、绕过上游 first-run 的 `enable-user-units.sh`，所以那批单元集体没装；逐个查过后只有它是真缺口，见 `lock.md` §11.28）。
 
@@ -243,12 +243,16 @@ git apply --reverse --check niri.patch   # 必须通过
     - `~/bin/.clipboard-sync.bad`（762 B，2026-08-13 01:08）：微信剪贴板同步的**死锁版** —— `wl-paste --watch`
       的回调里再调 `wl-paste`，在 wl-clipboard 2.3 上自己锁自己（活的那份 `~/bin/clipboard-sync.sh` 是 7 分钟后
       重写的架构：watch 只打标记、独立循环消费 + `flock` 单实例；`wechat-clipboard-sync.service` 用的是它）。
-      **⚠ 但活的那份 2026-09-21 查出同样是坏的**：`flock -w 3 "$LOCK"` 只给了**路径、没给命令** ⇒ util-linux 2.42.3
-      的 `flock` 把唯一参数当 **fd 号**、直接 `flock: bad file descriptor: '/tmp/clip-sync.lock'` rc=64（本机实测复现）
-      ⇒ 循环里那行**永远走 `|| { sleep 0.3; continue; }`**，后面的 `rm -f "$FLAG"` 和真正的同步代码**从没执行过**
-      ⇒ **微信剪贴板同步实际早已失效**，只剩 0.3s 一圈空转、每圈 fork 一个 flock 子进程刷 journal
-      （systemd 的 `SyslogIdentifier` 让这些子进程都署名 `clipboard-sync.sh`，所以看着像"脚本在被反复重启"）。
-      修法（**还没落地**，等用户点头）：删掉循环里那行，改成循环外 `exec 9>"$LOCK"; flock -n 9 || exit 0`（真单实例）。
+      **⚠ 但活的那份 2026-09-21 查出同样是坏的，同日修好并实测通过**：`flock -w 3 "$LOCK"` 只给了**路径、没给命令**
+      ⇒ util-linux 2.42.3 的 `flock` 把唯一参数当 **fd 号**、直接 `flock: bad file descriptor: '/tmp/clip-sync.lock'` rc=64
+      （本机实测复现）⇒ 循环里那行**永远走 `|| { sleep 0.3; continue; }`**，后面的 `rm -f "$FLAG"` 和真正的同步代码
+      **从没执行过** ⇒ **微信剪贴板同步实际早已失效**（`~/.cache/clip-sync-flag` 自开机 20:10:18 起从没被消费），
+      只剩 0.3s 一圈空转、每圈 fork 一个 flock 子进程刷 journal（systemd 的 `SyslogIdentifier` 让这些子进程都署名
+      `clipboard-sync.sh`，所以看着像"脚本在被反复重启"；实测 198 行/分钟）。**修法**：删掉循环里那行，改成循环外
+      `exec 9>"$LOCK"; flock -n 9 || exit 0`（真单实例；单元 `Restart=no` 所以退出安全）。**实测**：Wayland 写入
+      `ANTE-FIXED-…` → X11 `xclip -o` 逐字相同 ✓；PNG 6,131,730 B → X11 收到 6,131,730 B ✓；标记文件每次都被消费 ✓；
+      空转日志降到 1 行/20s ✓。备份 `~/.local/state/backups/bin/clipboard-sync.sh.bak-20260921-flock`。
+      （方向只有 W→X：微信复制、浏览器粘贴那条路**本来就没实现**，单元 Description 写 `<->` 是名不副实。）
     - `~/bin/.wechat.plan-b`（283 B，2026-08-13）：微信启动器备用版；活的 `~/bin/wechat` 是 2026-09-20 版，
       多一个 `--in-process-gpu`。
     - `~/.config/.niri-dms-retired-20260919/`（15 个文件）：**DMS 时代的 niri 配置存档**
@@ -270,6 +274,7 @@ git apply --reverse --check niri.patch   # 必须通过
 | 锁屏人脸 | `sudo split-lock/face-pam.sh --remove` |
 | 删掉的 `flclash-helper.service`（其实没必要恢复） | 见 §5 那行；备份在 `~/.local/state/backups/etc/systemd/system/flclash-helper.service.bak-20260921-deleted` |
 | 合盖/挂起锁屏 | `systemctl --user disable --now omarchy-sleep-lock.service`（回到"合盖不锁"；日志排查法见 `lock.md` §11.28） |
+| 微信剪贴板同步脚本改坏 | `cp ~/.local/state/backups/bin/clipboard-sync.sh.bak-20260921-flock ~/bin/clipboard-sync.sh`，再 `systemctl --user stop wechat-clipboard-sync.service && systemctl --user start --no-block wechat-clipboard-sync.service` |
 | screensaver 恢复 | 删 `~/.local/state/omarchy/toggles/screensaver-off` + 复原 `omarchy-menu.jsonc.bak-20260920-prescreensaver` |
 | 选择器预热 | `touch ~/.local/state/omarchy/toggles/picker-warmup-off`（或 `systemctl --user disable --now omarchy-picker-warmup`） |
 | 插件本地魔改 | 在该插件目录 `git apply -R ~/.config/omarchy/niri-port/plugin-patches/<id>.patch` |
