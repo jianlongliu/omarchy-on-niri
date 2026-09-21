@@ -267,8 +267,7 @@ Mod+Ctrl+Up    { move-window-to-workspace-up; }   // 窗口移到上一工作区
 Mod+Ctrl+Down  { move-window-to-workspace-down; } // 窗口移到下一工作区
 Mod+Ctrl+Left  { move-column-left; }         // 列左移
 Mod+Ctrl+Right { move-column-right; }        // 列右移
-Mod+O          { toggle-overview; }          // 总览（Mod+O 保留）
-Mod+Tab repeat=false { toggle-overview; }    // 总览（用户指定 Super+Tab）
+Mod+Tab repeat=false { toggle-overview; }    // 总览（用户指定 Super+Tab；Mod+O 2026-09-21 已删）
 ```
 
 ### 5.5 仍未改绑定的 Omarchy 键（保留 niri 原生 tiling）
@@ -608,7 +607,7 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
 | 弹窗（toast）没给浮栏让位 | `§8 第 18 条` | `docs/visual.md` |
 | 耗电 / 续航专项（测过一轮，从 BIOS C-States 接着查） | `§8 第 19 条` | `docs/behavior.md` |
 | `omarchy-theme-set-browser-policy` 那步为何失败（查上游是否该放行） | `§8 第 20 条` | `docs/behavior.md` |
-| `Mod+O` 与 `Mod+Tab` 都绑 `toggle-overview`，用户未表态，暂留两个 | `§8 第 24 条` | `docs/behavior.md` |
+| ~~`Mod+O` 与 `Mod+Tab` 都绑 `toggle-overview`~~ **2026-09-21 用户定案：留 `Mod+Tab`、删 `Mod+O`** | `§8 第 24 条` | `docs/behavior.md` |
 | 面板拖拽 / 键盘导航的端到端复现（`wtype` 送不进面板） | `§8.11` | `docs/plugins.md` |
 | `hyprctl` schema 精度：个别 Hyprland-only 字段仍给占位值 | `§8 第 5 条` | `docs/shims.md` |
 
@@ -636,10 +635,12 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
   `pkexec omarchy-apply-lock` 补上后 `lock status` 的 `passwordPam` = `true`；顺带删掉被上游 `grep -qi finger`
   误判生成的 `omarchy-lock-fingerprint`，并排除 dms-greeter（它只写 `/etc/pam.d/greetd`）（见 §8.18）。
 - [x] Omarchy 锁屏（`Mod+Ctrl+L`）在 niri 上**真人**实测（2026-09-19）：按下即锁、输密码即解锁；且此时锁屏已经换成自研 `jianlongliu.split-lock`（§11.18–§11.20），日志 `lock-requested → screen-stabilizing → secure=true → unlocked`。
-- [ ] **锁屏与登录界面的账户切换统一用头像**（2026-09-19 用户提出）：
+- [x] ~~**锁屏与登录界面的账户切换统一用头像**~~ **2026-09-21 用户定案：锁屏侧不做**（他记的正是我当时的结论「greetd 实现不了」）。
   - 登录界面 `split-greeter`：账户选择器以**头像为主体**（一行头像、选中高亮），用户名降为次要信息；头像沿用 `/var/lib/AccountsService/icons/<user>`，缺省首字母圆牌。
   - 锁屏 `split-lock`：现在是单账户（只解当前会话）。要支持"切到别的账户"，除了头像选择器，还得把会话交回 greetd —— 锁的 PAM 服务 `/etc/pam.d/omarchy-lock-password` 只认当前登录用户，跨账户必然要重走一次登录会话。
   - 两处共用一个头像组件；配色/壁纸跟着选中账户走的那套逻辑（greeter 已实现）复用。
+  - **为什么锁屏侧不做**：跨账户必须把会话交回 greetd＝等于重走一次登录（锁的 PAM 服务只认当前登录用户），
+    那等于把锁屏做成第二个登录管理器；收益不值这个复杂度。所以锁屏保持单账户，要换账户就注销回 greeter。
 - [ ] 真实跑一次 `omarchy update`，确认上游变更时覆盖层自动重放或明确报冲突。**2026-09-19 部分验证**：手动走了等价的 `git merge --ff-only` 路径（§8.13，上游只改到我们 patch 内文件的"其他区域"），重放幂等成立；官方脚本本身仍没跑过（它要 sudo + snapper 快照 + 包升级）。
 - [x] **全桌面字号 / DPI 一致性（2026-09-20）**：`~/bin/omarchy-display-text-size` 垫片逐档往返 `12/14/16/20/9/12` 实测 —— shell `base-size` 与终端 pt 同步、Qt/fcitx5 走目标 pt、GTK 侧恒 9pt 由 `text-scaling-factor` 承接（14px 档第一版曾把 GTK 算成 17px，已修）。bar 进程 PATH 解析裸命令命中 `~/bin` 垫片；`fc-match monospace` = SFMono Nerd Font、`xrdb -query` = 96。XWayland 只剩 xrdb 96 一处 DPI 来源（见 §8.19）。真人拖动待用户核对 shim 日志。
 - [x] **logout/reboot/shutdown** 统一标准化：`~/bin/omarchy-niri-system` 单一入口（logout→niri quit、reboot/shutdown→logind D-Bus `Manager.Reboot/PowerOff`；`loginctl` 无该 verb 是本 bug，已改；`pkcheck` 免密 exit 0 验证）。
@@ -651,7 +652,7 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
 - [x] **菜单 override label+icon 修复（2026-08-27）**：`extensions/omarchy-menu.jsonc` 的 3 个 setup 项补全 label+icon，合并后显示 "Monitors"/"Keybindings"/"Input" 且图标正常（不再显示 raw id `setup.monitors` 之类）；根因是 `normalizeItem` 的 `label: value.label || id` 把 action-only override 的 label 退化成 id 并覆盖默认项。
 - [x] **screensaver 禁用 + 屏蔽（2026-09-20，用户要求）**：官方 flag `~/.local/state/omarchy/toggles/screensaver-off`（`omarchy-launch-screensaver` 实测 exit 1、无窗口）+ 用户 override 6 条 `when:"false"` 盖住仅有的 `force` 入口；`idle.screensaver`（150s）超时值**未动**。同时修掉该文件 5 处超长 `\u` 转义（§8 第 23 条）。
 - [x] **按键去重 + 应用启动键（2026-09-19/20）**：`niri validate` 通过、生效行无重复键；`Mod+Return` / `Mod+Y` / `Ctrl+Shift+Esc`（终端类）、`Mod+E`（nautilus）、`Mod+Z`（浏览器）实测均开出窗口；过程中顶出并修掉垫片 v1.0 的 `setsid` 坑（§8 第 22、24 条）。
-- [ ] **等你肉眼确认**：开一次菜单看 System 里 Screensaver 是否已消失（`when:"false"` 的效果只能看渲染；文件本身已按 `stripJsonc` + `JSON.parse` 校验通过）。
+- [x] **用户已肉眼确认（2026-09-21）：菜单 System 里 Screensaver 已看不见**（`when:"false"` 的效果只能看渲染；文件本身早先已按 `stripJsonc` + `JSON.parse` 校验通过）。
 - [x] **视觉磨砂（frosted Quickshell）**：`Menu.qml` + `KeyboardPanel.qml` 挂 `BackgroundEffect.blurRegion`（只磨砂卡片，不全屏）；`effects.kdl` 给 `omarchy-keyboard-panel` 设 `xray false`（实时窗口毛玻璃）；`[popups]` alpha 0.8→0.65。面板开/关屏幕底部清晰度 on/off≈0.995 → 无全屏霜化。
 - [x] **浮栏磨砂（2026-09-19）**：`Bar.qml` 保住 `[bar] background-alpha`（不再强制 alpha=1）+ 挂**圆角** `blurRegion`，`effects.kdl` 给 `^omarchy-bar$` 设 `xray false`；实测栏内 `(25,17,20)→(97,95,109)`、四角像素与不磨砂时逐像素相同（无亮晕）、blur 开/关平均差 3.68 且连拍可复现（见 §8.8/§8.11）。
 - [x] **媒体键 OSD（2026-08-25）**：`XF86Audio*`/`XF86MicMute`→`omarchy-audio-output-volume`/`omarchy-audio-input-mute`、`XF86MonBrightness*`→`omarchy-brightness-display`，均带 `hotkey-overlay-title`；`omarchy-osd` 已在 niri 渲染确认。

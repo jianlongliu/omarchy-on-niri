@@ -51,7 +51,7 @@
     - **终端类一律走 `omarchy-launch-terminal`**（与菜单同一条路、自带"跟随当前终端 cwd"），不裸调
       `xdg-terminal-exec`——这条依赖垫片在位（§8 第 22 条）。`Mod+Z` 的实测恰好把垫片 v1.0 的 `setsid`
       坑顶了出来（`systemd-run` 路径静默死，见 §8 第 22 条 v1.1），修完 3 秒出 Zen 窗口。
-    - 遗留未定：`Mod+O` 与 `Mod+Tab` 都绑 `toggle-overview`（用户未表态，暂留两个）。
+    - ~~遗留未定~~ **2026-09-21 用户定案**：只留 `Mod+Tab`，`Mod+O` 删掉（同一个 `toggle-overview` 不再绑两次）。
     - 后补（2026-09-20）：`Mod+Y` / `Ctrl+Shift+Esc` 的命令行多了 `--app-id=org.omarchy.float-tui`、`Mod+E` 的 nautilus 靠 window-rule 浮动，
       见 §8 第 26 条。
 

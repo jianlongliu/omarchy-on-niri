@@ -151,7 +151,8 @@
 | `/etc/greetd/split-greeter/` | 登录器 shell + bridge（world readable） | 重跑 `split-greeter/install.sh` |
 | `/usr/local/bin/{split-greeter,split-greeter-sync,ir-light}` | 登录器入口、主题/壁纸同步、IR 补光 | 前两个重跑对应 `install.sh`；`ir-light` 仓库副本 `split-lock/ir-light`。**它硬件专属**：写死 `open("/dev/video2")` + UVC 扩展单元 `unit=13 selector=14`（ThinkPad X1 Carbon Gen9 的 Chicony 04f2:b6ea），换机要按自己 IR 摄像头改这两处，否则只是点不亮灯（PAM 里是 `optional`，坏了不会把人锁在外面）。仓库那份必须与 `/usr/local/bin/ir-light` **逐字节相同**（`scripts/local-files-sync.sh` 就守这条），所以说明只能写在这里 |
 | `/usr/local/bin/omarchy-greeter`、`omarchy-greeter-sync` | 兼容软链 → `split-*` | — |
-| ~~`/etc/systemd/system/flclash-helper.service`~~ **2026-09-21 已删**（用户点名） | FlClash 的 TUN 特权助手：`ExecStart="/usr/lib/flclash/FlClashHelperService"`、`RuntimeDirectory=flclash`、`Environment=FLCLASH_HELPER_OWNER_{UID,GID}=1000`、`WantedBy=multi-user.target`。**FlClash 卸载后单元还留着 `enabled`**，于是每次开机 `203/EXEC`（可执行文件没了）重试 5 次 → `start-limit-hit`，白刷一屏红字（`--since "-3 days"` 里 12 次）。删前核过：`/usr/lib/flclash`、`~/.config/FlClash`、`/run/flclash` **都不存在**（FlClash 包也没装），残留为零；同目录 `vpn-hotspot.service` 只在 Description 文字里提 flclash、**没有任何 `Requires=`/`After=` 依赖**（且它自己 `disabled`+`inactive`，本轮没动）。代理已由系统级 `mihomo` 接管 | `pkexec cp ~/.local/state/backups/etc/systemd/system/flclash-helper.service.bak-20260921-deleted /etc/systemd/system/ && pkexec systemctl daemon-reload && pkexec systemctl enable --now flclash-helper.service`（**前提是 FlClash 重新装上**，否则又是 203/EXEC） |
+| ~~`/etc/systemd/system/flclash-helper.service`~~ **2026-09-21 已删**（用户点名） | FlClash 的 TUN 特权助手：`ExecStart="/usr/lib/flclash/FlClashHelperService"`、`RuntimeDirectory=flclash`、`Environment=FLCLASH_HELPER_OWNER_{UID,GID}=1000`、`WantedBy=multi-user.target`。**FlClash 卸载后单元还留着 `enabled`**，于是每次开机 `203/EXEC`（可执行文件没了）重试 5 次 → `start-limit-hit`，白刷一屏红字（`--since "-3 days"` 里 12 次）。删前核过：`/usr/lib/flclash`、`~/.config/FlClash`、`/run/flclash` **都不存在**（FlClash 包也没装），残留为零；同目录 `vpn-hotspot.service` 只在 Description 文字里提 flclash、**没有任何 `Requires=`/`After=` 依赖**（它自己 `disabled`+`inactive`；2026-09-21 也一并删了，见下一行）。代理已由系统级 `mihomo` 接管 | `pkexec cp ~/.local/state/backups/etc/systemd/system/flclash-helper.service.bak-20260921-deleted /etc/systemd/system/ && pkexec systemctl daemon-reload && pkexec systemctl enable --now flclash-helper.service`（**前提是 FlClash 重新装上**，否则又是 203/EXEC） |
+| ~~`/etc/systemd/system/vpn-hotspot.service`、`/usr/local/bin/vpn-hotspot`、`/etc/dnsmasq-vpn-hotspot.conf`、`/etc/hostapd/hostapd.conf`~~ **2026-09-21 已删**（用户点名「一起删」） | flclash 时代「把 VPN 共享成 `ap0` 热点」的整套：单元 `Type=oneshot`+`RemainAfterExit=yes`，脚本写死 `VPN_IFACE=FlClash`（hostapd + dnsmasq + iptables NAT 那一套）。FlClash 没了以后全是死件：单元 `disabled`+`inactive`（**没有像 `flclash-helper` 那样每次开机报错**，所以一直没人注意）、`ap0` 接口不存在、`hostapd`/`dnsmasq` 两个服务也 `inactive`+`disabled`（删前核过：没有别的用途）、`/etc/NetworkManager/conf.d/99-ap0-unmanaged.conf` 更早就不存在了 | 四份备份都在备份根下同名 `.bak-20260921-deleted`（`etc/systemd/system/`、`usr/local/bin/`、`etc/`、`etc/hostapd/`），`cp` 回原位 + `systemctl daemon-reload` 即可；真要再用得先把 FlClash 装回来 |
 | `/etc/systemd/logind.conf.d/20-inhibit-delay.conf` | `[Login] InhibitDelayMaxSec=15`（2026-09-21 装，用户拍板）：`omarchy-sleep-lock.service` 的延迟抑制剂窗口上限，给"合盖→锁"留 ~12s 预算（不装只有默认 5s ⇒ 4s 预算）。源件是上游 `$OMARCHY_PATH/etc/systemd/logind.conf.d/20-inhibit-delay.conf`，逐字照抄 | `pkexec rm /etc/systemd/logind.conf.d/20-inhibit-delay.conf && systemctl reload systemd-logind`（**改前本机没有这个文件**；同目录另有更早的 `lid-suspend.conf`，三档合盖都设 `suspend`，2026-05-19 装机写入） |
 
 - 换主题/壁纸后同步到登录页：`sudo split-greeter-sync "$USER"`（还有实验账户时要一起列）。
@@ -167,7 +168,7 @@
 | `omarchy-picker-warmup.service` | `PICKER_WARMUP_DELAY=45` + `ExecStartPre=/bin/sleep`；`toggles/picker-warmup-off` 存在即跳过 | ✅ `default/systemd/user/`（`%h` 模板，2026-09-20 收进；`install.sh` 第 4 步装并链接） |
 | `omarchy-sleep-lock.service` | **本机版**：上游那两条 `ConditionEnvironment=` 全删 —— ① `OMARCHY_PATH` 那条读的是**用户管理器**环境、**看不见单元自己的 `Environment=`**（2026-09-21 探针实证），本机又没 UWSM 去 import 它；② 另一条 `WAYLAND_DISPLAY` 看着满足，但**条件是单元被拉起那刻评估的，而单元由 `graphical-session.target` 拉起、那会儿会话还没把环境发布进用户管理器**（2026-09-21 重启实证：20:10:17 被跳过、20:10:18 niri 才起来）⇒ 抑制剂挂不上、合盖不锁。本机版显式给 `OMARCHY_PATH`/`PATH`（`omarchy-system-sleep-lock` 里是裸 `omarchy-shell`），`ExecStart` 指包装器 `%h/bin/omarchy-sleep-lock-start`（`port-bin/omarchy-sleep-lock-start`：有界等会话环境发布 → 采纳 `WAYLAND_DISPLAY`/`XDG_RUNTIME_DIR`/`NIRI_SOCKET` 等 → `exec` 上游 monitor）。**合盖/挂起锁屏就靠它**，见 `lock.md` §11.28 | ✅ `local-config/systemd/user/` + `port-bin/`（2026-09-21 收进） |
 | `materal-recolor.{path,service}` | **是本移植的一部分**（不是无关物件）：`.path` 盯 Omarchy 壁纸文件，一变就拉起 oneshot `.service` 跑 `%h/bin/materal-update`（`port-bin/` 里的 matugen 包装，机制见主文档 §8.10）。上游没有、也没有包认领 | ✅ `local-config/systemd/user/`（2026-09-20 收进；装法 `systemctl --user enable --now materal-recolor.path`） |
-| `wechat-clipboard-sync`、`wl-clip-persist`、`wl-gammarelay`、`xsettingsd` | 与本移植无关（第一个是私人物件，后三个是通用 Wayland 守护进程；四者都无包认领），仅共存。**`wechat-clipboard-sync` 2026-09-21 修过脚本里的 flock 写法**（同步链真的死了，详见 §8 第 13 条）；它是 `Type=oneshot`+`RemainAfterExit=yes` 而 `ExecStart` 永不退出 ⇒ 永远停在 `activating`、**`systemctl restart` 会挂住**（要 `stop` 再 `start --no-block`） | — |
+| `wechat-clipboard-sync`、`wl-clip-persist`、`wl-gammarelay`、`xsettingsd` | 与本移植无关（第一个是私人物件，后三个是通用 Wayland 守护进程；四者都无包认领），仅共存。**`wechat-clipboard-sync` 2026-09-21 修过脚本里的 flock 写法**（同步链真的死了，详见 §8 第 13 条）、**并补上 X11→Wayland 反向同步**；它是 `Type=oneshot`+`RemainAfterExit=yes` 而 `ExecStart` 永不退出 ⇒ 永远停在 `activating`、**`systemctl restart` 会挂住**（要 `stop` 再 `start --no-block`） | — |
 
 - 三个 omarchy 单元都软链进 `graphical-session.target.wants/`（**`omarchy-sleep-lock` 是 2026-09-21 才补上的**：本机走 dev-link 装机、绕过上游 first-run 的 `enable-user-units.sh`，所以那批单元集体没装；逐个查过后只有它是真缺口，见 `lock.md` §11.28）。
 
@@ -252,7 +253,12 @@ git apply --reverse --check niri.patch   # 必须通过
       `exec 9>"$LOCK"; flock -n 9 || exit 0`（真单实例；单元 `Restart=no` 所以退出安全）。**实测**：Wayland 写入
       `ANTE-FIXED-…` → X11 `xclip -o` 逐字相同 ✓；PNG 6,131,730 B → X11 收到 6,131,730 B ✓；标记文件每次都被消费 ✓；
       空转日志降到 1 行/20s ✓。备份 `~/.local/state/backups/bin/clipboard-sync.sh.bak-20260921-flock`。
-      （方向只有 W→X：微信复制、浏览器粘贴那条路**本来就没实现**，单元 Description 写 `<->` 是名不副实。）
+      **2026-09-21 当天补上反向（X11 → Wayland）并验通**：微信里复制的文字/图片现在也能在浏览器/编辑器里粘贴。
+      X11 侧没有 watch 接口，所以在同一个循环里**轮询**（每 4 个 tick ≈1.2s 一次，且先用 `xclip -o -t TARGETS` 带 0.5s
+      超时探一下——剪贴板空时 `xclip` 会阻塞，这是唯一的坑）。**防回环**：两个方向各自记"我上次推过去的 md5"
+      （`W2X_HASH`/`X2W_HASH`），对方那边出现自己的指纹就跳过，所以内容最多被推一跳、不会来回弹（实测主循环空闲
+      CPU 1 tick/4s）。**四向实测**：W→X 文字 ✓、W→X 图片 ✓、X→W 文字 ✓、X→W 图片 412,501 B 逐字节一致 ✓。
+      想只保留单向：删掉 `while` 里 `TICK % 4` 那一整块即可（**中间那版"只修 flock 的单向脚本"没有单独留备份**）。
     - `~/bin/.wechat.plan-b`（283 B，2026-08-13）：微信启动器备用版；活的 `~/bin/wechat` 是 2026-09-20 版，
       多一个 `--in-process-gpu`。
     - `~/.config/.niri-dms-retired-20260919/`（15 个文件）：**DMS 时代的 niri 配置存档**
@@ -274,7 +280,8 @@ git apply --reverse --check niri.patch   # 必须通过
 | 锁屏人脸 | `sudo split-lock/face-pam.sh --remove` |
 | 删掉的 `flclash-helper.service`（其实没必要恢复） | 见 §5 那行；备份在 `~/.local/state/backups/etc/systemd/system/flclash-helper.service.bak-20260921-deleted` |
 | 合盖/挂起锁屏 | `systemctl --user disable --now omarchy-sleep-lock.service`（回到"合盖不锁"；日志排查法见 `lock.md` §11.28） |
-| 微信剪贴板同步脚本改坏 | `cp ~/.local/state/backups/bin/clipboard-sync.sh.bak-20260921-flock ~/bin/clipboard-sync.sh`，再 `systemctl --user stop wechat-clipboard-sync.service && systemctl --user start --no-block wechat-clipboard-sync.service` |
+| 微信剪贴板同步脚本改坏 | `cp ~/.local/state/backups/bin/clipboard-sync.sh.bak-20260921-flock ~/bin/clipboard-sync.sh`，再 `systemctl --user stop wechat-clipboard-sync.service && systemctl --user start --no-block wechat-clipboard-sync.service`（**注意**这是最老的"坏版"快照；只想去掉反向同步就按 §8 第 13 条删 `TICK % 4` 那块） |
+| 删掉的 `vpn-hotspot` 整套（其实没必要恢复） | 见 §5 那行；四份备份都在 `~/.local/state/backups/` 下同名 `.bak-20260921-deleted` |
 | screensaver 恢复 | 删 `~/.local/state/omarchy/toggles/screensaver-off` + 复原 `omarchy-menu.jsonc.bak-20260920-prescreensaver` |
 | 选择器预热 | `touch ~/.local/state/omarchy/toggles/picker-warmup-off`（或 `systemctl --user disable --now omarchy-picker-warmup`） |
 | 插件本地魔改 | 在该插件目录 `git apply -R ~/.config/omarchy/niri-port/plugin-patches/<id>.patch` |

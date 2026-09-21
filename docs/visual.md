@@ -62,7 +62,7 @@ niri 26.04 的 `background-effect` + Quickshell 的 `ext_background_effect` 形�
   实测（scale 2.0 物理 px）：屏幕主体 0 差异、卡片 556×130 物理（278×65 逻辑）居中底部、磨砂生效。
 - **本机浮动 bar 的圆角 region（2026-09-19 起；插件侧，不在 `niri.patch` 内）**：`charlieras262.floating-bar`
   的 `PanelWindow` 挂 `BackgroundEffect.blurRegion: Region { item: …; radius: root.effectiveCornerRadius }`，
-  `effects.kdl` 给 `^omarchy-bar$` 设 `xray false`，霜化只落在圆角矩形内（不设的话矩形外会糊成亮晕，§11）。
+  `effects.kdl` 给 `^omarchy-bar$` 设 `xray`（**2026-09-21 起为 `true`**，见下文 Layer-1 那节），霜化只落在圆角矩形内（不设的话矩形外会糊成亮晕，§11）。
   **该 region 跟踪的是 item 的几何**：把 item 位移到屏外，区域跟着出屏 ⇒ 霜化整块消失
   （2026-09-21 boot reveal 实测，用户："没blur"；见第 33 条 33b ④）。所以它指向一个**不动的替身**
   `barBlurAnchor`，而不是会滑动的 `barVisual`。
@@ -81,7 +81,18 @@ niri 26.04 的 `background-effect` + Quickshell 的 `ext_background_effect` 形�
     Quickshell 已发卡片形状区域，该区域就是唯一磨砂范围，全屏 surface 不会霜化）。`xray false` =
     磨砂卡片背后的**实时窗口**（真毛玻璃）；`xray true` = 只磨砂壁纸。
   - `^omarchy-blurwallpaper$` → `place-within-backdrop true`（overview 模糊壁纸插件，§8 第 10 条）。
-  - `^omarchy-bar$` → `background-effect { xray false }`（**只设 xray**，同 keyboard-panel；用户明确不要 xray）。
+  - `^omarchy-menu$` → `background-effect { xray false }`（**只设 xray，不设 `blur true`**）。
+    **2026-09-21 用户要求**：菜单要真毛玻璃（磨卡片背后的实时窗口）、性能开销他认。菜单与状态栏弹窗同构
+    （全屏透明 PanelWindow + 卡片，Quickshell 只发卡片的 `ext_background_effect` 区域），所以只设 `xray`。
+    改前（无此规则 ⇒ niri 默认 `xray true` = 只磨壁纸）与改后实测：菜单区域平均差 **7.63**、最大 **80**
+    （2560×1600 实拍）。**对照**：bar 那条改 `xray` 的同类实测均值只有 **0.4% 像素、最大 12** —— 差额的
+    原因见下一条，也正是"bar 可以省、菜单不能省"的由来。
+  - `^omarchy-bar$` → `background-effect { xray true }`（**只设 xray**；2026-09-21 用户拍板改的）。
+    为什么改：bar 是浮栏、**不占位**（`exclusionMode: root.barHidden ? Ignore : Auto`），但 niri 把平铺/最大化
+    窗口挡在 bar 那条横带之外，所以"背后"平时只有壁纸 ⇒ `xray false` 与 `xray true` 观感几乎一样：
+    同设置连拍两张当噪声基线（差 0.00），改 `xray` 前后逐行对比，bar 横带平均差仅 **0.93**、最大单像素 **12**
+    （≈0.4%），肉眼看不出来。唯一看得出差别的场景是**浮动窗口拖到 bar 底下**（那时 `xray false` 才磨到活内容）。
+    想找回那种观感就把这条改回 `false`。
     浮栏得**半透明**才有霜面可看：`shell.toml [bar] background-alpha 0.45` 喂 `Color.bar.background`，而浮栏插件
     的 `Bar.qml` 不再把该 alpha 强制成 1（niri 补丁第 5 处，§8.11）。
     **圆角区域由客户端下发**：补丁给 bar 的 `PanelWindow` 挂

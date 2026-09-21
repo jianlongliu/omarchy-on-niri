@@ -66,15 +66,29 @@ layer-rule {
     }
 }
 
-// Floating bar frost (2026-09-19). Only `xray` is set here, NOT `blur true`:
-// the rounded region comes from the client, exactly like the status-bar popups
-// below. xray false frosts whatever is actually behind the bar (the live
-// windows, should one ever get there) rather than the wallpaper alone, per the
-// user. The bar has to stay semi-transparent for any of it to show -- shell.toml's
+// Floating bar frost. Only `xray` is set here, NOT `blur true`: the rounded
+// region comes from the client, exactly like the status-bar popups below.
+// xray true (2026-09-21, user): blur the wallpaper alone. Measured against
+// xray false on a live desktop: mean 0.4% of pixels differ, max 12/255 -- i.e.
+// invisible -- because niri keeps tiled windows out of the bar's strip. The only
+// visible case is a FLOATING window dragged under the bar; flip to false if that
+// look is wanted back. The bar has to stay semi-transparent for any of it to show -- shell.toml's
 // [bar] background-alpha feeds Color.bar.background, and the plugin now keeps
 // that alpha instead of forcing it to 1.
 layer-rule {
     match namespace="^omarchy-bar$"
+    background-effect {
+        xray true
+    }
+}
+
+// Omarchy menu (2026-09-21, user): real frosted glass over the live windows behind
+// the card -- the performance cost is accepted. Like the status-bar popups below,
+// this is a full-screen transparent PanelWindow with a card, and Quickshell sends an
+// ext_background_effect region for the card only; no `blur true` here either, so the
+// client's region stays the sole blur area.
+layer-rule {
+    match namespace="^omarchy-menu$"
     background-effect {
         xray false
     }
