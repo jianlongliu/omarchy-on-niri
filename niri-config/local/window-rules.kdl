@@ -135,3 +135,29 @@ window-rule {
         blur true
     }
 }
+
+// About window / fastfetch TUI (2026-09-22). Upstream gets three things for free
+// that niri does not give: Hyprland's blur is GLOBAL (default/hypr/looknfeel.lua
+// `blur = { enabled = true }`) so `org.omarchy.about` is frosted without saying so,
+// and its float + size live in default/hypr/apps/system.lua (float/center/920x480).
+// niri needs both spelled out, and without them the window arrives as a tile with
+// a hard-edged translucent background — the "fastfetch 没有磨砂" symptom.
+// The app-id comes from omarchy-launch-about's own
+// `omarchy-launch-or-focus-tui --app-id=org.omarchy.about`, so the Ghostty rule
+// above does not match it.
+// Size: 920x540 rather than upstream's 920x480 — the fit code in the launcher is
+// skipped once a user fastfetch config exists (`custom_fastfetch_config`), so the
+// rule size is what About gets, and the Omarchy module layout is 102 cols x 30 rows
+// (cell 7.4x15 logical px, font-size 9 + window-padding 12) ⇒ ~474 px of content.
+// niri 26.04 has no `center` rule, so the window is not centred like upstream's.
+window-rule {
+    match app-id=r#"^org\.omarchy\.about$"#
+    open-floating true
+    default-column-width { fixed 920; }
+    default-window-height { fixed 540; }
+    draw-border-with-background false
+    background-effect {
+        xray false
+        blur true
+    }
+}

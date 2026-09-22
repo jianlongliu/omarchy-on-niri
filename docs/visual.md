@@ -12,6 +12,7 @@
 
 
 - 8.8 视觉磨砂（frosted Quickshell / 状态栏面板毛玻璃）
+- 34. **About 窗口（fastfetch TUI）的磨砂与尺寸（2026-09-22，用户 "我原汁原味的blur咋没了? … 是fastfetch的blur没了" → "我看着还是没blur"）**：上游 Hyprland 的 blur 是**全局**的、float/center/920×480 在 `default/hypr/apps/system.lua`，About 窗口白拿；niri 两样都得显式写 ⇒ 补 `match app-id=r#"^org\.omarchy\.about$"#`（`open-floating` + 920×540 + 磨砂块）。误判记录：先按 logo 配色查、被用户否掉
 - 33. **交接过渡的桌面侧：加载期什么都不显示，bar 到点整块出现（boot reveal，2026-09-21；起因 "输入完密码确认后…有文字" → "能掩盖 quickshell 的启动过程吗? 那个有点丑了" → 用户否决黑幕与一切全屏遮罩 "不黑, 先放壁纸不行吗?" → 一度定稿 "bar 从上面慢慢浮下来"，最终因霜化的机制问题改成"到点整块出现"，过程见 33b ④⑤⑥）**：登录交接到桌面之间隔着一段文本 VT（根因与另外三处改动见 `docs/lock.md` §11.26）。做法：**壁纸照原样铺底、不加任何遮罩**，桌面壳层启动时把标记 `$XDG_RUNTIME_DIR/omarchy-boot-splash` 当作"这次是真登录"，据此让 bar 的 surface 先不上屏、**等壳层真正组装完**再整块出现——2026-09-21 起这个"组装完"由宿主播报：`omarchy.background` 服务里新增 `paintedOnce`（壁纸首帧解码上屏；实测冷启动 ~1.35s，是整条启动链上最晚的一件事），宿主读它并推给 bar（地板 600ms / 天花板 6000ms 兜底），**不再用固定时长**（同一台机器各次冷启动差几百毫秒，开机那次还要多 ~0.5s）（**不做滑入**：霜化是 niri 按区域自己画的，滑入会先露一块空磨砂矩形，见 33b ⑥），重启壳层不重放。**关键事实：本机在用的 bar 是第三方插件 `charlieras262.floating-bar`，不是内置 `plugins/bar/Bar.qml`**——插件只拿到受限 shell API、看不到标记，所以标记由宿主**推**过去（`shell.qml` 新增 `pushBootReveal()`，在 `configureBar` 与标记 `onLoaded` 两处调用）；推给"谁被配置成 bar"，内置/插件都适用。**落点**：`shell/shell.qml`（标记 + 推送）+ `shell/plugins/bar/Bar.qml`（内置 bar：整块 surface 停屏外再滑入）+ **`~/.config/omarchy/plugins/charlieras262.floating-bar/Bar.qml`（真正生效的那个，见 `niri-port/plugin-patches/charlieras262.floating-bar.patch`）**：浮动 bar 用 **`PanelWindow.visible` 开关**（加载期整块不上屏、到点整块出现；不再有 `barVisual` 位移），`blurRegion` 指向不动的 `barBlurAnchor`（region 跟位移对象走会丢霜化，见 33b ④）。**`niri.patch` 22 文件/48 hunk、md5 `6138cc1bece9a94312572d8685c845a4`（2026-09-21 晚重导出核，把活体先改、补丁没跟上的 `paintedOnce`/`pushBootReveal()` 增补补进来）；插件补丁 md5 `0d36c626a9992de5a457e3f2880bc99a`（7 hunk，2026-09-21 核）**；**加载期底部居中的 `Thinking…` 卡片（脑形 U+F09D1，插件自带的第二个 `PanelWindow`，常驻映射、藏在屏下，arming 后立刻上屏；表面是**卡片大小 + 借 `^omarchy-osd$` 那条霜化规则**，尺寸/字体/离底照 OSD 关机吐司）已实施，收卡等宿主推的"壁纸已画"而不是固定时长；plymouth 盖交接空窗仍搁置 —— 两条都见 `docs/lock.md` §11.27**；**2026-09-21 晚补：那 ~1.4s 空窗已被 `swaybg` 填掉**（niri `spawn-at-startup` 先铺同一张图、几十 ms 上屏，与插件那份逐像素一致 ⇒ 无缝），平色底色现在只剩头 ~100ms 的台阶 —— 见 `docs/local-overrides.md` §4
 - 33b. **boot reveal 的三个坑（2026-09-21，全是实测）**：① **别用 QML 动画排片**——bar 停屏外时 surface 不在屏上，动画的钟照走但不出版本帧，名义 1800+1400 的 `PauseAnimation+NumberAnimation` 实测在 0.9s 内一次落位；改用**普通 Timer 做 hold + 每帧按墙钟算进度的 Timer 做滑入**（实测节拍稳定 16ms/次，`bootReveal` 逐帧平滑 0.001→0.999）。② **`anchors.fill: parent` 会接管 x/y**，包一层 `Item` 做位移时必须写 `width/height`，否则只剩淡入、位移被静默忽略。③ **bar 的可见内容要包在同一个 Item 里**再位移：只动 surface 会带着独占区一起动，屏幕上的窗口跟着上下跳。④ **`BackgroundEffect.blurRegion` 不能跟会被位移的 item**：包上 `barVisual` 之后霜化整块消失（用户："没blur"）——niri 磨的是**它拿到的那块矩形**，而 reveal 开始时 bar 停在上边之外，区域采样在屏外，frost 就跟着没了；改成指向一个**不动的替身**（`barBlurAnchor`：`anchors.fill: parent` + 同 `radius` + `color: "transparent"`，只当形状不画画），几何与静止时的 bar 相同（bar 填满 surface）。⑤ **"只有 opacity" 是缓动的锅，不是位移没生效**：surface 高只到 bar 的底边，**顶边以上全是被裁掉的**，能看见的只有"裸露高度 = barSize − offset"这一段 ⇒ **缓动决定看得见多少下降**：InOutCubic 的前一半在爬坡时 bar 还只是顶边一条，又跟淡入同速，眼睛只读到"淡"；换 **OutCubic** 并把淡入提前结束（`Math.min(1, bootReveal * 3.5)`，约 100ms 就全不透明），让下降当主角。另：offset 满值 50 逻辑像素 > bar 高 32 ⇒ 前约 14% 的位移是看不见的（等价于把 hold 稍微延长，正常）。⑥ **滑入方案最终废弃（2026-09-21）**：霜化是 **niri 按它拿到的 region 自己画的**（不看客户端画了什么、也不看 alpha），所以任何「bar 滑进来」的做法都会先露出一块**空的磨砂矩形**、再有个 bar 追下来（用户原话：「屏幕顶部有个 blur 的 bar, 然后再浮下来一个 bar」），而 region 又跟不上位移（④）⇒ 最终改成「surface 先不上屏（`PanelWindow.visible`）、到点整块出现」，两个问题一起消失；⑤ 那段缓动/淡入的调试过程留作记录。
 - 32. **吐司"一来通知整屏变糊"：全屏 surface 撞上 niri 侧 `blur true`（2026-09-20，用户 "我的吐司通知,
@@ -202,6 +203,36 @@ quickshell：`pkill -x quickshell && niri msg action spawn -- quickshell -n -p $
       （我第一次取到 `mean=70` 就是这种）。要测就先确认窗口真的在屏幕上（本机没装 xdotool/xwininfo，只能用
       「亮色 UI 掩码扫列」或先看 `niri msg workspaces` 的 `active`/`active_window_id`）。
     - 回退：`~/.local/state/backups/.config/niri/window-rules.kdl.bak-20260920-wechatblur`。另两条 niri 配置通用坑见 §8 第 26 条。
+
+34. **About 窗口（fastfetch TUI）的磨砂与尺寸：上游靠"全局 blur + `system.lua`"白拿，niri 两样都得自己写
+    （2026-09-22，用户「我原汁原味的blur咋没了?」→「是fastfetch的blur没了, 好像套了啥主题」→「我看着还是没blur」）**：
+    - **先说误判**：这个"没 blur"我先当成 **logo 配色**问题查（甚至顺手删了上游那条 `color:{1:green}`），其实它只是把 logo
+      从被染绿的 `[1m[32m` 变回原生青蓝 `[1m[36m`，**跟磨砂无关**，用户当场否掉。**用户说的"fastfetch 的 blur"＝ About 面板那块面**，
+      不是他的终端窗口、也不是字体。别再往配色/主题方向上找。
+    - **根因（两层，上游全是白拿、niri 全要显式写）**：① 上游 Hyprland 的 blur 是**全局**的
+      （`default/hypr/looknfeel.lua` 里 `blur = { enabled = true }`），About 窗口（app-id `org.omarchy.about`）
+      不写任何规则也自动磨砂；niri 必须**逐窗口 opt-in**，而 `window-rules.kdl` 里 ghostty / `org.omarchy.terminal` /
+      `org.omarchy.float-tui` 都带磨砂块、**独缺 `org.omarchy.about`** ⇒ 半透明底裸奔，看着就是"没 blur"。
+      ② 它的浮动与尺寸在上游 `default/hypr/apps/system.lua`（float + center + 920×480）；niri 不写规则就是**一个 tile**，
+      30 行 × 102 列的 TUI 挤进 624px 宽的列里。
+    - **落点**：`~/.config/niri/window-rules.kdl` + 仓库 `niri-config/local/window-rules.kdl` 末尾新增
+      `match app-id=r#"^org\.omarchy\.about$"#`：`open-floating true` + `default-column-width { fixed 920; }` +
+      `default-window-height { fixed 540; }` + `draw-border-with-background false` + `background-effect { xray false; blur true }`。
+      app-id 来自 `omarchy-launch-about` 自带的 `omarchy-launch-or-focus-tui --app-id=org.omarchy.about` —— 跟
+      `org.omarchy.float-tui` 一样**不匹配 Ghostty 那条规则，磨砂块必须照抄一份**（同 §8 第 26 条）。
+    - **尺寸为什么 540 而不是上游的 480**：`omarchy-launch-about` 里的 fit 分支在**存在用户 fastfetch 配置**时整段跳过
+      （`custom_fastfetch_config`）⇒ 窗口尺寸只能由这条规则给。本机内容 102 列 × 30 行（`fastfetch --pipe false` 数出来）、
+      `font-size 9` + `window-padding 12` ⇒ 内容约 474 逻辑 px 高，480 是贴着边，给 540。**niri 26.04 没有 `center` 规则，
+      但浮动窗口本来就居中**（实测 `tile_pos_in_workspace_view [178,148]`，1280×800 上 (1280−920)/2 = 180 ✓）。
+    - **实测（2026-09-22）**：`omarchy-launch-about` → `niri msg --json windows` = `app_id=org.omarchy.about,
+      is_floating=true, window_size=[920,540]`。磨砂不能只看屏幕亮度，用**"同一块文本空白带"的高频分量**判定
+      （窗口内物理 y 316..356 ＝ padding + 前两行空行）：**直接看背景（关窗前后同坐标）`mean|Δ|=5.43`，透过 About 窗口
+      只有 `0.25`**，而两者低频相关 `0.844` ⇒ **透光但细节被糊掉 = 磨砂真在起作用**（不透明窗口不会既 0.25 又 0.84 相关）。
+      内容完整：窗口内文本占物理 dy≈100..850、底部约 200px 是空的 ⇒ 30 行全显示、没被裁。
+    - **两个操作坑**：① `niri msg action reload-config` **不存在**（`unrecognized subcommand 'reload-config'`）——
+      改 `*.kdl` 后 niri 自己会重载（journal `DEBUG niri_config: loaded config from …`），要手动就用 `load-config-file`。
+      ② `niri msg action close-window` 对 About **无效**（TUI 不吃 close 请求，窗口还在），得 `kill <pid>`。
+    - 回退：`~/.local/state/backups/.config/niri/window-rules.kdl.bak-20260922-aboutblur`，再 `niri validate`。
 
 ---
 

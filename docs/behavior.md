@@ -88,6 +88,13 @@
       `spawn "nautilus" "--new-window"`。手动把当前窗口切浮动是 `Mod+V`。
     - 回退：还原 `~/.local/state/backups/.config/niri/binds.kdl.bak-20260920-floatbinds` 与
       `~/.local/state/backups/.config/niri/window-rules.kdl.bak-20260920-floatbinds`，再 `niri validate`。
+    - **后补（2026-09-22）：第三条同形状的规则 = `^org\.omarchy\.about$`**（About 窗口 / fastfetch TUI）。
+      跟 `float-tui` 那条一个道理：app-id 不是 `com.mitchellh.ghostty`，Ghostty 的磨砂块不覆盖它，
+      所以要**照抄一份磨砂块**；另外它还要 `open-floating true` + 固定 `920x540`（上游这些是 Hyprland 全局 blur 与
+      `system.lua` 白给的）。起因是用户「我原汁原味的blur咋没了?」——**"fastfetch 的 blur"指的就是这块 About 面板**。
+      根因、尺寸推算、像素级实测（透光低频相关 0.844 / 高频 1/20）与两个操作坑（`reload-config` 子命令不存在、
+      `close-window` 关不掉 TUI）见 `docs/visual.md` §8.8 第 34 条；回退
+      `~/.local/state/backups/.config/niri/window-rules.kdl.bak-20260922-aboutblur`。
 
 ---
 
