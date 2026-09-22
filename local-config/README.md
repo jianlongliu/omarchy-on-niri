@@ -20,6 +20,7 @@ adjust fonts and DPI.
 | `omarchy/shell.toml` | `~/.config/omarchy/shell.toml` | 字号与通透度的**唯一旋钮**：`[font] base-size 12`（基准，见 `docs/visual.md`）、`[bar]` 尺寸 + `background-alpha 0.45` + **`icon-font 12`**（要 `Style.qml` 的白名单，已在 `niri.patch` 里）、`[menu] background-alpha 0.45`（**不写底色**，走主题的 `[menu] background`）。**磨砂五处之一**，漏了就退回不透明卡片 |
 | `omarchy/shell.json` | `~/.config/omarchy/shell.json` | bar 布局与 idle 计时：`bar.id = charlieras262.floating-bar`（**在用的 bar 是第三方插件，不在 `niri.patch` 里**）、`idle.lock 300`、`disabledPlugins: ["omarchy.lock"]`。⚠ 钉的是**本机 bar 偏好**＋ 5 个不在仓库里的第三方部件，见下 |
 | `omarchy/extensions/omarchy-menu.jsonc` | 同上 | 菜单 override：3 个 setup 项的 label + icon（上游只给 action，会显示成 raw id）＋ screensaver 的 6 条 `when:"false"` 屏蔽（用户要求禁用，见 `docs/local-overrides.md`） |
+| `fastfetch/config.jsonc` | `~/.config/fastfetch/config.jsonc` | 纯观感：**上游那份 Fastfetch 展示配置**（`etc/fastfetch/config.jsonc`）逐字节照抄，**只换了 logo 段** —— `type: file` + `~/.config/omarchy/branding/about.txt`（本机没有 branding 目录）→ `type: builtin` + `source: arch`，padding 原样；**上游那条 `"color": { "1": "green" }` 已删** —— 它会把内置 Arch logo 从原生青蓝（`[1m[36m`）染成主题绿，看着"像套了个主题"。⚠ 里面几条 `omarchy-version*` / `omarchy-theme-current` / `omarchy-version-pkgs` 要求 `$OMARCHY_PATH/bin` 在 PATH 里；本机 `/etc/fastfetch/` 不存在（dev-link 装机没装 `omarchy-settings` 包），所以这份用户级配置**就是在跑的那份**（见 `docs/file-layout.md`、`docs/local-overrides.md` §8 第 14 条） |
 
 配色走 **Omarchy 自己的主题**，没有私有主题文件：
 
@@ -43,6 +44,7 @@ cp local-config/ghostty/config ~/.config/ghostty/config          # 先备份你�
 cp local-config/systemd/user/materal-recolor.* ~/.config/systemd/user/
 systemctl --user enable --now materal-recolor.path              # 需要 ~/bin/materal-update 在位
 ghostty +validate-config                                        # 无输出即通过
+install -Dm644 local-config/fastfetch/config.jsonc ~/.config/fastfetch/config.jsonc  # 纯观感，可跳过
 ```
 
 - **字体是个人口味**：`font-family = SFMono Nerd Font` / `Microsoft YaHei`、`mouse-scroll-multiplier`、
@@ -76,3 +78,6 @@ cd ~/Projects/omarchy-on-niri
 
 `~/.config/omarchy/{shell.json,shell.toml}` 是**热监听**（存盘即生效）；但仓库里这份改了**不会**自动
 同步到机器 —— 方向是"机器 → 仓库"，回写靠 `local-files-sync.sh` 报 `DIFF` 后人工 `cp`。
+
+`~/.config/fastfetch/config.jsonc`（上游展示配置 + 内置 Arch logo）2026-09-22 收在 `local-config/fastfetch/` 下，
+与机器上那份逐字节相同；纯观感，不影响移植。

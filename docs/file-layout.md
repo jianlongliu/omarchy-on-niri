@@ -338,6 +338,12 @@ clobbered without backup. Fastfetch is package-owned at
 `/etc/fastfetch/config.jsonc`; delete `~/.config/fastfetch/config.jsonc` to
 return to the packaged default.
 
+On this machine no `omarchy-*` package is installed at all (`/etc/skel` is stock
+Arch, `/etc/fastfetch/` absent), so fastfetch reads the user-level file and that
+file is what runs. It is upstream's config with the logo swapped — builtin
+`arch` instead of the `~/.config/omarchy/branding/about.txt` art — and it is
+collected in `local-config/fastfetch/config.jsonc`.
+
 ## Quick reference: where does X live?
 
 | Goal | Touch |

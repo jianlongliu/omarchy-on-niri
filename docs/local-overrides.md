@@ -65,7 +65,7 @@
 | `niri-port/niri.patch` + `Niri.qml` + `plugins/blurwallpaper` | 覆盖层，挺过 `omarchy update` | `~/bin/omarchy-niri-repatch`（幂等） |
 | `niri-port/plugin-patches/` | 4 个第三方插件的本地魔改补丁（+ README 说明怎么生成/怎么重放） | 手工 `git apply`（无自动重放器） |
 | `scripts/kdl-sync.sh`、`scripts/local-files-sync.sh` | 机器 ↔ 仓库的对账：前者比 `niri-config/local/*.kdl`（家目录占位符），后者比 `local-config/` + `plugins/` + `split-lock/ir-light`（逐字节） | 各自直接跑；不在本机则 `skip` |
-| `local-config/` | **本机 `~/.config` 覆盖层**（上游默认树 `config/` 之外那几份）：`ghostty/config`（含 `background-blur-radius = 0` 这条磨砂必需改动；配色走 Omarchy 主题的 `config-file`，不带私有主题文件）、`systemd/user/materal-recolor.{path,service}` | 拷到 `~/.config/` 对应路径（见该目录 README）；`materal-recolor.path` 还要 `systemctl --user enable --now` |
+| `local-config/` | **本机 `~/.config` 覆盖层**（上游默认树 `config/` 之外那几份）：`ghostty/config`（含 `background-blur-radius = 0` 这条磨砂必需改动；配色走 Omarchy 主题的 `config-file`，不带私有主题文件）、`systemd/user/materal-recolor.{path,service}`、（2026-09-22）`fastfetch/config.jsonc`（上游 fastfetch 展示配置 + 内置 Arch logo 原生青蓝，删了上游的绿覆盖，纯观感） | 拷到 `~/.config/` 对应路径（见该目录 README）；`materal-recolor.path` 还要 `systemctl --user enable --now` |
 | `plugins/jianlongliu.arch-logo/` | 自研 bar 插件的源码（`BarWidget.qml` + `arch-logo.svg` + `manifest.json`；无 `clonedFrom`，不是上游克隆） | 拷到 `~/.config/omarchy/plugins/jianlongliu.arch-logo/` |
 | `split-lock/ir-light` | PAM 人脸栈点名的 IR 补光脚本（`pam_exec.so /usr/local/bin/ir-light`）的仓库副本 | `install -m 0755 split-lock/ir-light /usr/local/bin/ir-light`；**硬件专属，见 §5** |
 | `niri-config/local/*.kdl`（7 份） | **本机在用的 niri 配置**（`config` + `input/monitor/layout/window-rules/effects/binds` 的模块化拆分） | 拷到 `~/.config/niri/`、把 `/home/<user>` 换成自己家目录、按自己显示器改 `monitor.kdl`，然后 `niri validate`；说明见 `niri-config/README.md` |
@@ -264,6 +264,24 @@ git apply --reverse --check niri.patch   # 必须通过
     - `~/.config/.niri-dms-retired-20260919/`（15 个文件）：**DMS 时代的 niri 配置存档**
       （`config.kdl` + `user.kdl` + `dms/*.kdl` 九个 + `gtk-4.0-stale/` 两份，8 月那批），2026-09-19 移植接管时
       整个退役、留作回滚点。**本文档此前从没记过它**（所以清 `ls` 时才像新发现一样冒出来）。
+14. ~~`~/.config/fastfetch/config.jsonc`~~ **已收进仓库（2026-09-22）**：`local-config/fastfetch/config.jsonc`。
+    上游的 Fastfetch **展示**配置是仓库里的 `etc/fastfetch/config.jsonc`（file-layout 表里映射到
+    `/etc/fastfetch/config.jsonc`，随 `omarchy-settings` 包走；`$OMARCHY_PATH` 的 checkout 里也有一份，
+    与仓库逐字节相同，md5 `2b2ce12a…`）。本机这份是它的**用户级覆盖**：逐字节照抄、**只改 logo 段** ——
+    `type: file` + `source: ~/.config/omarchy/branding/about.txt`（本机**没有** `~/.config/omarchy/branding/`）
+    → `type: builtin` + `source: arch`，padding（top 2 / right 6 / left 2）原样；**并删掉上游那条
+    `"color": { "1": "green" }`**（2026-09-23 用户报「我的 blue/原汁原味没了，像套了主题」后去掉的）：
+    上游用它把 logo 统一染成主题绿，内置 `arch` logo 的原生配色是**青蓝**（pty 抓包 `[1m[36m`，加绿后
+    变 `[1m[32m`）—— 留绿覆盖＝Arch 变绿，去掉＝原汁原味。其余 key 不动。
+    **实跑验过**：三块边框区（Hardware / Software / Age·Uptime·Update）全出值，logo 走 pty 抓包是原生青蓝。
+    ⚠ 它有几条模块直接调 `omarchy-version` / `-branch` / `-channel` / `omarchy-theme-current` /
+    `omarchy-version-pkgs`，换机时这些要在 PATH 里（本机走 `$OMARCHY_PATH/bin`，已在）。
+    ⚠ **本机 `/etc/fastfetch/` 不存在**：`pacman -Qs omarchy` 为空（一个 omarchy 包都没装）、`/etc/skel` 是
+    Arch 原始那三份，`fastfetch` 本体来自 Arch 包 `fastfetch 2.68.1-1` ⇒ 删掉用户级这份是回落到 fastfetch
+    自己的出厂默认，**不是**回到 omarchy 那份。
+    改动前的两份都在备份根：`config.jsonc.bak-20260922`（`XeroArch` 内置 logo 的简版，632 B，用户原来的）
+    与 `config.jsonc.bak-20260923-greenlogo`（照抄上游、还留着绿覆盖的中间版）；更早还有
+    `config.jsonc.bak-20260921-033651`（655 B）。
 
 ---
 
@@ -285,3 +303,4 @@ git apply --reverse --check niri.patch   # 必须通过
 | screensaver 恢复 | 删 `~/.local/state/omarchy/toggles/screensaver-off` + 复原 `omarchy-menu.jsonc.bak-20260920-prescreensaver` |
 | 选择器预热 | `touch ~/.local/state/omarchy/toggles/picker-warmup-off`（或 `systemctl --user disable --now omarchy-picker-warmup`） |
 | 插件本地魔改 | 在该插件目录 `git apply -R ~/.config/omarchy/niri-port/plugin-patches/<id>.patch` |
+| fastfetch 配置改坏 | `cp ~/.local/state/backups/.config/fastfetch/config.jsonc.bak-20260922 ~/.config/fastfetch/config.jsonc`（改前那份，`XeroArch` 简版；想回到"绿 logo"的中间版用 `…bak-20260923-greenlogo`；想回上游展示配置就直接 `cp $OMARCHY_PATH/etc/fastfetch/config.jsonc` 过来，但那条 `color: green` 会把 Arch 染绿） |
