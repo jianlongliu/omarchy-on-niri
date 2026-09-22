@@ -1,0 +1,100 @@
+#!/bin/bash
+# yay — PATH-first shim mapping Omarchy's AUR-helper calls onto paru (doc §8 第 34 条).
+#
+# Why: upstream Omarchy drives the AUR through `yay` (install/omarchy-base.packages
+# ships it), but this machine runs paru and has no yay on disk at all. Every yay call
+# site therefore died with "command not found", and the menu's TUIs came up empty —
+# `omarchy-pkg-aur-install` (Install → AUR) is nothing but `yay -Slqa | fzf`, so the
+# picker had no list to show, and no preview either:
+#   * omarchy-pkg-aur-install   (menu Install → AUR: list, previews, install)
+#   * omarchy-pkg-remove        (menu Remove → Package: preview of installed pkgs)
+#   * omarchy-pkg-aur-add       (installing AUR deps from other helpers)
+#   * omarchy-update-aur-pkgs   (AUR upgrade pass; this machine's omarchy-update
+#                                shim bypasses it, see port-bin/omarchy-update)
+#
+# One shim beats four patched call sites: ~/bin is first in PATH for both the niri
+# session and the Quickshell shell, and edits to bin/* would be hunks that every
+# upstream update has to replay (same reasoning as the uwsm-app shim, §8 第 22 条).
+#
+# Argument compatibility — all of these were run against paru 2.1.0 on this machine
+# and accepted as-is, so the shim is a plain passthrough for them:
+#   -S --noconfirm --needed PKG…   (install; paru knows `needed`, args.rs)
+#   -Slqa                          (AUR-only list: 119811 entries here, and
+#                                   119811 + 20176 repo pkgs == -Slq's 139987)
+#   -Siia PKG / -Qi PKG / -Qqe     (info + previews + installed list)
+#   -Sua --noconfirm --cleanafter --ignore a,b   (paru knows `cleanafter`/`ignore`)
+#   `aur/PKG` targets              (paru's own prefix; upstream's install path
+#                                   rewrites picks to `aur/<name>` before -S)
+# And `-S --noconfirm` really is non-interactive here: paru's PKGBUILD review is
+# gated on `!config.no_confirm` (src/install.rs, review()), so no diff pager opens
+# inside the menu's floating terminal.
+#
+# The one gap the shim has to paper over — `yay -Gp PKG` prints FOUR lines before
+# the PKGBUILD (yay get.go printPkgbuilds: logger.Printf("\n\n# %s\n\n%s", …)), which
+# is exactly what upstream's `yay -Gpa {1} | tail -n +5` preview bind strips. paru's
+# -Gp prints the bare PKGBUILD, so the four lines are re-emitted here; without this
+# the alt-b preview would silently eat the first 4 lines of the PKGBUILD (its leading
+# comments for most packages, but real assignments for a terse one).
+#
+# Rollback: rm ~/bin/yay
+set -uo pipefail
+
+# --- locate the real paru without ever re-entering ourselves ---------------------
+# Pure bash on purpose: callers include session and unit contexts whose PATH may be
+# stripped (`env PATH=/usr/bin:/bin …`), and shelling out to `dirname` there used to
+# fail silently — which turned the self-directory skip into a no-op, letting a decoy
+# paru sitting next to the shim win.
+case $0 in
+*/*) self_dir=${0%/*} ;;
+*) self_dir=. ;; # invoked as a bare name (`bash yay`), i.e. via the cwd
+esac
+self_dir=${self_dir:-/}
+
+real_paru=""
+IFS=: read -r -a path_dirs <<<"$PATH"
+for dir in "${path_dirs[@]}"; do
+    dir=${dir:-.}
+    [[ $dir == "$self_dir" ]] && continue
+    # `-ef` covers the case of the shim itself being named paru on PATH.
+    if [[ -f $dir/paru && -x $dir/paru && ! $dir/paru -ef $0 ]]; then
+        real_paru="$dir/paru"
+        break
+    fi
+done
+
+if [[ -z $real_paru ]]; then
+    echo "yay(shim): paru not found on PATH — the AUR paths of the Omarchy menu need it" >&2
+    exit 127
+fi
+
+# --- which invocation is this? ---------------------------------------------------
+print_pkgbuild=0
+get_pkgbuild=0
+targets=()
+for arg in "$@"; do
+    case $arg in
+    --getpkgbuild) get_pkgbuild=1 ;;
+    --print) print_pkgbuild=1 ;;
+    -*) # bundled short options, e.g. -Gpa
+        if [[ $arg =~ ^-[A-Za-z]+$ ]]; then
+            [[ $arg == *G* ]] && get_pkgbuild=1
+            [[ $arg == *p* ]] && print_pkgbuild=1
+        fi
+        ;;
+    *) targets+=("$arg") ;;
+    esac
+done
+
+# --- `yay -Gp`: print the 4-line header upstream's `tail -n +5` strips ------------
+if ((get_pkgbuild && print_pkgbuild && ${#targets[@]} > 0)); then
+    body=$("$real_paru" "$@")
+    rc=$?
+    # Headers are per-target in yay; with several targets paru's output can't be
+    # split up again, so emit one header for the whole run (nothing calls it that
+    # way — upstream only ever passes a single `{1}`).
+    ((rc == 0)) || exit "$rc"
+    printf '\n\n# %s\n\n%s' "${targets[*]}" "$body"
+    exit 0
+fi
+
+exec "$real_paru" "$@"

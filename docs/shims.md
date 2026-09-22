@@ -16,6 +16,7 @@
 - 5. **hyprctl schema 精度**：个别 Hyprland-only 字段可能是占位值；如遇脚本异常再补映射。
 - 7. **TUI 编辑器启动已修**：`omarchy-launch-tui` 原本走 `uwsm-app`+`xdg-terminal-exec`（Hyprland/uwsm
 - 22. **应用启动类调用统一到一个 `uwsm-app` 垫片（2026-09-19 修）**：上游 Omarchy `bin/` 里有 ~30 处
+- 34. **AUR 助手统一成 `yay` → paru 垫片（`~/bin/yay`，2026-09-22 修）**：上游的 AUR 调用全走 `yay`，本机只有 paru
 
 ---
 
@@ -107,3 +108,27 @@
     **边界（垫片只解决"调用死掉"，不解决调用方语义错误）**：`omarchy-toggle-nightlight` 调
     `uwsm-app -- hyprsunset`，niri 上 hyprsunset 本身没意义（§8 第 19 条一带）；`omarchy-launch-or-focus`
     的默认命令写成 `uwsm-app -- $WINDOW_PATTERN`，把窗口匹配串当命令——这两个是上游调用方的毛病，另议。
+
+---
+
+34. **AUR 助手统一成 `yay` → paru 垫片（`~/bin/yay`，2026-09-22 修）**：上游 Omarchy 的 AUR 调用全走
+    `yay`（`install/omarchy-base.packages` 里就装着它），本机只有 paru、`yay` 不存在 ⇒
+    `omarchy-pkg-aur-install`（菜单 Install → AUR）本体就是 `yay -Slqa | fzf`，列表取空 ⇒ **选择器打开
+    是空的、预览也没内容**；同类调用还有 `omarchy-pkg-remove`（Remove → Package 的预览）、
+    `omarchy-pkg-aur-add`、`omarchy-update-aur-pkgs`（本机 `omarchy-update` 垫片本来就绕过最后这个）。
+    **修法（只加一个文件）**：PATH-first 垫片 `~/bin/yay`（仓库副本 `port-bin/yay`，随 `install.sh` 的
+    `port-bin/*` glob 装进 `~/bin`），参数原样透传给 paru —— `-S --noconfirm --needed`、
+    `-Slqa`（只出 AUR：119811 条，正是 `-Slq` 的 139987 减官方 `pacman -Slq` 的 20176）、
+    `-Siia` / `-Qi` / `-Qqe`、`-Sua --noconfirm --cleanafter --ignore a,b`、`aur/<name>` 前缀，
+    全部实测可用；`--noconfirm` 在 paru 里确实非交互（审核的门是 `!config.no_confirm`，paru
+    `src/install.rs` 的 `review()` 开头），所以不会在菜单那个浮窗终端里冒出 PKGBUILD diff 分页器。
+    **唯一的语义缺口是 `-Gp`**：yay 会在 PKGBUILD 前多打四行（空行/空行/`# 包名`/空行，yay `get.go`
+    `printPkgbuilds` 的 `logger.Printf("\n\n# %s\n\n%s", …)`），这正是上游
+    `--bind 'alt-b:change-preview:yay -Gpa {1} | tail -n +5'` 里 `tail -n +5` 的来历；paru 的 `-Gp`
+    只打裸 PKGBUILD，**垫片把四行补回来** —— 否则 alt-b 预览会静默吃掉 PKGBUILD 的头四行。
+    垫片扫 PATH 找真 paru 时跳过自己所在目录，且**不依赖外部命令**（`dirname` 在被裁过的调用环境
+    `env PATH=/usr/bin:/bin` 里会失败，跳过自身目录随之静默失效 —— 这条是离线测试当场抓出来的）。
+    验证：`port-bin/tests/test-yay-shim.sh`（离线，假 paru，4 项：参数原样透传 / `-Gp` 补头且
+    `tail -n +5` 拿到完整 PKGBUILD / 非 `-Gp` 不加头 / `bash -n`），4/4 绿；真机在 pty 里跑了菜单那两个
+    TUI（Install → AUR 列表 119811 条 + 信息面板、alt-b 预览首行 `# Maintainer: …`、Remove 的
+    `paru -Qi` 预览），原始输出是合法 UTF-8、零 U+FFFD，装包数 1191 前后不变。回退：`rm ~/bin/yay`。
