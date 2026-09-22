@@ -70,7 +70,7 @@ omarchy-on-niri/
 ├── docs/INSTALL.md  <- hand-run install procedure
 ├── docs/omarchy-on-niri-port.md <- main volume: current facts + module map
 ├── docs/{visual,behavior,plugins,shims,upstream,migration,lock,local-overrides}.md <- module volumes
-├── scripts/     <- kdl-sync.sh, local-files-sync.sh
+├── scripts/     <- kdl-sync.sh, local-files-sync.sh, check-doc-refs.py, menu-model-render.js
 └── README.md
 ```
 

@@ -63,7 +63,7 @@ omarchy-on-niri/
 ├── docs/INSTALL.zh.md   <- 手动执行安装流程
 ├── docs/omarchy-on-niri-port.md <- 主文档（当前事实 + 模块映射表，中文）
 ├── docs/{visual,behavior,plugins,shims,upstream,migration,lock,local-overrides}.md <- 各模块卷（中文）
-├── scripts/             <- kdl-sync.sh、local-files-sync.sh
+├── scripts/             <- kdl-sync.sh、local-files-sync.sh、check-doc-refs.py、menu-model-render.js
 └── README.md / README.zh.md
 ```
 

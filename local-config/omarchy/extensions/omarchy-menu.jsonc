@@ -48,5 +48,59 @@
   // Override (not the repo default) so it hot-reloads and survives omarchy update.
   "setup.monitors": {"icon":"󰍹","label":"Monitors","action":"omarchy-launch-config-editor \"$HOME/.config/niri/monitor.kdl\""},
   "setup.keybindings": {"icon":"","label":"Keybindings","action":"omarchy-launch-config-editor \"$HOME/.config/niri/binds.kdl\""},
-  "setup.input": {"icon":"","label":"Input","action":"omarchy-launch-config-editor \"$HOME/.config/niri/input.kdl\""}
+  "setup.input": {"icon":"","label":"Input","action":"omarchy-launch-config-editor \"$HOME/.config/niri/input.kdl\""},
+
+  // 2026-09-22 屏蔽以下 6 个 id（= 5 个菜单项）：本机要么没有对应功能，要么动作链在本机必失败。
+  //   style.unlock           本机无 LUKS（lsblk 无 crypt、/etc/crypttab 空），它主题化的是不存在的磁盘解锁屏；
+  //                          且 omarchy-plymouth-set 的 root 事务要求 $OMARCHY_PATH 归 root 或 /etc/omarchy.conf
+  //                          授权，本机两者都不成立 => 必拒；就算过了末尾还会 mkinitcpio -P 重建 initramfs。
+  //   install.webapp         能造 .desktop，但 Exec 走 omarchy-launch-webapp：默认浏览器
+  //                          (userapp-Firefox-W32OS3.desktop) 不在白名单 => 回落 chromium.desktop，本机没装
+  //                          chromium => 解析出空命令，造出来的启动器点了没反应。
+  //   install.preinstalls    本机无 Omarchy 仓库（pacman.conf 只有 core/extra/multilib/archlinuxcn），包表里
+  //                          的 aether/cliamp/omacut/omacalc/omawrite 任何仓库都查不到 => omarchy-pkg-add 整笔失败。
+  //   update.channel         stable/rc/edge 会把 Omarchy 自家仓库写进 pacman 配置；dev 还会 git clone 上游到
+  //                          ~/omarchy 并 omarchy-dev-link（写 /etc/omarchy.conf、改 OMARCHY_PATH）。
+  //   update.config.plymouth 同 unlock 那套 root 事务（且 /usr/share/plymouth/themes/omarchy 不存在）=> 必拒。
+  //   update.config.shell    omarchy-refresh-config 会拿 $OMARCHY_PATH（Sep-19 那份拷贝）的 shell.json
+  //                          盖掉本机调优版，再 omarchy-bar defaults + 重启壳。
+  //   这 6 条都是 when:"false" 显式隐藏（只有显式 false 才生效），label/icon 从默认项复制，取消隐藏时不会退化成 id。
+  //   本轮按用户决定不动：Remove 侧的 remove.preinstalls（脚枪，会 rm agent CLI 包装 + omarchy-pkg-drop）；
+  //   Learn 里 5 条走 omarchy-launch-webapp 的文档链接（同 install.webapp 的根因，只记档）。
+  "style.unlock": {"icon":"󰟵","label":"Unlock","when":"false"},
+  "install.webapp": {"icon":"","label":"Web App","when":"false"},
+  "install.preinstalls": {"icon":"󰏓","label":"Preinstalls","when":"false"},
+  "update.channel": {"icon":"󰔫","label":"Channel","when":"false"},
+  "update.config.plymouth": {"icon":"󱣴","label":"Plymouth","when":"false"},
+  "update.config.shell": {"icon":"󰍜","label":"Shell","when":"false"},
+
+  // 2026-09-22 用户要求：Update 菜单把 "Omarchy" 改成 "Pacman"，并新增 AUR / Plugins 两条更新入口。
+  //   三行都走演示终端包装器（本机 2026-09-22 实测：窗口起得来、`tty`=/dev/pts/N、sudo 能弹密码框）。
+  //   update.omarchy 只改显示：label 换 "Pacman"、图标换成 Arch 那枚、iconFont 清空（不清会继续用 omarchy
+  //     品牌字体渲染这枚普通 Nerd Font 字形）——动作仍原样裸调 `omarchy-update`，即 ~/bin 垫片 = sudo pacman -Syu
+  //     （与 bar 的 system-update 部件同一条路；想更直白就把 action 换成 'sudo pacman -Syu'）。
+  //   update.aur = paru -Sua（本机 paru v2.1.0 在位；AUR 另有 ~/bin/yay 垫片，此处按用户要求用 paru）。
+  //   update.plugins = `omarchy plugin update`（bin/omarchy-plugin-update）：只动 git 克隆的插件，本机 5 个克隆里
+  //     3 个带本地 patch（charlieras262.floating-bar / meviusisback.ai-subs / ronald.input-sources）=> 上游改了同一文件时
+  //     `git merge --ff-only` 会拒绝并报 "you have local changes"，需要手工重放 plugin-patches。
+  //   注：新增 id 按合并规则**追加在 Update 子菜单末尾**（"Time" 之后）；override 无法改位置，要挪只能改默认文件。
+  "update.omarchy": {"icon":"󰣇","iconFont":"","label":"Pacman","action":"omarchy-launch-floating-terminal-with-presentation omarchy-update"},
+  "update.aur": {"icon":"󰣇","label":"AUR","action":"omarchy-launch-floating-terminal-with-presentation 'paru -Sua'"},
+  "update.plugins": {"icon":"󰐱","label":"Plugins","action":"omarchy-launch-floating-terminal-with-presentation 'omarchy plugin update'"},
+
+  // 2026-09-22 续（用户"你继续"）：Update 面板逐行体检 —— 只多出一条同 §8 第 27 条性质的死行，一并隐藏。
+  //   update.password.drive（Drive Encryption）：脚本第一句 blkid -t TYPE=crypto_LUKS 本机命中 0 个（无 LUKS，理由同 §8 第 27 条
+  //     style.unlock），直接走 else 分支打印 "No encrypted drives available." + exit 1 —— 故隐藏。
+  //   其余各行体检结论（一律不动）：
+  //     update.firmware  本机没装 fwupd（fwupdmgr 缺失）⇒ 脚本会先 omarchy-pkg-add fwupd（extra 里有，装得上），
+  //       之后因 /sys/firmware/efi 与 /usr/lib/fwupd/efi/fwupdx64.efi 都在，会 install -D 到**硬编码**的
+  //       /boot/EFI/arch/fwupdx64.efi —— 本机 ESP 是 /boot/EFI/{Boot,Linux,systemd}、没有 arch 目录，install -D 会把
+  //       /boot/EFI/arch/ 现造出来（无害的野文件）。真正干活的 fwupdmgr refresh --force + update 本身可用，
+  //       笔记本固件更新是真有用的 ⇒ 保留可见，只记这个瑕疵（要治就得自己重写 action，绕开那段 EFI 暂存）。
+  //     update.time      systemd-timesyncd 本机 enabled + active ⇒ 可用。
+  //     update.hardware  audio = systemctl --user restart pipewire 系；wifi/bluetooth = rfkill + nmcli；
+  //       trackpad 要 /sys/bus/i2c/drivers/i2c_hid_acpi/i2c-*（本机有 i2c-ELAN0672:00）⇒ 三条都可用。
+  //     update.themes    Extra Themes 的守卫命令 omarchy-theme-extras 本机 exit 1 ⇒ 菜单里本来就自动不渲染（实测不在列表里）。
+  //     update.process / update.password.user / update.timezone 照旧可用。
+  "update.password.drive": {"icon":"","label":"Drive Encryption","when":"false"}
 }

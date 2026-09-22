@@ -18,6 +18,8 @@
 - 11. **电池面板 POWER PROFILE 区为空（2026-08-25 已修）**：系统电源后端是 **TLP**（`tlp` + `tlp-pd`
 - 15. **brightnessctl 授权安装 + 背光权限（2026-08-25）**：媒体键 OSD（§5.3）依赖
 - 23. **screensaver 关掉并屏蔽（2026-09-20，用户要求「很烦，屏蔽和禁用他」）**：本机
+- 27. **菜单屏蔽 5 项（unlock / web app / preinstalls / channel / config.plymouth+shell）（2026-09-22，用户要求）**：这 6 个 id
+- 28. **Update 菜单改造：`update.omarchy` → "Pacman"，新增 `update.aur` / `update.plugins`（2026-09-22，用户要求）**：同一份 override
 - 8.17 输入源徽章（`ronald.input-sources`）+ fcitx5 双源前提（2026-09-19）
 - 12. **Super+K 键位菜单只剩 2 条（第二次复发，2026-08-25 晚已修）**：同日早些时候修过一次
 - 8.6 A 层：菜单指向 niri 真配置，Hyprland 层降级
@@ -190,6 +192,116 @@
       没有 niri 绑定（`Indicators` 里的 StayAwake 是手动「别睡」开关，与此无关）。
     - 同一次还修掉这份 override 文件里 **5 处超长 `\u` 转义**（2 处历史遗留 + 3 处新增），规则见 §8.6
       末尾那两条 override 注意。
+
+---
+
+27. **菜单屏蔽 5 项：`style.unlock` / `install.webapp` / `install.preinstalls` / `update.channel` / `update.config.{plymouth,shell}`（2026-09-22，用户要求）**：
+    用户点名"style unlock 屏蔽、install 屏蔽 web app + pre-installs、update 屏蔽 channel + config"。评估后**只屏坏掉的**：
+    前四条屏蔽是因为**本机要么没有对应功能、要么动作链在本机必失败**（不是审美取舍）；`update.config` 只屏
+    `plymouth`（必失败）与 `shell`（会盖掉本机调优版），**保留还在用的 `update.config.hyprland`（"Niri Theme" →
+    `omarchy-niri-apply-theme`，见 §8.6）和 `tmux`**。逐条根因：
+    - `style.unlock`：本机**没有 LUKS**（`lsblk -o NAME,TYPE,FSTYPE,MOUNTPOINT` 无 `crypt`、`/etc/crypttab` 空）
+      ⇒ 它主题化的是不存在的磁盘解锁屏；且 `omarchy-plymouth-set-by-theme` → `omarchy-plymouth-set` 的 root 事务
+      要求 `$OMARCHY_PATH` 归 root 或由 `/etc/omarchy.conf`（dev-link 授权）指定，而本机 `OMARCHY_PATH=~/.local/share/omarchy`
+      是**用户所有的 git checkout**、`/etc/omarchy.conf` **不存在** ⇒ `validate_trusted_configuration_file` 断言失败、
+      拒绝发布（读代码结论，未实跑——要 sudo）；末尾还会 `plymouth-set-default-theme omarchy` + `mkinitcpio -P`
+      重建 initramfs（＝ §11.27 已搁置的启动链工作）。
+    - `install.webapp`：脚本能造出 `~/.local/share/applications/<Name>.desktop`，但 Exec 是 `omarchy-launch-webapp "<url>"`；
+      它读 `xdg-settings get default-web-browser` = `userapp-Firefox-W32OS3.desktop`（Zen 的 userapp 条目）**不在白名单**
+      （chrome/brave/edge/opera/vivaldi/helium）⇒ 回落 `chromium.desktop`，**本机没装 chromium**（`pacman -Q chromium` 无、
+      `/usr/share/applications/chromium.desktop` 无）⇒ 命令解析为空串（干跑验证过），最终只执行 `setsid uwsm-app -- --app=<url>`
+      ⇒ **造出来的启动器点了没反应**。⚠ 同一根因还挂着 **Learn 里 5 条**（`learn.omarchy/hyprland/arch/neovim/bash` 全是
+      `omarchy-launch-webapp`）。唯一修法：把默认浏览器设成 `google-chrome.desktop`（Chrome 已装）⇒ 一处修活 6+ 条。
+      本轮按用户决定**只记档：不动浏览器默认值，也不屏蔽 Learn**。
+    - `install.preinstalls`：本机没装 omarchy 包、没配 Omarchy 仓库（`/etc/pacman.conf` 只有 core/extra/multilib/archlinuxcn）
+      ⇒ 包表里的 `aether`/`cliamp`/`omacut`/`omacalc`/`omawrite` **任何仓库都查不到** ⇒ `omarchy-pkg-add` 整笔事务失败、
+      脚本 exit 1（"Preinstalls are still marked as removed"）。另注：它本来也**显示成置灰 ✓（像已装）**——`disabled`
+      守卫是 `[[ ! -f ~/.local/state/omarchy/preinstalls-removed ]]`，本机没这个 marker ⇒ 守卫成立。
+    - `update.channel`：**最危险的一条**。`stable|rc|edge` 走 `omarchy-refresh-pacman <channel>` + `omarchy-update-pacman -S … omarchy{,-settings}`
+      ⇒ **把 Omarchy 自家仓库写进 pacman 配置**；`dev` 更狠 —— `git clone github.com/omacom/omarchy ~/omarchy` + `omarchy-dev-link`
+      （写 `/etc/omarchy.conf`、**改 `OMARCHY_PATH`**）+ 标 reboot-required。本机 `~/bin/omarchy-update` 垫片的注释早写明
+      "本机没装 omarchy 包、没配 Omarchy 自家仓库，上游流程会卡在 omarchy-update-keyring"。另注 `omarchy-channel-current`
+      在本机报 `dev` ⇒ Dev 那行一直挂着个毫无意义的 ✓。
+    - `update.config.plymouth`：`omarchy-refresh-plymouth` → `omarchy-plymouth-set --refresh-default`，同 `style.unlock` 那套
+      root 事务（且 `/usr/share/plymouth/themes/omarchy` 根本不存在）⇒ 必拒。
+    - `update.config.shell`：`omarchy-refresh-shell` → `omarchy-refresh-config omarchy/shell.json`（从 `$OMARCHY_PATH/config/` 拷、先备份你的版本）
+      + `omarchy-bar defaults` + `omarchy-restart-shell` ⇒ 会拿 `$OMARCHY_PATH`（本机是 **Sep-19 那份拷贝**，不是活的 checkout）里
+      1249 B 的 shell.json 盖掉 `~/.config/omarchy/shell.json` 的 1789 B 本机调优版（`bar.id`、`xray`、字号…）。要重置时走 CLI 仍可。
+    - 落地：**只改用户层 override** `~/.config/omarchy/extensions/omarchy-menu.jsonc`（＝ 仓库
+      `local-config/omarchy/extensions/omarchy-menu.jsonc`，两边逐字节相同，`scripts/local-files-sync.sh` 可校验）：6 个 id 各一条
+      `"when":"false"` + **从默认项复制的 label/icon**（§8.6 那条 override 规矩），同一 id 只写一次、不写行内注释
+      （`stripJsonc` 只删整行注释）。备份 `~/.local/state/backups/.config/omarchy/extensions/.omarchy-menu.jsonc.bak-20260922-menuhides`。
+      壳层热重载，**不需要 `omarchy-restart-shell`**。
+    - 验证（实测）：`omarchy menu refresh` → `ok`；逐屏抓图 + OCR 核对 —— Style 里 **Unlock 消失**、Update 里 **Channel 消失**
+      （Omarchy / Config / Process / Hardware / Firmware / Password / Timezone / Time 仍在 ⇒ Config 保留）、Install 里 **Web App 消失**；
+      Install 另做 A/B（临时还原备份 → 抓图 → 还原）：A 有 "Web App"、B 没有 ⇒ 确认是这份文件在驱动渲染（不是缓存）。
+      离线解析：用 `MenuModel.js` 的 `stripJsonc` 两条正则剥注释/尾逗号后 `json.loads` 通过，默认 340 + 用户 22 项合并无缺。
+    - **本轮按用户决定没做**（留档）：① Remove 侧的 `remove.preinstalls` **仍然可见可点**，守卫同样只看那个 marker ⇒ 点了会跑
+      `omarchy-webapp-remove-all` + `omarchy-tui-remove-all` + `rm ~/.local/bin/{codex,claude,agy,copilot,gh,opencode,pi,omp,ori,grok,crush,…}`
+      + `omarchy-pkg-drop … xournalpp … moonlight-qt …`（本机装着 xournalpp 与 moonlight-qt ⇒ 会真被卸掉）。**只造 marker 会把
+      `install.preinstalls` 反过来点亮**，要处理就给它也加一条 `when:"false"`。② Learn 那 5 条死链（见上）。
+    - 回退：把上面那个备份拷回 `~/.config/omarchy/extensions/omarchy-menu.jsonc`，再 `omarchy menu refresh`（热生效）。
+
+---
+
+28. **Update 菜单改造：`update.omarchy` → "Pacman"，新增 `update.aur` / `update.plugins`（2026-09-22，用户要求）**：
+    用户原话"omarchy menu update 把 omarchy 改 pacman，增加 aur (paru -Sua) 和 plugin (omarchy plugin update) 更新"。
+    改的还是 §8 第 27 条那份用户层 override（同一个文件、同一段注释区）：
+    - `update.omarchy`：**只改显示** —— `label` → `Pacman`、图标换成 Arch 那枚（从默认项 `install.package` 抄）、
+      **`iconFont` 显式清空**。清它是有原因的：`mergeMenuSources` 是**逐字段覆盖**，不清就继续拿默认项的
+      `iconFont:"omarchy"` 去渲染这枚普通 Nerd Font 字形；置空后 `Menu.qml` 的
+      `font.family: row.iconFont.length > 0 ? row.iconFont : root.fontFamily` 回落到菜单字体。
+      **动作保持原样**（`omarchy-launch-floating-terminal-with-presentation omarchy-update`）⇒ 裸调 `omarchy-update`
+      落到 `~/bin/omarchy-update` 垫片 = `sudo pacman -Syu` + 一句 AUR 提示，与 bar 的 `system-update` 部件同一条路。
+      想更直白就是把 action 换成 `'sudo pacman -Syu'`。
+    - `update.aur`：`omarchy-launch-floating-terminal-with-presentation 'paru -Sua'`（本机 paru v2.1.0 在位；
+      AUR 另有 `~/bin/yay` 垫片，此处按用户要求用 paru）。
+    - `update.plugins`：`omarchy-launch-floating-terminal-with-presentation 'omarchy plugin update'`（= `bin/omarchy-plugin-update`）。
+      **它会动真格**：只更新 `~/.config/omarchy/plugins/` 下的 git 克隆（本机 5 个：`charlieras262.floating-bar`、
+      `io.github.claudsondouglas.arcdock`、`jrmmhm.pocket`、`meviusisback.ai-subs`、`ronald.input-sources`），其中
+      **3 个带本机 patch**（`niri-port/plugin-patches/` 里的 floating-bar / ai-subs / input-sources）⇒ 上游改了同一文件时
+      `git merge --ff-only` 会报 "you have local changes" 并跳过、**不会**自动重放 patch，需要手工处理；更新成功后会
+      `omarchy-shell shell rescanPlugins`。它拒绝非交互运行（无 TTY 时报 "refusing to continue without confirmation"），
+      所以必须走终端——这条正是。
+    - **顺序限制（实测）**：新增 id 按 `mergeMenuSources` 规则**追加在 Update 子菜单末尾**（"Time" 之后），
+      override 改不了位置；要把它俩挪到 Pacman 下面只能改默认文件（走 `niri.patch`）。
+    - 演示终端链路实测（2026-09-22）：`omarchy-launch-floating-terminal-with-presentation 'sleep 6'` 起出窗口
+      （`niri msg windows` 见 Title `Omarchy`、App ID `org.omarchy.terminal`）；在窗口里 `: <>/dev/tty` 成功、`tty` = `/dev/pts/2`、
+      `sudo -n true` 报 "a password is required" ⇒ **有控制终端、sudo 能弹密码框**（`sudo pacman -Syu` / `paru -Sua` 能正常要密码）。
+      本机无免密 sudo，故**不实跑更新本身**（只验到"窗口起得来、终端在、能要密码"）。
+    - 验证：`omarchy menu refresh` → `ok`；`omarchy menu summon update` + 抓图 OCR ⇒ `Pacman / Config / Process / Hardware /
+      Firmware / Password / Timezone / Time / AUR / Plugins`（Channel 已按 §8 第 27 条隐藏）；离线 `stripJsonc` + `json.loads`
+      通过、合并后 26 项、`update.omarchy.iconFont == ""` 且 action 与默认项逐字符相同。
+    - **同轮续作（用户"你继续"）：Update 面板逐行体检** —— 只查出**一条**与 §8 第 27 条同性质的死行，已一并隐藏：
+      `update.password.drive`（**Drive Encryption**）脚本第一句就是 `blkid -t TYPE=crypto_LUKS`，本机命中 0 个
+      （无 LUKS，理由同 style.unlock）⇒ 必走 else 打印 "No encrypted drives available." 后 `exit 1`。
+      其余各行体检结论（一律**不动**，只留档）：
+      - `update.firmware` 本机没装 fwupd（`fwupdmgr` 缺失）⇒ 脚本会先 `omarchy-pkg-add fwupd`（extra 里有，装得上），
+        之后因 `/sys/firmware/efi` 与 `/usr/lib/fwupd/efi/fwupdx64.efi` 都在，会 `install -D` 到**硬编码**的
+        `/boot/EFI/arch/fwupdx64.efi`——本机 ESP 是 `/boot/EFI/{Boot,Linux,systemd}`、没有 `arch` 目录，`install -D`
+        会把 `/boot/EFI/arch/` 现造出来（无害的野文件）。真正干活的 `fwupdmgr refresh --force` + `sudo fwupdmgr update`
+        本身可用，笔记本固件更新也是真有用的 ⇒ 保留可见，只记这个瑕疵（要治就得自己重写 action，绕开那段 EFI 暂存）。
+      - `update.time` `systemd-timesyncd` 本机 enabled + active ⇒ 可用。
+      - `update.hardware.*` audio = `systemctl --user restart pipewire` 系；wifi/bluetooth = `rfkill` + `nmcli`；
+        trackpad 要 `/sys/bus/i2c/drivers/i2c_hid_acpi/i2c-*`（本机有 `i2c-ELAN0672:00`）⇒ 三条都可用。
+      - `update.themes`（Extra Themes）的守卫 `omarchy-theme-extras` 本机 exit 1 ⇒ 菜单里本来就自动不渲染。
+      - `update.process`（只剩 Shell）/ `update.password.user` / `update.timezone` 照旧可用。
+    - **验证法升级（本轮最有复用价值的一条）**：`~/.local/share/omarchy/shell/plugins/menu/MenuModel.js` 是**纯 JS 且
+      `module.exports` 全导出**（无 QML 依赖），所以菜单可以用 `node` 在**无头**下按生产逻辑渲染：`parseMenuJsonc` 读两份
+      jsonc → `mergeMenuSources` 合并 → `guardScript(items)` 生成的那段 bash 真跑一遍拿到所有 `when/checked/disabled` 结果
+      → `isVisible` + `labelFor` + `displayRow` 逐行算出来。这比抓图＋OCR 硬得多（不受窗口遮挡、不受面板位置影响）。
+      这个探针已收进仓库：**`scripts/menu-model-render.js`**（`node scripts/menu-model-render.js <parent-id> [--default-only]`，
+      无第三方依赖，跑的是机器上那份 `MenuModel.js`，所以换机器仍有效）；实测输出：
+      `update` 10 行（Pacman/Config/Process/Hardware/Firmware/Password/Timezone/Time/AUR/Plugins，`update.omarchy` 的
+      `iconFont=""` 已生效）、`update.password` **1 行（只剩 User）**、`update.config` 2 行（Niri Theme/Tmux）、
+      `style` 6 行（无 Unlock/Screensaver）、`install` 12 行（无 Web App/Preinstalls）、`install.preinstalls` 0 行、
+      `system` 5 行（无 Screensaver）。**A/B 也用它做**：`--default-only`（假装没有 override）时 `update.password` 立刻变回
+      **2 行（Drive Encryption + User）**，这就是"隐藏确实由这份 override 驱动"的干净证据（无需改动文件）。
+      注意 `childCount` **不过滤隐藏项**，要对"看得见的子项数"得自己按 `isVisible` 数（探针里已这么写）。
+      ⚠ 抓图路线的坑：菜单是图层表面、会盖住终端，但**子菜单面板小、位置不固定**，OCR 很容易把终端里的文字当成菜单内容
+      （本轮就误读过一次）；要抓图就得先把终端窗口挪走，而"挪窗口/切空 workspace"在本机 dynamic workspace 下也不可靠。
+    - 回退：`~/.local/state/backups/.config/omarchy/extensions/.omarchy-menu.jsonc.bak-20260922-updatemenu`（改造前）或
+      `.bak-20260922-updaudit`（体检前）覆盖回去 + `omarchy menu refresh`。
 
 ---
 
