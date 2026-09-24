@@ -633,7 +633,7 @@ Omarchy 有两层配置，只有层1在 niri 上真正生效：
       `Mod+Ctrl+Return … { spawn-sh "omarchy-launch-terminal herdr"; }` ⇒ `niri validate` = `config is valid`。
       改前快照 `~/.local/state/backups/.config/niri/binds.kdl.bak-20260924-herdr`（与改后只差这一行），
       并同步进仓库 `niri-config/local/binds.kdl`（`scripts/kdl-sync.sh` 七份全 ok）。
-    - **排查陷阱（白测一轮）**：从 agent 自己的 shell 里测 `herdr`，先撞上的是 herdr 的**嵌套检测**
+    - **排查陷阱（别再白测一轮）**：从 agent 自己的 shell 里测 `herdr`，先撞上的是 herdr 的**嵌套检测**
       （`nested herdr is disabled by default` / `recursion detected. base case not found. aborting.`）——
       agent 就跑在 herdr pane 里，`env -u HERDR_*` 清掉变量也没用（它按进程祖先判），
       **得换到没有 herdr 祖先的进程树里才看得到真错误**：

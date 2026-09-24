@@ -233,10 +233,8 @@ quickshell：`pkill -x quickshell && niri msg action spawn -- quickshell -n -p $
       改 `*.kdl` 后 niri 自己会重载（journal `DEBUG niri_config: loaded config from …`），要手动就用 `load-config-file`。
       ② `niri msg action close-window` 对 About **无效**（TUI 不吃 close 请求，窗口还在），得 `kill <pid>`。
     - 回退：`~/.local/state/backups/.config/niri/window-rules.kdl.bak-20260922-aboutblur`，再 `niri validate`。
-    - **编号更正（2026-09-24）：本条原写 `§8 第 34 条`，与同一夜 `yay → paru` 垫片那条撞号**（`ab15732`，比本条晚
-      2 分半提交，也取了 34）⇒ 两条抢一个号，且映射表里**一条都没登记**。本条的号**零引用**，所以由本条让出：
-      现为 **`§8 第 36 条`**，34 归垫片那条（它已被 `docs/omarchy-on-niri-port.md` §3 引用两处、号还写进了提交信息，
-      历史不改）。两条现已登记进 §8 映射表。
+    - **编号（2026-09-24）**：本条原为 `§8 第 34 条`，34 让给同夜的 `yay → paru` 垫片那条，现为 **`§8 第 36 条`**
+      （见 `docs/omarchy-on-niri-port.md` §8 映射表）。
 
 ---
 

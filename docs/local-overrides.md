@@ -218,10 +218,8 @@ cp /tmp/niri.patch ~/.config/omarchy/niri-port/niri.patch              # 重放�
 
 ## 8. 缺口：本机有、仓库没有（换机不可复现）
 
-> ⚠ **本节 1–15 是卷内序号，不占全局的 `§8 第 N 条` 号段** —— 数字只是恰好重合：全局 `§8 第 13 条`
-> 讲的是「Ghostty 磨砂模糊」（正文在 `docs/visual.md`），全局 `§8 第 15 条` 讲的是「brightnessctl 授权安装」
-> （正文在 `docs/behavior.md`），都与本节条目无关。本卷引用本节时一律写 **「§8 缺口第 N 项」**（历史正文里那些裸
-> `§8 第 13 条` / `第 15 条` 已按此改写，见 `docs/omarchy-on-niri-port.md` §8 映射表）。
+> ⚠ **本节 1–15 是卷内序号，不占全局的 `§8 第 N 条` 号段**（全局 `§8 第 13 条` = Ghostty 磨砂模糊、
+> `§8 第 15 条` = brightnessctl 授权安装，都与本节条目无关）。本卷引用本节一律写 **「§8 缺口第 N 项」**。
 
 1. ~~三个 `~/bin` 垫片~~ **已收进仓库（2026-09-20）**：`port-bin/{omarchy-update,omarchy-picker-warmup,omarchy-display-text-size}`
 2. ~~`omarchy-picker-warmup.service`~~ **已收进仓库**：`default/systemd/user/omarchy-picker-warmup.service`
