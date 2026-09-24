@@ -27,7 +27,8 @@ input {
         // off
         tap
         // dwt
-        // dwtp
+        // dwtp = disable-when-trackpointing：用小红点（TrackPoint）时忽略触控板输入，防止手够小红点时蹭到板子（2026-09-23 开）
+        dwtp
         // drag false
         // drag-lock
         natural-scroll
@@ -63,3 +64,12 @@ input {
     // Setting max-scroll-amount="0%" makes it work only on windows already fully on screen.
     // focus-follows-mouse max-scroll-amount="0%"
 }
+
+// 触控板 / 触摸屏开关：上游 omarchy-toggle-touchpad|touchscreen 会走 ~/bin/omarchy-toggle-input-device 垫片。
+// 下面两个文件由垫片创建 / 删除（存在 = 该类设备置 `off`；niri 没有按设备名的开关，只有设备类型级的 off）：
+//   input-toggle-touchpad.kdl    → input { touchpad { off } }
+//   input-toggle-touchscreen.kdl → input { touch { off } }
+// optional=true ⇒ 文件不存在只出一条 WARN；niri 会 watch 被 include 的文件并在变化时 live-reload，
+// 所以开关不需要额外调 reload。原理与取舍见 docs/shims.md §4。
+include optional=true "input-toggle-touchpad.kdl"
+include optional=true "input-toggle-touchscreen.kdl"

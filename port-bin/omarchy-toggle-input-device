@@ -1,0 +1,105 @@
+#!/bin/bash
+
+# omarchy:summary=Enable, disable, or toggle a touchpad / touchscreen (niri port)
+# omarchy:args=<touchpad|touchscreen> [on|off|toggle]
+# omarchy:hidden=true
+#
+# Upstream toggles a *named* device through Hyprland: `hyprctl eval hl.device({ name, enabled })`.
+# niri has no equivalent — its Input docs say "Currently, there's no way to configure specific
+# devices individually (but that is planned)", and `niri msg` has no input subcommand at all.
+# The only lever is the bare `off` flag inside a pointing-device section of the single
+# `input {}` node (Input docs: off = "if set, no events will be sent from this device"), and
+# `off` takes no value — so "enabled" means the flag is simply absent.
+#
+# That rules out editing ~/.config/niri/input.kdl in place: it is mirrored into this repo and
+# compared byte for byte by scripts/kdl-sync.sh. Instead input.kdl carries two optional includes:
+#
+#   input-toggle-touchpad.kdl    -> input { touchpad { off } }
+#   input-toggle-touchscreen.kdl -> input { touch { off } }
+#
+# This script is the only writer of those files: "disable" writes one, "enable" removes it.
+# Documented niri behaviour that makes that work:
+#   * `include optional=true` — "You can allow nonexistent includes by setting optional=true"
+#     (Since 26.04); a missing file is a warning, so "enabled" is just "file absent".
+#   * Include docs: "All included files are watched for changes, and the config live-reloads
+#     when any of them change." Verified on this machine for both directions of the toggle
+#     (niri logs the reload ~40 ms after the file appears/disappears).
+#   * Introduction: "The configuration is live-reloaded. Simply edit and save the config file,
+#     and your changes will be applied. ... and everything else."
+# Even so the reload action is called explicitly afterwards: the whole point of this shim is to
+# never silently do nothing, and that must not hinge on inotify watch behaviour staying intact.
+# The two files stay out of kdl-sync.sh's way because it only walks the seven *.kdl names
+# hardcoded in its loop.
+#
+# Supersedes upstream's persistence (the device name written to
+# ~/.local/state/omarchy/toggles/hypr/<kind>-disabled-name and read back by
+# default/hypr/disabled-input-device.lua): that path is Hyprland layer-2 config and never runs
+# on niri. Here the overlay file itself is the state.
+
+set -euo pipefail
+
+KIND="${1:-}"
+ACTION="${2:-toggle}"
+
+usage() {
+  echo "Usage: omarchy-toggle-input-device <touchpad|touchscreen> [on|off|toggle]" >&2
+}
+
+case "$KIND" in
+  # niri groups devices by type: touchpads live under `touchpad {}`, touchscreens under `touch {}`.
+  touchpad) SECTION=touchpad; LABEL=Touchpad; ICON=touchpad ;;
+  touchscreen) SECTION=touch; LABEL=Touchscreen; ICON=touch ;;
+  *)
+    usage
+    exit 1
+    ;;
+esac
+
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/niri"
+OVERLAY="$CONFIG_DIR/input-toggle-$KIND.kdl"
+
+notify() { # <message>
+  # Best effort: the OSD is a shell round-trip, and it must never decide whether the toggle worked.
+  omarchy-osd -i "$ICON" -m "$1" >/dev/null 2>&1 || true
+}
+
+reload() {
+  # The include file is watched and niri reloads on its own; the explicit call makes it
+  # deterministic instead of dependent on inotify behaviour.
+  niri msg action load-config-file >/dev/null 2>&1 || true
+}
+
+disable() {
+  mkdir -p "$CONFIG_DIR"
+  printf 'input {\n  %s {\n    off\n  }\n}\n' "$SECTION" >"$OVERLAY"
+  if ! niri validate -c "$CONFIG_DIR/config.kdl" >/dev/null 2>&1; then
+    # Never leave behind a config that makes niri reject its own reload.
+    rm -f "$OVERLAY"
+    echo "error: $OVERLAY made the config invalid; removed it again" >&2
+    exit 1
+  fi
+  reload
+  notify "$LABEL disabled"
+}
+
+enable() {
+  rm -f "$OVERLAY"
+  reload
+  notify "$LABEL enabled"
+}
+
+case "$ACTION" in
+  on) enable ;;
+  off) disable ;;
+  toggle)
+    if [[ -f $OVERLAY ]]; then
+      enable
+    else
+      disable
+    fi
+    ;;
+  *)
+    usage
+    exit 1
+    ;;
+esac

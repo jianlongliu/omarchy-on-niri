@@ -85,7 +85,7 @@
 
 ---
 
-## 2. `~/bin` 垫片（本机 PATH 层，22 项含备份）
+## 2. `~/bin` 垫片（本机 PATH 层，20 项含隐藏文件；2026-09-23 实测 `ls -A ~/bin | wc -l`）
 
 | 名字 | 说明 | 仓库里有? |
 |---|---|---|
@@ -99,11 +99,14 @@
 | `omarchy-update` | 垫片 → `sudo pacman -Syu`；手装机跑不通上游 update 流程 | ✅ `port-bin/`（2026-09-20 收进） |
 | `omarchy-picker-warmup` | 配合用户单元延迟预热选择器缩略图 | ✅ `port-bin/`（2026-09-20 收进） |
 | `omarchy-display-text-size` | bar 的 Display 面板字号滑块驱动全桌面（CLI 路径绕过它） | ✅ `port-bin/`（2026-09-20 收进） |
+| `omarchy-toggle-input-device` | 触控板 / 触摸屏开关。上游脚本走 `hl.device`（niri 侧被垫片 no-op ⇒ 只弹 OSD、设备不关的"假成功"）；本垫片改成**写 / 删** `~/.config/niri/input-toggle-{touchpad,touchscreen}.kdl`，由 `input.kdl` 里两行 `include optional=true` 引入。菜单里的 Touchpad 项现在**真生效**，见垫片卷 `docs/shims.md` §4 | ✅ `port-bin/`（2026-09-23 收进） |
 | `wechat`、`clipboard-sync.sh`、`clipboard-handler.sh` | 移植之前的老自建，保留 | ❌（与本移植无关） |
 
-- 上表 11 项与仓库 `port-bin/` 的对账（2026-09-20 `md5sum` 逐个核过）：**10 项逐字节一致**；
+- 上表 12 项与仓库 `port-bin/` 的对账：**11 项**于 2026-09-20 `md5sum` 逐个核过（**10 项逐字节一致**；
   唯一例外是 `omarchy-update` —— 仓库版只把注释改成了通用措辞（"这类机器"而不是"本机"），
-  **代码体逐行相同**（`diff <(grep -v '^#' ~/bin/omarchy-update) <(grep -v '^#' port-bin/omarchy-update)` 为空）。
+  **代码体逐行相同**（`diff <(grep -v '^#' ~/bin/omarchy-update) <(grep -v '^#' port-bin/omarchy-update)` 为空））；
+  **`omarchy-toggle-input-device`** 2026-09-23 新增 —— 它进 `~/bin` 时就是 `install(1)` 从 `port-bin/` 复制的，
+  已 `diff` 核过逐字节一致。
 - 回退：`rm ~/bin/<名字>`（若 `$OMARCHY_PATH/bin` 有同原件，会自动回退到它）。
 
 ---
@@ -127,6 +130,12 @@
   `effects.kdl`、`input.kdl`、`monitor.kdl`；每个都在备份根留了 `.bak-*`（改前必留）。
   **2026-09-20 已收进仓库**：`niri-config/local/`（家目录参数化成 `/home/<user>`，说明见该目录 README）。
   **2026-09-21 两处新改**：① `layout.kdl` 的 `layout { background-color }` —— 这就是**开机到壁纸画出来之间那一屏的底色**（niri 内建默认 `#404040` 深灰，配置里原本没人设过；实测用 `#FF00FF` 试色当场生效），现设成**当前壁纸的平均色**（`magick <bg> -resize 1x1!` 取，当时 `#BDBDBE`），开机那屏因此从"深灰洞"变成与壁纸亮部接近的平色；换壁纸后可跟着重取。② `config.kdl` 的 `cursor` 块加了 `hide-after-inactive-ms 1000`（原块已有 `hide-when-typing`、`Bibata-Modern-Amber` 20）：想让**开机那根箭头**自己消失——niri 没有"立刻藏"的接口，这是唯一的旋钮；副作用是平时停手 1s 箭头也没。备份 `config.kdl.bak-20260921-cursor`（`layout.kdl` 那份 `bgcolor` 备份已随后续改动清掉）。
+- **2026-09-23 两处（都在 `input.kdl`；备份 `.bak-20260923-inputtoggle`、`.bak-20260923-dwtp`）**：
+  ① 文件**末尾**加两行 `include optional=true "input-toggle-touchpad.kdl"` / `…-touchscreen.kdl` —— 给 `hl.device`
+  开关用（机制与实测见 `shims.md` §4；覆盖文件由 `~/bin/omarchy-toggle-input-device` 管理，常态**不该存在**，缺文件只有
+  `optional include not found` WARN）。② `touchpad` 段里把 **`// dwtp` 的注释去掉**（`dwtp` = disable-when-trackpointing：
+  用小红点时忽略触控板输入，防手够小红点蹭到板子；**只 `dwtp`**，`dwt` 仍关着——用户明确不需要）。
+  两处同样同步进仓库 `niri-config/local/input.kdl`，`scripts/kdl-sync.sh` 已核一致。
 - **2026-09-24 一处（`binds.kdl`；改前快照 `.bak-20260924-herdr`）**：`Mod+Ctrl+Return` 从**裸调 `herdr`** 改成
   `spawn-sh "omarchy-launch-terminal herdr"`（顺带把 `ctrl` 规范成 `Ctrl`）。裸调在 niri 下必失败：herdr 是 TUI，
   而 bind 派生的子进程没有 tty（niri 自己 `fd0=/dev/null`、`fd1/2=journald socket`）⇒ `herdr: Not a tty (os error
