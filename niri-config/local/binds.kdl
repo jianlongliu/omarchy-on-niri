@@ -21,6 +21,7 @@ Mod+Shift+Slash { show-hotkey-overlay; }
 // 因为内部走 `setsid uwsm-app` 而本机没有 uwsm-app —— 已由 ~/bin/uwsm-app 垫片统一解决，
 // 见 ~/Projects/omarchy-on-niri/docs/omarchy-on-niri-port.md §8 第 22 条。
 Mod+Return hotkey-overlay-title="Terminal (default)" { spawn-sh "omarchy-launch-terminal"; }
+Mod+Ctrl+Return hotkey-overlay-title="Herdr" { spawn-sh "omarchy-launch-terminal herdr"; }
 Mod+D hotkey-overlay-title="Apps menu" { spawn-sh "omarchy-menu toggle apps"; }
 Mod+Space hotkey-overlay-title="Omarchy Menu" { spawn-sh "omarchy-menu toggle"; }
 Mod+L hotkey-overlay-title="Lock the screen" { spawn-sh "omarchy-system-lock"; }

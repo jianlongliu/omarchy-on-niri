@@ -29,6 +29,7 @@
 - 20. **换主题时 `omarchy-theme-set-browser-policy` 因 sudo 要密码失败**（日志成片
 - 25. **桌面双击弹窗慢（壁纸/主题切换器"要等会"）（2026-09-20，用户要求）**：入口是 `shell/plugins/background/Background.qml`
 - 19. **耗电/续航专项（2026-09-19 测过一轮，下次接着做）**：表现为"感觉慢 + 续航差"。已排除的
+- 35. **Herdr 键位：`Super+Ctrl+Return` 必须经终端启动（裸 `herdr` 在 niri 下没有 tty，必死）（2026-09-24）**：`binds.kdl` 里那行原本是裸调 `herdr`
 
 ---
 
@@ -615,3 +616,28 @@ Omarchy 有两层配置，只有层1在 niri 上真正生效：
       RC6 47%、i915 中断 779/s；隐藏后：98%、~60/s）→ 测量时务必把终端切到不可见工作区、输出写文件
       （niri 不合成未聚焦工作区上的窗口）。`i915` 中断数不是帧数代理；`i915_flip` 的 D 时长会被自己
       脚本里的 `subprocess.run` 阻塞放大，只有中位数可用。
+
+---
+
+35. **Herdr 键位：`Super+Ctrl+Return` 必须经终端启动，裸 `herdr` 在 niri 下必死（2026-09-24）**：
+    用户问「`binds.kdl` 里 `Super+Ctrl+Return` 启动 herdr 是我写错了吗」。**键位与命令名都没写错**
+    （`herdr` = `/usr/bin/herdr`，v0.9.1），错的是**启动方式** —— 那一行原本是裸调 `spawn-sh "herdr"`。
+    - **根因**：herdr 是 TUI，要挂在 tty 上；而 niri 派给 bind 的子进程**没有 tty**。实测 niri 自己
+      （pid 取 `pgrep -x niri`）是 `fd0 → /dev/null`、`fd1/fd2 → journald socket`，所以裸跑固定报
+      `herdr: Not a tty (os error 25)`、exit 1 —— 按了等于没按，niri 也不会给任何提示。
+    - **上游本来就是这条路**：`default/hypr/bindings/applications.lua` 写的是
+      `o.bind("SUPER + CTRL + RETURN", "Herdr", { omarchy = "terminal-herdr" })`，而
+      `bin/omarchy-launch-terminal-herdr` 的内容就一句 `exec omarchy-launch-terminal herdr`。
+      本机那行绕过了这层包装（§5.3 那条「终端类一律走 `omarchy-launch-terminal`」同样适用）。
+    - **修法**（`~/.config/niri/binds.kdl` 一行，顺带把 `ctrl` 规范成 `Ctrl`）：
+      `Mod+Ctrl+Return … { spawn-sh "omarchy-launch-terminal herdr"; }` ⇒ `niri validate` = `config is valid`。
+      改前快照 `~/.local/state/backups/.config/niri/binds.kdl.bak-20260924-herdr`（与改后只差这一行），
+      并同步进仓库 `niri-config/local/binds.kdl`（`scripts/kdl-sync.sh` 七份全 ok）。
+    - **排查陷阱（白测一轮）**：从 agent 自己的 shell 里测 `herdr`，先撞上的是 herdr 的**嵌套检测**
+      （`nested herdr is disabled by default` / `recursion detected. base case not found. aborting.`）——
+      agent 就跑在 herdr pane 里，`env -u HERDR_*` 清掉变量也没用（它按进程祖先判），
+      **得换到没有 herdr 祖先的进程树里才看得到真错误**：
+      `setsid env -i HOME="$HOME" PATH="$PATH" TERM=dumb herdr </dev/null` → 这才现出 `Not a tty`。
+    - **顺带修正 §5.5 的旧结论**：那儿写的「因本机不用 tmux/herdr，不再绑定」只对**键位面板**成立
+      （`Super+Alt+K` Tmux keybindings、`Super+Ctrl+K` Herdr keybindings 确实没绑，`Mod+K` 已让给
+      `omarchy-menu-keybindings`），**herdr 本身是在用的**，现在也直接从键位进。

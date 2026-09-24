@@ -224,6 +224,7 @@ spawn-sh-at-startup "quickshell -n -p /home/<dev-user>/.local/share/omarchy/shel
 Mod+D             hotkey-overlay-title="Apps menu"    { spawn-sh "omarchy-menu toggle apps"; }
 Mod+Space         hotkey-overlay-title="Omarchy Menu" { spawn-sh "omarchy-menu toggle"; }
 Mod+Return        hotkey-overlay-title="Terminal"     { spawn-sh "omarchy-launch-terminal"; }
+Mod+Ctrl+Return   hotkey-overlay-title="Herdr"        { spawn-sh "omarchy-launch-terminal herdr"; }
 Mod+L             hotkey-overlay-title="Lock screen"  { spawn-sh "omarchy-system-lock"; }
 Mod+E             hotkey-overlay-title="Files"        { spawn "nautilus"; }
 Mod+Z             hotkey-overlay-title="Browser"      { spawn-sh "omarchy-launch-browser"; }
@@ -245,6 +246,11 @@ Print            { spawn-sh "omarchy-capture-screenshot"; }
 Ctrl+Alt+Delete  hotkey-overlay-title="System menu"  { spawn-sh "omarchy-menu toggle system"; }
 Mod+Shift+Escape allow-inhibiting=false              { toggle-keyboard-shortcuts-inhibit; }
 ```
+
+**Herdr（2026-09-24）**：`Mod+Ctrl+Return` 走 `omarchy-launch-terminal herdr`，等于上游
+`applications.lua` 的 `omarchy = "terminal-herdr"`。**不能裸调 `herdr`** —— 它是 TUI，而 niri 派给
+bind 的子进程没有 tty（`fd0=/dev/null`、`fd1/2=journald socket`），裸跑必报 `Not a tty (os error 25)`
+后退出，键位静默失效；见 §8 第 35 条。
 
 **媒体键重定向到 OSD 脚本（2026-08-25）**：原 niri 裸绑定只改值、不出 OSD。已改为经 Omarchy
 脚本来「改值 + 调 `omarchy-osd`」，并加 `hotkey-overlay-title`（在 Super+K 菜单可查）：
@@ -281,7 +287,9 @@ Mod+Tab repeat=false { toggle-overview; }    // 总览（用户指定 Super+Tab�
 **已让出（2026-08-31）**：`Mod+Escape` 从 inhibitor 逃生键改回 Omarchy 的 System menu
 （`omarchy-menu toggle system`），逃生键挪到 `Mod+Shift+Escape`（`allow-inhibiting=false`，
 抑制激活时仍可用）。`Super+Alt+K`（Tmux keybindings）与 `Super+Ctrl+K`（Herdr keybindings）
-因本机不用 tmux/herdr，不再绑定。
+不绑：前者本机不用 tmux；两者都只是「键位说明」面板，而 `Mod+K` 已经让给 `omarchy-menu-keybindings`。
+**2026-09-24 修正**：此处原写「因本机不用 tmux/herdr，不再绑定」——**herdr 其实在用**，且已绑
+`Mod+Ctrl+Return`（见 §5.3 与 §8 第 35 条）；不绑的只是它的键位面板 `Super+Ctrl+K`。
 
 ### 5.6 窗口边框色跟随 Omarchy 主题（A+C 的 C 层）
 
@@ -586,6 +594,7 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
 | `§8 第 31 条` | [bar] 段只认 3 个键 → 让 shell.toml 能覆盖全… | `docs/visual.md` |
 | `§8 第 32 条` | 吐司"一来通知整屏变糊" | `docs/visual.md` |
 | `§8 第 33 条` | 交接过渡的桌面侧（壁纸铺底 + bar 从顶边滑下来） | `docs/visual.md`（登录侧全案见 `docs/lock.md` §11.26） |
+| `§8 第 35 条` | Herdr 键位必须经终端启动（裸 `herdr` 在 niri 下没有 tty） | `docs/behavior.md` |
 | `§8.6` | A 层 | `docs/behavior.md` |
 | `§8.7` | 更新覆盖层 | `docs/upstream.md` |
 | `§8.8` | 视觉磨砂 | `docs/visual.md` |

@@ -127,6 +127,11 @@
   `effects.kdl`、`input.kdl`、`monitor.kdl`；每个都在备份根留了 `.bak-*`（改前必留）。
   **2026-09-20 已收进仓库**：`niri-config/local/`（家目录参数化成 `/home/<user>`，说明见该目录 README）。
   **2026-09-21 两处新改**：① `layout.kdl` 的 `layout { background-color }` —— 这就是**开机到壁纸画出来之间那一屏的底色**（niri 内建默认 `#404040` 深灰，配置里原本没人设过；实测用 `#FF00FF` 试色当场生效），现设成**当前壁纸的平均色**（`magick <bg> -resize 1x1!` 取，当时 `#BDBDBE`），开机那屏因此从"深灰洞"变成与壁纸亮部接近的平色；换壁纸后可跟着重取。② `config.kdl` 的 `cursor` 块加了 `hide-after-inactive-ms 1000`（原块已有 `hide-when-typing`、`Bibata-Modern-Amber` 20）：想让**开机那根箭头**自己消失——niri 没有"立刻藏"的接口，这是唯一的旋钮；副作用是平时停手 1s 箭头也没。备份 `config.kdl.bak-20260921-cursor`（`layout.kdl` 那份 `bgcolor` 备份已随后续改动清掉）。
+- **2026-09-24 一处（`binds.kdl`；改前快照 `.bak-20260924-herdr`）**：`Mod+Ctrl+Return` 从**裸调 `herdr`** 改成
+  `spawn-sh "omarchy-launch-terminal herdr"`（顺带把 `ctrl` 规范成 `Ctrl`）。裸调在 niri 下必失败：herdr 是 TUI，
+  而 bind 派生的子进程没有 tty（niri 自己 `fd0=/dev/null`、`fd1/2=journald socket`）⇒ `herdr: Not a tty (os error
+  25)` 退出、键位静默失效；上游 `applications.lua` 的 `omarchy = "terminal-herdr"` 走的就是这层包装器。
+  已同步进仓库 `niri-config/local/binds.kdl`（`scripts/kdl-sync.sh` 七份全 ok），详见 `behavior.md` §8 第 35 条。
 - **壁纸从会话第一帧就在（2026-09-21 晚，本机新装的包）**：`swaybg`（**extra 仓库 `pacman -S swaybg`，1.2.2-1，非 omarchy 自带**）由 `config.kdl` 的 `spawn-at-startup "swaybg" "-i" "/home/<user>/.local/state/omarchy/current/background" "-m" "fill"` 拉起（走 omarchy 的"当前壁纸"软链 ⇒ 换壁纸自动跟）。
   动机：Quickshell 的 `omarchy.background` 要 ~1.4s 才画出壁纸，这段只有一屏底色（见 `docs/lock.md` §11.27 的"② 可打的部分"）。
   **实测三点**：① `-m fill` = 源图 cover 居中，与插件渲染**逐像素一致**（130 个纯壁纸区块差 0.01/255）⇒ 插件那份上来时无缝；② 杀掉壳层后壁纸仍在（顺带成壳层崩溃时的兜底）；③ **同一 background 层内"后映射的在上"**——把 swaybg 起在壳层之后它就压住插件那份（用一张品红测试图复现：此时换壁纸会看到旧图）。
