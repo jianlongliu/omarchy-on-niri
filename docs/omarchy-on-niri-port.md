@@ -277,6 +277,12 @@ Mod+Ctrl+Right { move-column-right; }        // 列右移
 Mod+Tab repeat=false { toggle-overview; }    // 总览（用户指定 Super+Tab；Mod+O 2026-09-21 已删）
 ```
 
+**2026-09-21 又删掉 `Mod+1..9`（按号跳工作区）**：本机切工作区只用触摸板手势 / `Mod+Page_Up/Down`
+（相对切换），而 niri 是**动态**工作区——编号槽位会随空工作区回收而漂：niri 自己的文档就写着
+「2 个工作区 + 1 个空的时，索引 3、4、5… 都指第 3 个」，该轮实测 `Mod+3..9` 全落到同一个底部空工作区，
+留着只有误触价值。被删的行在 `binds.kdl` 里就地注释成 `// dropped 2026-09-21: …` 保留；
+`Mod+Ctrl+1..9`（把列移到某工作区）**没有动**。
+
 ### 5.5 仍未改绑定的 Omarchy 键（保留 niri 原生 tiling）
 
 这些 Omarchy 默认键仍被 niri 平铺/窗口占用，未强行覆盖，如需再让出可后续处理：

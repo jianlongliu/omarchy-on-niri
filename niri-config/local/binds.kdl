@@ -208,15 +208,19 @@ Mod+Ctrl+Shift+WheelScrollUp   { move-column-left; }
 //
 // For example, with 2 workspaces + 1 empty, indices 3, 4, 5 and so on
 // will all refer to the 3rd workspace.
-Mod+1 { focus-workspace 1; }
-Mod+2 { focus-workspace 2; }
-Mod+3 { focus-workspace 3; }
-Mod+4 { focus-workspace 4; }
-Mod+5 { focus-workspace 5; }
-Mod+6 { focus-workspace 6; }
-Mod+7 { focus-workspace 7; }
-Mod+8 { focus-workspace 8; }
-Mod+9 { focus-workspace 9; }
+// dropped 2026-09-21: Mod+1..9（按号跳工作区）。
+// 理由：本机只用触摸板手势 / Mod+Page_Up/Down 做相对切换；niri 是动态工作区，
+// 编号槽位会随空工作区回收而漂（实测 Mod+3..9 全塌到同一个底部空工作区），
+// 留着只有误触价值。要恢复取消注释即可。
+// Mod+1 { focus-workspace 1; }
+// Mod+2 { focus-workspace 2; }
+// Mod+3 { focus-workspace 3; }
+// Mod+4 { focus-workspace 4; }
+// Mod+5 { focus-workspace 5; }
+// Mod+6 { focus-workspace 6; }
+// Mod+7 { focus-workspace 7; }
+// Mod+8 { focus-workspace 8; }
+// Mod+9 { focus-workspace 9; }
 Mod+Ctrl+1 { move-column-to-workspace 1; }
 Mod+Ctrl+2 { move-column-to-workspace 2; }
 Mod+Ctrl+3 { move-column-to-workspace 3; }
