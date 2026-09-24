@@ -12,7 +12,7 @@
 
 
 - 8.8 视觉磨砂（frosted Quickshell / 状态栏面板毛玻璃）
-- 34. **About 窗口（fastfetch TUI）的磨砂与尺寸（2026-09-22，用户 "我原汁原味的blur咋没了? … 是fastfetch的blur没了" → "我看着还是没blur"）**：上游 Hyprland 的 blur 是**全局**的、float/center/920×480 在 `default/hypr/apps/system.lua`，About 窗口白拿；niri 两样都得显式写 ⇒ 补 `match app-id=r#"^org\.omarchy\.about$"#`（`open-floating` + 920×540 + 磨砂块）。误判记录：先按 logo 配色查、被用户否掉
+- 36. **About 窗口（fastfetch TUI）的磨砂与尺寸（2026-09-22，用户 "我原汁原味的blur咋没了? … 是fastfetch的blur没了" → "我看着还是没blur"）**：上游 Hyprland 的 blur 是**全局**的、float/center/920×480 在 `default/hypr/apps/system.lua`，About 窗口白拿；niri 两样都得显式写 ⇒ 补 `match app-id=r#"^org\.omarchy\.about$"#`（`open-floating` + 920×540 + 磨砂块）。误判记录：先按 logo 配色查、被用户否掉
 - 33. **交接过渡的桌面侧：加载期什么都不显示，bar 到点整块出现（boot reveal，2026-09-21；起因 "输入完密码确认后…有文字" → "能掩盖 quickshell 的启动过程吗? 那个有点丑了" → 用户否决黑幕与一切全屏遮罩 "不黑, 先放壁纸不行吗?" → 一度定稿 "bar 从上面慢慢浮下来"，最终因霜化的机制问题改成"到点整块出现"，过程见 33b ④⑤⑥）**：登录交接到桌面之间隔着一段文本 VT（根因与另外三处改动见 `docs/lock.md` §11.26）。做法：**壁纸照原样铺底、不加任何遮罩**，桌面壳层启动时把标记 `$XDG_RUNTIME_DIR/omarchy-boot-splash` 当作"这次是真登录"，据此让 bar 的 surface 先不上屏、**等壳层真正组装完**再整块出现——2026-09-21 起这个"组装完"由宿主播报：`omarchy.background` 服务里新增 `paintedOnce`（壁纸首帧解码上屏；实测冷启动 ~1.35s，是整条启动链上最晚的一件事），宿主读它并推给 bar（地板 600ms / 天花板 6000ms 兜底），**不再用固定时长**（同一台机器各次冷启动差几百毫秒，开机那次还要多 ~0.5s）（**不做滑入**：霜化是 niri 按区域自己画的，滑入会先露一块空磨砂矩形，见 33b ⑥），重启壳层不重放。**关键事实：本机在用的 bar 是第三方插件 `charlieras262.floating-bar`，不是内置 `plugins/bar/Bar.qml`**——插件只拿到受限 shell API、看不到标记，所以标记由宿主**推**过去（`shell.qml` 新增 `pushBootReveal()`，在 `configureBar` 与标记 `onLoaded` 两处调用）；推给"谁被配置成 bar"，内置/插件都适用。**落点**：`shell/shell.qml`（标记 + 推送）+ `shell/plugins/bar/Bar.qml`（内置 bar：整块 surface 停屏外再滑入）+ **`~/.config/omarchy/plugins/charlieras262.floating-bar/Bar.qml`（真正生效的那个，见 `niri-port/plugin-patches/charlieras262.floating-bar.patch`）**：浮动 bar 用 **`PanelWindow.visible` 开关**（加载期整块不上屏、到点整块出现；不再有 `barVisual` 位移），`blurRegion` 指向不动的 `barBlurAnchor`（region 跟位移对象走会丢霜化，见 33b ④）。**`niri.patch` 22 文件/48 hunk、md5 `ef920a66ece784dfc207c7c87c479f5b`（2026-09-23 重导出核：新增菜单 `style.avatar.*` 三行，见 `docs/lock.md` §11.29；上几版重导出是把活体先改、补丁没跟上的 `paintedOnce`/`pushBootReveal()` 增补补进来）；插件补丁 md5 `0d36c626a9992de5a457e3f2880bc99a`（7 hunk，2026-09-21 核）**；**加载期底部居中的 `Thinking…` 卡片（脑形 U+F09D1，插件自带的第二个 `PanelWindow`，常驻映射、藏在屏下，arming 后立刻上屏；表面是**卡片大小 + 借 `^omarchy-osd$` 那条霜化规则**，尺寸/字体/离底照 OSD 关机吐司）已实施，收卡等宿主推的"壁纸已画"而不是固定时长；plymouth 盖交接空窗仍搁置 —— 两条都见 `docs/lock.md` §11.27**；**2026-09-21 晚补：那 ~1.4s 空窗已被 `swaybg` 填掉**（niri `spawn-at-startup` 先铺同一张图、几十 ms 上屏，与插件那份逐像素一致 ⇒ 无缝），平色底色现在只剩头 ~100ms 的台阶 —— 见 `docs/local-overrides.md` §4
 - 33b. **boot reveal 的三个坑（2026-09-21，全是实测）**：① **别用 QML 动画排片**——bar 停屏外时 surface 不在屏上，动画的钟照走但不出版本帧，名义 1800+1400 的 `PauseAnimation+NumberAnimation` 实测在 0.9s 内一次落位；改用**普通 Timer 做 hold + 每帧按墙钟算进度的 Timer 做滑入**（实测节拍稳定 16ms/次，`bootReveal` 逐帧平滑 0.001→0.999）。② **`anchors.fill: parent` 会接管 x/y**，包一层 `Item` 做位移时必须写 `width/height`，否则只剩淡入、位移被静默忽略。③ **bar 的可见内容要包在同一个 Item 里**再位移：只动 surface 会带着独占区一起动，屏幕上的窗口跟着上下跳。④ **`BackgroundEffect.blurRegion` 不能跟会被位移的 item**：包上 `barVisual` 之后霜化整块消失（用户："没blur"）——niri 磨的是**它拿到的那块矩形**，而 reveal 开始时 bar 停在上边之外，区域采样在屏外，frost 就跟着没了；改成指向一个**不动的替身**（`barBlurAnchor`：`anchors.fill: parent` + 同 `radius` + `color: "transparent"`，只当形状不画画），几何与静止时的 bar 相同（bar 填满 surface）。⑤ **"只有 opacity" 是缓动的锅，不是位移没生效**：surface 高只到 bar 的底边，**顶边以上全是被裁掉的**，能看见的只有"裸露高度 = barSize − offset"这一段 ⇒ **缓动决定看得见多少下降**：InOutCubic 的前一半在爬坡时 bar 还只是顶边一条，又跟淡入同速，眼睛只读到"淡"；换 **OutCubic** 并把淡入提前结束（`Math.min(1, bootReveal * 3.5)`，约 100ms 就全不透明），让下降当主角。另：offset 满值 50 逻辑像素 > bar 高 32 ⇒ 前约 14% 的位移是看不见的（等价于把 hold 稍微延长，正常）。⑥ **滑入方案最终废弃（2026-09-21）**：霜化是 **niri 按它拿到的 region 自己画的**（不看客户端画了什么、也不看 alpha），所以任何「bar 滑进来」的做法都会先露出一块**空的磨砂矩形**、再有个 bar 追下来（用户原话：「屏幕顶部有个 blur 的 bar, 然后再浮下来一个 bar」），而 region 又跟不上位移（④）⇒ 最终改成「surface 先不上屏（`PanelWindow.visible`）、到点整块出现」，两个问题一起消失；⑤ 那段缓动/淡入的调试过程留作记录。
 - 32. **吐司"一来通知整屏变糊"：全屏 surface 撞上 niri 侧 `blur true`（2026-09-20，用户 "我的吐司通知,
@@ -204,7 +204,7 @@ quickshell：`pkill -x quickshell && niri msg action spawn -- quickshell -n -p $
       「亮色 UI 掩码扫列」或先看 `niri msg workspaces` 的 `active`/`active_window_id`）。
     - 回退：`~/.local/state/backups/.config/niri/window-rules.kdl.bak-20260920-wechatblur`。另两条 niri 配置通用坑见 §8 第 26 条。
 
-34. **About 窗口（fastfetch TUI）的磨砂与尺寸：上游靠"全局 blur + `system.lua`"白拿，niri 两样都得自己写
+36. **About 窗口（fastfetch TUI）的磨砂与尺寸：上游靠"全局 blur + `system.lua`"白拿，niri 两样都得自己写
     （2026-09-22，用户「我原汁原味的blur咋没了?」→「是fastfetch的blur没了, 好像套了啥主题」→「我看着还是没blur」）**：
     - **先说误判**：这个"没 blur"我先当成 **logo 配色**问题查（甚至顺手删了上游那条 `color:{1:green}`），其实它只是把 logo
       从被染绿的 `[1m[32m` 变回原生青蓝 `[1m[36m`，**跟磨砂无关**，用户当场否掉。**用户说的"fastfetch 的 blur"＝ About 面板那块面**，
@@ -233,6 +233,10 @@ quickshell：`pkill -x quickshell && niri msg action spawn -- quickshell -n -p $
       改 `*.kdl` 后 niri 自己会重载（journal `DEBUG niri_config: loaded config from …`），要手动就用 `load-config-file`。
       ② `niri msg action close-window` 对 About **无效**（TUI 不吃 close 请求，窗口还在），得 `kill <pid>`。
     - 回退：`~/.local/state/backups/.config/niri/window-rules.kdl.bak-20260922-aboutblur`，再 `niri validate`。
+    - **编号更正（2026-09-24）：本条原写 `§8 第 34 条`，与同一夜 `yay → paru` 垫片那条撞号**（`ab15732`，比本条晚
+      2 分半提交，也取了 34）⇒ 两条抢一个号，且映射表里**一条都没登记**。本条的号**零引用**，所以由本条让出：
+      现为 **`§8 第 36 条`**，34 归垫片那条（它已被 `docs/omarchy-on-niri-port.md` §3 引用两处、号还写进了提交信息，
+      历史不改）。两条现已登记进 §8 映射表。
 
 ---
 
@@ -313,7 +317,7 @@ monospace 补回 `SFMono Nerd Font`（Nerd 图标）与 `Noto Sans Mono CJK SC`�
 **实测 xdg 的 `conf.d` 在 `fonts.conf` 之后加载**，所以在那里写整条回退链不会顶掉菜单选的字体；
 另注 fontconfig 没有 `append_first` 这个 edit mode（写了只有 warning、静默无效）。
 改前警告：写进 `fonts.conf` 的中文规则会被下一次选字体抹掉（当时中文掉到 MS Gothic）。
-详见 `local-overrides.md` §8 第 15 条。
+详见 `local-overrides.md` §8 缺口第 15 项。
 
 ---
 

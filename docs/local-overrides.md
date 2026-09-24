@@ -52,7 +52,7 @@
   `omarchy-plugin-remove` 写 `.<id>.bak.<ts>`。装第三方配置里那批（opencode / DankMaterialShell / gtk / qt6ct /
   fastfetch / xsettingsd / environment.d / fcitx5）都按本条收进备份根了。
 - 本条只管**备份**。清 `ls` 时顺手挖出的两个"旧版本脚本"与一个"旧时代配置存档"（不是备份）
-  加点隐藏、**没有删**，清单与来历见 §8 第 13 条。
+  加点隐藏、**没有删**，清单与来历见 §8 缺口第 13 项。
 
 ---
 
@@ -182,7 +182,7 @@
 | `omarchy-picker-warmup.service` | `PICKER_WARMUP_DELAY=45` + `ExecStartPre=/bin/sleep`；`toggles/picker-warmup-off` 存在即跳过 | ✅ `default/systemd/user/`（`%h` 模板，2026-09-20 收进；`install.sh` 第 4 步装并链接） |
 | `omarchy-sleep-lock.service` | **本机版**：上游那两条 `ConditionEnvironment=` 全删 —— ① `OMARCHY_PATH` 那条读的是**用户管理器**环境、**看不见单元自己的 `Environment=`**（2026-09-21 探针实证），本机又没 UWSM 去 import 它；② 另一条 `WAYLAND_DISPLAY` 看着满足，但**条件是单元被拉起那刻评估的，而单元由 `graphical-session.target` 拉起、那会儿会话还没把环境发布进用户管理器**（2026-09-21 重启实证：20:10:17 被跳过、20:10:18 niri 才起来）⇒ 抑制剂挂不上、合盖不锁。本机版显式给 `OMARCHY_PATH`/`PATH`（`omarchy-system-sleep-lock` 里是裸 `omarchy-shell`），`ExecStart` 指包装器 `%h/bin/omarchy-sleep-lock-start`（`port-bin/omarchy-sleep-lock-start`：有界等会话环境发布 → 采纳 `WAYLAND_DISPLAY`/`XDG_RUNTIME_DIR`/`NIRI_SOCKET` 等 → `exec` 上游 monitor）。**合盖/挂起锁屏就靠它**，见 `lock.md` §11.28 | ✅ `local-config/systemd/user/` + `port-bin/`（2026-09-21 收进） |
 | `materal-recolor.{path,service}` | **是本移植的一部分**（不是无关物件）：`.path` 盯 Omarchy 壁纸文件，一变就拉起 oneshot `.service` 跑 `%h/bin/materal-update`（`port-bin/` 里的 matugen 包装，机制见主文档 §8.10）。上游没有、也没有包认领 | ✅ `local-config/systemd/user/`（2026-09-20 收进；装法 `systemctl --user enable --now materal-recolor.path`） |
-| `wechat-clipboard-sync`、`wl-clip-persist`、`wl-gammarelay`、`xsettingsd` | 与本移植无关（第一个是私人物件，后三个是通用 Wayland 守护进程；四者都无包认领），仅共存。**`wechat-clipboard-sync` 2026-09-21 修过脚本里的 flock 写法**（同步链真的死了，详见 §8 第 13 条）、**并补上 X11→Wayland 反向同步**；它是 `Type=oneshot`+`RemainAfterExit=yes` 而 `ExecStart` 永不退出 ⇒ 永远停在 `activating`、**`systemctl restart` 会挂住**（要 `stop` 再 `start --no-block`） | — |
+| `wechat-clipboard-sync`、`wl-clip-persist`、`wl-gammarelay`、`xsettingsd` | 与本移植无关（第一个是私人物件，后三个是通用 Wayland 守护进程；四者都无包认领），仅共存。**`wechat-clipboard-sync` 2026-09-21 修过脚本里的 flock 写法**（同步链真的死了，详见 §8 缺口第 13 项）、**并补上 X11→Wayland 反向同步**；它是 `Type=oneshot`+`RemainAfterExit=yes` 而 `ExecStart` 永不退出 ⇒ 永远停在 `activating`、**`systemctl restart` 会挂住**（要 `stop` 再 `start --no-block`） | — |
 
 - 三个 omarchy 单元都软链进 `graphical-session.target.wants/`（**`omarchy-sleep-lock` 是 2026-09-21 才补上的**：本机走 dev-link 装机、绕过上游 first-run 的 `enable-user-units.sh`，所以那批单元集体没装；逐个查过后只有它是真缺口，见 `lock.md` §11.28）。
 
@@ -217,6 +217,11 @@ cp /tmp/niri.patch ~/.config/omarchy/niri-port/niri.patch              # 重放�
 ---
 
 ## 8. 缺口：本机有、仓库没有（换机不可复现）
+
+> ⚠ **本节 1–15 是卷内序号，不占全局的 `§8 第 N 条` 号段** —— 数字只是恰好重合：全局 `§8 第 13 条`
+> 讲的是「Ghostty 磨砂模糊」（正文在 `docs/visual.md`），全局 `§8 第 15 条` 讲的是「brightnessctl 授权安装」
+> （正文在 `docs/behavior.md`），都与本节条目无关。本卷引用本节时一律写 **「§8 缺口第 N 项」**（历史正文里那些裸
+> `§8 第 13 条` / `第 15 条` 已按此改写，见 `docs/omarchy-on-niri-port.md` §8 映射表）。
 
 1. ~~三个 `~/bin` 垫片~~ **已收进仓库（2026-09-20）**：`port-bin/{omarchy-update,omarchy-picker-warmup,omarchy-display-text-size}`
 2. ~~`omarchy-picker-warmup.service`~~ **已收进仓库**：`default/systemd/user/omarchy-picker-warmup.service`
@@ -340,10 +345,10 @@ cp /tmp/niri.patch ~/.config/omarchy/niri-port/niri.patch              # 重放�
 | 锁屏人脸 | `sudo split-lock/face-pam.sh --remove` |
 | 删掉的 `flclash-helper.service`（其实没必要恢复） | 见 §5 那行；备份在 `~/.local/state/backups/etc/systemd/system/flclash-helper.service.bak-20260921-deleted` |
 | 合盖/挂起锁屏 | `systemctl --user disable --now omarchy-sleep-lock.service`（回到"合盖不锁"；日志排查法见 `lock.md` §11.28） |
-| 微信剪贴板同步脚本改坏 | `cp ~/.local/state/backups/bin/clipboard-sync.sh.bak-20260921-flock ~/bin/clipboard-sync.sh`，再 `systemctl --user stop wechat-clipboard-sync.service && systemctl --user start --no-block wechat-clipboard-sync.service`（**注意**这是最老的"坏版"快照；只想去掉反向同步就按 §8 第 13 条删 `TICK % 4` 那块） |
+| 微信剪贴板同步脚本改坏 | `cp ~/.local/state/backups/bin/clipboard-sync.sh.bak-20260921-flock ~/bin/clipboard-sync.sh`，再 `systemctl --user stop wechat-clipboard-sync.service && systemctl --user start --no-block wechat-clipboard-sync.service`（**注意**这是最老的"坏版"快照；只想去掉反向同步就按 §8 缺口第 13 项删 `TICK % 4` 那块） |
 | 删掉的 `vpn-hotspot` 整套（其实没必要恢复） | 见 §5 那行；四份备份都在 `~/.local/state/backups/` 下同名 `.bak-20260921-deleted` |
 | screensaver 恢复 | 删 `~/.local/state/omarchy/toggles/screensaver-off` + 复原 `omarchy-menu.jsonc.bak-20260920-prescreensaver` |
 | 选择器预热 | `touch ~/.local/state/omarchy/toggles/picker-warmup-off`（或 `systemctl --user disable --now omarchy-picker-warmup`） |
 | 插件本地魔改 | 在该插件目录 `git apply -R ~/.config/omarchy/niri-port/plugin-patches/<id>.patch` |
 | fastfetch 配置改坏 | `cp ~/.local/state/backups/.config/fastfetch/config.jsonc.bak-20260922 ~/.config/fastfetch/config.jsonc`（改前那份，`XeroArch` 简版；想回到"绿 logo"的中间版用 `…bak-20260923-greenlogo`；想回上游展示配置就直接 `cp $OMARCHY_PATH/etc/fastfetch/config.jsonc` 过来，但那条 `color: green` 会把 Arch 染绿） |
-| 字体/中文回退改坏 | `rm ~/.config/fontconfig/conf.d/60-cjk-fallback.conf`（回系统默认：中文会落到 MS Gothic、图标无回退）；`fonts.conf` 本身由菜单管，`menu → style → font` 重选一次即重建；仓库副本 `local-config/fontconfig/conf.d/` 可拷回来（见 §8 第 15 条） |
+| 字体/中文回退改坏 | `rm ~/.config/fontconfig/conf.d/60-cjk-fallback.conf`（回系统默认：中文会落到 MS Gothic、图标无回退）；`fonts.conf` 本身由菜单管，`menu → style → font` 重选一次即重建；仓库副本 `local-config/fontconfig/conf.d/` 可拷回来（见 §8 缺口第 15 项） |
