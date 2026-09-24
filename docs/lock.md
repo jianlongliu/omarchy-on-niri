@@ -28,6 +28,7 @@
 - §11.26 交接过渡：密码到桌面之间那段文字，以及两头各一段淡入（2026-09-21）
 - §11.27 交接那段黑：方向 A（底部 `Thinking…` 卡片）已实施，方向 B（plymouth 盖交接）仍搁置（2026-09-21）
 - §11.28 合盖/挂起不锁屏：单元**从没装过** → 2026-09-21 修好并**合盖实测通过**（当晚重启又暴露 `WAYLAND_DISPLAY` 条件在开机那刻也不成立 ⇒ 两条条件都删了，改用 `omarchy-sleep-lock-start` 包装器等会话环境）
+- §11.29 头像改成"可选"：真源 = AccountsService（免 root 的 `SetIconFile`），换头像入口 `omarchy-avatar` + 菜单 Style › Avatar（2026-09-23，用户指定）
 
 ## 另见（锁屏相关的东西分住哪几处）
 
@@ -516,7 +517,7 @@ Omarchy 的锁层从 `hyprctl -j monitors` 读两个字段，shim 之前都在�
 
    **关于"动画时长名义值"的教训（2026-09-21，先错后对）**：早先实测到"名义 1500+900 却在 ~0.9s 内一次落位、中途抓不到中间帧"，当时归因为"壳层启动期主线程太忙把动画帧吃掉"。**方向错了**：那轮测的其实是**内置 `plugins/bar/Bar.qml`**——而且它的做法是把 surface 停到屏幕外，surface 不在屏上时压根不出帧，钟照走、画面不同步；而屏幕上真正在显示的是第三方插件 `charlieras262.floating-bar`（见下）。后来改成"**普通 Timer 做 hold + 每帧按墙钟算进度**"，在**真正生效的那个 bar** 上实测节拍稳定 **16ms/次**、`bootReveal` 逐帧平滑 0.001→0.999。教训：① "先停屏外再进场"这类动画别用 `PauseAnimation`/`NumberAnimation` 排（surface 停屏外时它只走钟不出帧）；② 动手测任何"屏幕上该有的东西"之前，先确认你改的文件就是屏幕上那个（`~/.config/omarchy/shell.json` 的 `bar.id`）。
 
-**改动落点**：`split-greeter/{install.sh,niri.kdl,Greetd.qml,shell.qml,README.md}` + 新增 `split-greeter/session.sh` + `$OMARCHY_PATH/shell/shell.qml`（标记 + `pushBootReveal()` 把 `bootRevealArmed`/`bootRevealPainted` 推给当前 bar + `bootRevealWallpaperPainted` 读服务）+ `$OMARCHY_PATH/shell/plugins/background/Background.qml`（**新增 `property bool paintedOnce`**，首帧壁纸解码就位时latch，2026-09-21）+ `~/.config/niri/effects.kdl`（`^omarchy-osd$` → `^omarchy-(osd|boot-banner)$`，让卡片同款霜化）+ `$OMARCHY_PATH/shell/plugins/bar/Bar.qml`（内置 bar 的滑入，**本机不在用**）+ **`~/.config/omarchy/plugins/charlieras262.floating-bar/Bar.qml` → `niri-port/plugin-patches/charlieras262.floating-bar.patch`（本机在用的浮动 bar；**加载期 surface 不上屏、到点整块出现**，见 `docs/visual.md` §33）**；`niri.patch` 现在是 **22 文件/48 hunk**，md5 `6138cc1bece9a94312572d8685c845a4`；重生成照 §8.7 限路径，**新文件必须显式补进路径表**，否则下次重放会漏。备份：`~/.local/state/backups/.config/omarchy/niri-port/niri.patch.bak-20260921-192644`（46 hunk 的上一版 —— 活体已改出 `paintedOnce`/`pushBootReveal()` 增补而补丁没跟上，repatch 一度 exit 2）、`…bak-20260921-bootreveal`（再上一版 `…bootcurtain2`，黑幕版 `…bootcurtain`）。
+**改动落点**：`split-greeter/{install.sh,niri.kdl,Greetd.qml,shell.qml,README.md}` + 新增 `split-greeter/session.sh` + `$OMARCHY_PATH/shell/shell.qml`（标记 + `pushBootReveal()` 把 `bootRevealArmed`/`bootRevealPainted` 推给当前 bar + `bootRevealWallpaperPainted` 读服务）+ `$OMARCHY_PATH/shell/plugins/background/Background.qml`（**新增 `property bool paintedOnce`**，首帧壁纸解码就位时latch，2026-09-21）+ `~/.config/niri/effects.kdl`（`^omarchy-osd$` → `^omarchy-(osd|boot-banner)$`，让卡片同款霜化）+ `$OMARCHY_PATH/shell/plugins/bar/Bar.qml`（内置 bar 的滑入，**本机不在用**）+ **`~/.config/omarchy/plugins/charlieras262.floating-bar/Bar.qml` → `niri-port/plugin-patches/charlieras262.floating-bar.patch`（本机在用的浮动 bar；**加载期 surface 不上屏、到点整块出现**，见 `docs/visual.md` §33）**；`niri.patch` 现在是 **22 文件/48 hunk**，md5 `ef920a66ece784dfc207c7c87c479f5b`（2026-09-23 加头像菜单 3 行后重导出核，见 §11.29）；重生成照 §8.7 限路径，**新文件必须显式补进路径表**，否则下次重放会漏。备份：`~/.local/state/backups/.config/omarchy/niri-port/niri.patch.bak-20260921-192644`（46 hunk 的上一版 —— 活体已改出 `paintedOnce`/`pushBootReveal()` 增补而补丁没跟上，repatch 一度 exit 2）、`…bak-20260921-bootreveal`（再上一版 `…bootcurtain2`，黑幕版 `…bootcurtain`）。
 
 **验证**：
 - **判据 = `tests/state.sh` 对账**（离屏、不开合成器，可随时跑）：本树与 `git archive HEAD` 的干净副本**各 7 项 FAIL、输出逐字节一致**（`diff` 全等）⇒ 本机那 7 项本来就红，本次改动**没有新增失败**。
@@ -587,6 +588,26 @@ Omarchy 的锁层从 `hyprctl -j monitors` 读两个字段，shim 之前都在�
 - 验收（三条都实测）：`busctl get-property … InhibitDelayMaxUSec` 从 `5000000` 变 `15000000`；拿脚本**自己的** `derive_budget_ms()` 单独跑（补上文件顶部的 `budget_cap_ms`）得 **12000 ms**；reload 后 logind 仍 `active`、2 个会话都在。
 - 回退：`pkexec rm /etc/systemd/logind.conf.d/20-inhibit-delay.conf && systemctl reload systemd-logind` ⇒ 回到 5s/4s 预算（锁照常能锁，只是余量小）。
 - 上游原件的注释也解释了为什么是 15s 而不是「足够大就行」：延迟抑制剂只是**计时器不是承诺**，窗口一过 logind 照睡（可能锁还没 secure）；而合盖往往还伴随显示器重配，Quickshell 要等屏集稳定才锁得上。
+
+### §11.29 头像改成"可选"：真源 = AccountsService，换头像入口进 Style 菜单（2026-09-23，用户指定）
+
+**用户原话**：「omarchy menu 做个头像 avatar 修改麻烦不?」→「用户头像影响锁屏, 登录屏幕, 以后考虑给 omarchy menu 也塞一个」→「先1」→「Avatar头像修改放进omarchy menu style 选项里」。拍板：**先做换头像**（菜单里**显示**头像属阶段 2，未做：要动已在补丁里的 `shell/plugins/menu/Menu.qml` 加圆头像 + 抽 `MenuAvatar.qml`，等发话）、挑选方式**文件选择器为主**、菜单行放**仓库 default**。
+
+**为什么之前"不是选的"**：头像一直是**自动探测**（§11.23 那条链：`~/.config/omarchy/lock-avatar.{png,jpg,jpeg,webp}` → `~/.face` → `~/.face.icon` → `/var/lib/AccountsService/icons/$USER`，按顺序第一个命中的赢），本机命中的是最后那张（1254×1254 JPEG、root 所有）。本轮把它变成可选。
+
+**真源定成 AccountsService —— 只此一个**：登录屏 greeter 只读 `/var/lib/AccountsService/icons/$USER`（家目录 0750，greeter 读不到），锁屏只把这条当链尾兜底。所以**不能**只写 `~/.config/omarchy/lock-avatar.png`：它在链首会遮住 AccountsService，锁屏换了、登录屏还是旧的（= 两份真相）。改 AccountsService 又**不需要 root**：polkit `org.freedesktop.accounts.change-own-user-data` 本就是 allow-any，`SetIconFile` 免授权、无 pkexec、不弹窗（2026-09-23 实测；连 `SetIconFile ""` 清空回退首字母圆牌也验过，用完按备份字节还原）。accountsservice 是 D-Bus 激活的（单元 `disabled` 也会按需拉起，本机被首次调用唤起，属正常）。**daemon 不转码**：给什么字节落什么字节 —— 实测落盘就是我们生成的 512×512 8-bit PNG，不是它重存的。
+
+**落点**：
+- `port-bin/omarchy-avatar` → `~/bin`（`install.sh` 第 1 步自动拷，PATH-first；菜单 action 由 `Util.execDetached` 走 `bash -lc`，`~/bin` 在 PATH 首位）：`set <image>`（`magick` 居中裁方形 512 + `-depth 8 -strip` → `SetIconFile`）、`pick`（`omarchy-file-select`；niri 的 `/usr/share/xdg-desktop-portal/niri-portals.conf` 已把 FileChooser 指到 gtk 后端）、`default`（还原首见备份；无备份则清空 → 首字母圆牌）、`status`（报 AccountsService 路径/尺寸 + 锁屏链实际命中哪个）。**注意：只能按名字叫 `omarchy-avatar`** —— `omarchy` 路由只扫 `$OMARCHY_PATH/bin`（见其 `load_commands`），port-bin 这批命令都不出现在 `omarchy <组>` 里（想让它进路由就得往上游工作区的 `bin/` 放一个未跟踪副本，鉴于 `omarchy update` 的覆盖风险，本轮没做）。
+- **首次改动前自动备份**到 `~/.local/state/backups/.AccountsService-icon-$USER-<日期>`：隐藏命名，且只留**最早那一次**的图，后续 `set` 不再覆盖它。
+- 菜单：仓库 `default/omarchy/omarchy-menu.jsonc` 新增 `style.avatar`（icon U+F0009）+ `style.avatar.image`（`omarchy-avatar pick`）/ `style.avatar.default`（`omarchy-avatar default`），随 `niri.patch`（仍 22 文件/48 hunk，md5 `ef920a66…`，配方见 `local-overrides.md` §7）。
+- 顺手修：仓库那份 `omarchy-menu.jsonc` 副本早在 09-19 就与机器不一致（比机器少 4 条 agent 行、`setup.*` 还指回根 `config.kdl`），本次按机器真身同步 —— 另见 `local-overrides.md` §7 新增的"仓库副本不是机器镜像"警告。
+
+**验证（已做）**：`status` 三行都符合预期；`set` 非方图（1600×900）→ 落盘 512×512 8-bit PNG（证明裁切 + daemon 不转码）；连 `set` 两次备份仍只有一份；`default` 还原后 md5 与备份逐字节相同（`1dd0ef40c0edcdcbdd3c60060bd5f3dd`）；`pick` 用桩 `omarchy-file-select` 验三条路（挑到 → 走 `set`；取消 exit 1 静默；选择器失败 → stderr 提示 + 通知 + exit 1）；影子文件在场时 stderr 警告 + 通知里点名（菜单 action 是 detached，stderr 看不到）；菜单用仓库自带的 `scripts/menu-model-render.js`（跑 shell 自己的 parse → merge → guard → displayRow）验 `style` 多出 Avatar 行、`style.avatar` 两行 action 正确、图标码点 = U+F0009（`fc-list ':charset=f0009'` 证 SFMono Nerd Font 覆盖，与在用的 U+F003B 同为 12 个字体命中）；截图 `/var/tmp/menu-style.png`、`/var/tmp/menu-avatar.png`。`test/shell.d/menu-test.sh` 仍只有那 1 项**既有**失败（上游测试要 Hyprland 的 `input.lua`，移植改指 niri 配置，与本轮无关），`menu-guards-test.sh` 全过。
+
+**没验（要人）**：真 GTK 文件选择器点一次（只验了接线圈）；锁屏真锁一次看头像（照规矩不主动锁他的屏）；登录屏下次登录看（greeter 只认 AccountsService，本机注入不了点击）。
+
+**回退**：`omarchy-avatar default` 一键回原图；补丁用 `~/.local/state/backups/.niri.patch.bak-20260923`（与现行只差头像 3 行），菜单文件用 `.omarchy-menu.jsonc.bak-20260923`。
 
 ---
 

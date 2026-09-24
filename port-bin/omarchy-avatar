@@ -1,0 +1,189 @@
+#!/bin/bash
+
+# omarchy:summary=Set or restore the user avatar shown on the lock screen and the login screen
+# omarchy:args=<image>|pick|default|status
+# omarchy:examples=omarchy-avatar pick | omarchy-avatar "$HOME/Pictures/me.png" | omarchy-avatar default | omarchy-avatar status
+#
+# Lives in ~/bin so it survives `omarchy update`. Note: the `omarchy` router only scans
+# $OMARCHY_PATH/bin, so this one is NOT reachable as `omarchy avatar ...` (same as the other
+# port-bin commands) -- call it by name.
+#
+# omarchy-on-niri port: the avatar has one source of truth -- the AccountsService
+# icon at /var/lib/AccountsService/icons/$USER. The login screen reads that path
+# directly (it cannot read the user's home, mode 0750), and the lock screen falls
+# back to it after its own ~/.config/omarchy/lock-avatar.* / ~/.face chain.
+#
+# Writing it through AccountsService owns no root: polkit's
+# org.freedesktop.accounts.change-own-user-data is allow-any, so SetIconFile runs
+# without pkexec and without a password prompt (verified 2026-09-23). Writing
+# ~/.config/omarchy/lock-avatar.png instead would shadow the AccountsService icon
+# in the lock chain, leaving the two screens showing different pictures.
+#
+# Lives in ~/bin so it survives `omarchy update`.
+
+set -euo pipefail
+
+ICON_DIR=/var/lib/AccountsService/icons
+ICON="$ICON_DIR/$USER"
+BACKUP_DIR=${XDG_STATE_HOME:-$HOME/.local/state}/backups
+# Both screens mask the picture with a circle, so anything larger is wasted bytes
+# in a file the login screen loads for every account.
+SIZE=512
+
+usage() {
+  echo "Usage: omarchy-avatar <image>|pick|default|status" >&2
+  exit 1
+}
+
+# What AccountsService reports as the icon path; empty means "no icon, both
+# screens fall back to the initial-letter badge".
+icon_file() {
+  busctl --system get-property org.freedesktop.Accounts "/org/freedesktop/Accounts/User$UID" org.freedesktop.Accounts.User IconFile 2>/dev/null | sed -e 's/^s "//' -e 's/"$//' || true
+}
+
+# Empty path clears the icon, which is how AccountsService deletes it.
+set_icon() {
+  busctl --system call org.freedesktop.Accounts "/org/freedesktop/Accounts/User$UID" org.freedesktop.Accounts.User SetIconFile s "$1" >/dev/null
+}
+
+# Keep the first picture this command ever replaces, under a hidden name next to
+# the other backups. Later picks must not bury it, so an existing backup wins.
+backup_icon() {
+  [[ -f $ICON ]] || return 0
+  if ! compgen -G "$BACKUP_DIR/.AccountsService-icon-$USER-*" >/dev/null; then
+    mkdir -p "$BACKUP_DIR"
+    cp -p "$ICON" "$BACKUP_DIR/.AccountsService-icon-$USER-$(date +%Y%m%d)"
+  fi
+}
+
+# The lock screen's own chain outranks AccountsService, so a leftover override
+# silently wins. Only the notification can say so: menu actions run detached.
+shadow_file() {
+  local candidate
+  for candidate in "$HOME/.config/omarchy/lock-avatar.png" "$HOME/.config/omarchy/lock-avatar.jpg" "$HOME/.config/omarchy/lock-avatar.jpeg" "$HOME/.config/omarchy/lock-avatar.webp" "$HOME/.face" "$HOME/.face.icon"; do
+    if [[ -f $candidate ]]; then
+      printf '%s' "$candidate"
+      return 0
+    fi
+  done
+  printf ''
+}
+
+set_from() {
+  local source
+  local scratch
+  local shadow
+
+  if [[ ! -f $1 ]]; then
+    echo "omarchy-avatar: no such file: $1" >&2
+    exit 1
+  fi
+
+  source=$(readlink -f "$1")
+  scratch=$(mktemp --tmpdir omarchy-avatar-XXXXXX.png)
+
+  # 8-bit and no metadata: a 16-bit PNG of the same picture is four times the
+  # bytes the login screen reads per account, and nothing here needs it.
+  if ! magick "$source" -auto-orient -resize "${SIZE}x${SIZE}^" -gravity center -extent "${SIZE}x${SIZE}" -depth 8 -strip "$scratch" 2>/dev/null; then
+    rm -f "$scratch"
+    echo "omarchy-avatar: not an image magick can read: $source" >&2
+    omarchy-notification-send "Avatar not changed" "$source is not an image ImageMagick can read."
+    exit 1
+  fi
+
+  backup_icon
+  set_icon "$scratch"
+  rm -f "$scratch"
+
+  shadow=$(shadow_file)
+  if [[ -n $shadow ]]; then
+    omarchy-notification-send "Avatar updated" "Lock screen and login screen updated, but the lock screen still shows $shadow, which outranks it. Remove that file to see the new one."
+    echo "omarchy-avatar: lock screen override in the way: $shadow" >&2
+  else
+    omarchy-notification-send "Avatar updated" "Lock screen and login screen now use the new picture."
+  fi
+
+  echo "avatar: $(icon_file)"
+}
+
+restore_default() {
+  local backup
+  local latest
+
+  for backup in "$BACKUP_DIR"/.AccountsService-icon-"$USER"-*; do
+    [[ -f $backup ]] || continue
+    if [[ -z ${latest:-} || $backup > $latest ]]; then
+      latest=$backup
+    fi
+  done
+
+  if [[ -n ${latest:-} ]]; then
+    set_icon "$latest"
+    omarchy-notification-send "Avatar restored" "Back to $(basename "$latest")."
+    echo "avatar: $(icon_file)"
+  else
+    # Nothing to go back to, so show both screens' initial-letter badge.
+    set_icon ""
+    omarchy-notification-send "Avatar cleared" "Both screens show your initial until you set a picture again."
+    echo "avatar: (none)"
+  fi
+}
+
+status() {
+  local icon
+  local candidate
+  local winner
+
+  icon=$(icon_file)
+  if [[ -n $icon && -f $icon ]]; then
+    echo "accountsservice: $icon ($(magick identify -format '%wx%h %m %b' "$icon"))"
+  else
+    echo "accountsservice: (no icon)"
+  fi
+
+  for candidate in "$HOME/.config/omarchy/lock-avatar.png" "$HOME/.config/omarchy/lock-avatar.jpg" "$HOME/.config/omarchy/lock-avatar.jpeg" "$HOME/.config/omarchy/lock-avatar.webp" "$HOME/.face" "$HOME/.face.icon" "$ICON"; do
+    if [[ -f $candidate ]]; then
+      winner=$candidate
+      break
+    fi
+  done
+
+  if [[ -n ${winner:-} ]]; then
+    echo "lock screen:    $winner"
+  else
+    echo "lock screen:    (initial-letter badge)"
+  fi
+  echo "login screen:   ${icon:-(initial-letter badge)}"
+}
+
+[[ $# == 1 ]] || usage
+
+case "$1" in
+  pick)
+    # omarchy-file-select reports "picked nothing" (1) and "no chooser" (2)
+    # separately, because the two want different handling.
+    rc=0
+    image=$(omarchy-file-select --title "Pick an avatar" --extensions "png jpg jpeg webp gif") || rc=$?
+    if (( rc == 2 )); then
+      echo "omarchy-avatar: the file chooser failed to open" >&2
+      omarchy-notification-send "Avatar not changed" "The file chooser failed to open."
+      exit 1
+    fi
+    if (( rc == 1 )) || [[ -z $image ]]; then
+      exit 1
+    fi
+    set_from "$image"
+    ;;
+  default)
+    restore_default
+    ;;
+  status)
+    status
+    ;;
+  -*)
+    usage
+    ;;
+  *)
+    set_from "$1"
+    ;;
+esac

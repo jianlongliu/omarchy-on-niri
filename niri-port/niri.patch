@@ -176,10 +176,10 @@ index 782b4ba..1a95bde 100755
      else
        BACKGROUND_TRANSITION_SNAPSHOTS=false
 diff --git a/default/omarchy/omarchy-menu.jsonc b/default/omarchy/omarchy-menu.jsonc
-index 2ee2457..2d9cc69 100644
+index 2ee2457..a109d2b 100644
 --- a/default/omarchy/omarchy-menu.jsonc
 +++ b/default/omarchy/omarchy-menu.jsonc
-@@ -108,7 +108,7 @@
+@@ -108,9 +108,10 @@
    "style.bar": {"icon":"󰍜","label":"Menu Bar"},
    "style.bar.position": {"icon":"","label":"Position"},
    "style.bar.transparency": {"icon":"󰂵","label":"Transparency","action":"omarchy-bar transparent toggle"},
@@ -187,9 +187,16 @@ index 2ee2457..2d9cc69 100644
 +  "style.hyprland": {"icon":"","label":"Niri","action":"omarchy-launch-config-editor \"$HOME/.config/niri/config.kdl\""},
    "style.screensaver": {"icon":"󱄄","label":"Screensaver"},
    "style.about": {"icon":"","label":"About"},
++  "style.avatar": {"icon":"󰀉","label":"Avatar"},
    "style.bar.position.top": {"icon":"󰁝","label":"Top","action":"omarchy-bar position top"},
-@@ -123,9 +123,9 @@
+   "style.bar.position.bottom": {"icon":"󰁅","label":"Bottom","action":"omarchy-bar position bottom"},
+   "style.bar.position.left": {"icon":"󰁍","label":"Left","action":"omarchy-bar position left"},
+@@ -121,11 +122,13 @@
+   "style.screensaver.text": {"icon":"","label":"Edit Text","action":"omarchy-branding-screensaver text"},
+   "style.screensaver.image": {"icon":"","label":"Set From Image","action":"omarchy-branding-screensaver image"},
    "style.screensaver.default": {"icon":"","label":"Restore Default","action":"omarchy-branding-screensaver reset"},
++  "style.avatar.image": {"icon":"","label":"Set From Image","action":"omarchy-avatar pick"},
++  "style.avatar.default": {"icon":"","label":"Restore Default","action":"omarchy-avatar default"},
  
    // Setup
 -  "setup.monitors": {"icon":"󰍹","label":"Monitors","action":"omarchy-launch-config-editor \"$HOME/.config/hypr/monitors.lua\""},
@@ -201,7 +208,7 @@ index 2ee2457..2d9cc69 100644
    "setup.network": {"icon":"󰛳","label":"Network","aliases":["network"]},
    "setup.network.dns": {"icon":"󰇖","label":"DNS","aliases":["dns"]},
    "setup.network.dns.dhcp": {"icon":"󰩟","label":"DHCP","checked":"[[ \"$(omarchy-dns)\" == \"DHCP\" ]]","action":"omarchy-dns DHCP"},
-@@ -184,15 +184,18 @@
+@@ -184,15 +187,18 @@
    "setup.security.sshd": {"icon":"󰣀","label":"SSHD","action":"omarchy-launch-floating-terminal-with-presentation omarchy-setup-security-sshd"},
    "setup.security.passwordless-sudo": {"icon":"󰟵","label":"Passwordless Sudo","action":"omarchy-launch-floating-terminal-with-presentation omarchy-sudo-passwordless"},
    "setup.security.sudoless-docker": {"icon":"󰡨","label":"Sudoless Docker","when":"omarchy-sudo-docker --configured","action":"omarchy-launch-floating-terminal-with-presentation omarchy-setup-security-sudoless-docker"},
@@ -224,7 +231,7 @@ index 2ee2457..2d9cc69 100644
    "install.ai": {"icon":"󱚤","label":"AI"},
    "install.service": {"icon":"","label":"Service"},
    "install.development": {"icon":"󰵮","label":"Development"},
-@@ -284,7 +287,8 @@
+@@ -284,7 +290,8 @@
    "install.development.elixir.phoenix": {"icon":"","label":"Phoenix","disabled":"compgen -G \"$HOME/.mix/archives/phx_new*\"","action":"omarchy-launch-floating-terminal-with-presentation 'omarchy-install-dev-env phoenix'"},
  
    // Remove
@@ -234,7 +241,7 @@ index 2ee2457..2d9cc69 100644
    "remove.ai": {"icon":"󱚤","label":"AI","title":"Remove"},
    "remove.service": {"icon":"","label":"Services","title":"Remove"},
    "remove.development": {"icon":"󰵮","label":"Development","title":"Remove"},
-@@ -364,10 +368,10 @@
+@@ -364,10 +371,10 @@
    "update.channel.rc": {"icon":"🟡","label":"RC","checked":"[[ \"$(omarchy-channel-current)\" == \"rc\" ]]","action":"omarchy-launch-floating-terminal-with-presentation 'omarchy-channel-set rc'"},
    "update.channel.edge": {"icon":"🟠","label":"Edge","checked":"[[ \"$(omarchy-channel-current)\" == \"edge\" ]]","action":"omarchy-launch-floating-terminal-with-presentation 'omarchy-channel-set edge'"},
    "update.channel.dev": {"icon":"🔴","label":"Dev","checked":"[[ \"$(omarchy-channel-current)\" == \"dev\" ]]","action":"omarchy-launch-floating-terminal-with-presentation 'omarchy-channel-set dev'"},

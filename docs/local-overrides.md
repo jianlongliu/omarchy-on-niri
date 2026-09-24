@@ -61,7 +61,7 @@
 | 路径 | 内容 | 生效方式 |
 |---|---|---|
 | `shell/` | 移植后的 Omarchy Quickshell 源码（层 1） | `install.sh` 把覆盖层 `git apply` 进 `$OMARCHY_PATH`（幂等），或手工 `~/bin/omarchy-niri-repatch` |
-| `port-bin/*`（12 个） | `hyprctl`、`uwsm-app`、`materal-update`、`omarchy-update`、`omarchy-niri-system`、`omarchy-niri-apply-theme`、`omarchy-niri-repatch`、`omarchy-picker-warmup`、`omarchy-display-text-size`、`omarchy-powerprofiles-{list,set}`、`omarchy-sleep-lock-start` | `install.sh` 拷进 `~/bin`（PATH-first） |
+| `port-bin/*`（13 个） | `hyprctl`、`uwsm-app`、`materal-update`、`omarchy-update`、`omarchy-niri-system`、`omarchy-niri-apply-theme`、`omarchy-niri-repatch`、`omarchy-picker-warmup`、`omarchy-display-text-size`、`omarchy-powerprofiles-{list,set}`、`omarchy-sleep-lock-start`、`omarchy-avatar` | `install.sh` 拷进 `~/bin`（PATH-first） |
 | `niri-port/niri.patch` + `Niri.qml` + `plugins/blurwallpaper` | 覆盖层，挺过 `omarchy update` | `~/bin/omarchy-niri-repatch`（幂等） |
 | `niri-port/plugin-patches/` | 4 个第三方插件的本地魔改补丁（+ README 说明怎么生成/怎么重放） | 手工 `git apply`（无自动重放器） |
 | `scripts/kdl-sync.sh`、`scripts/local-files-sync.sh` | 机器 ↔ 仓库的对账：前者比 `niri-config/local/*.kdl`（家目录占位符），后者比 `local-config/` + `plugins/` + `split-lock/ir-light`（逐字节） | 各自直接跑；不在本机则 `skip` |
@@ -76,8 +76,8 @@
 | `docs/` | `INSTALL{,.zh}.md` + **主文档 `omarchy-on-niri-port.md`（当前事实 + 映射表）** + 模块卷 `visual/behavior/plugins/shims/upstream/migration/lock/local-overrides`（编号沿用原号），**正本就在 `docs/`** | 直接改 `docs/`，无第二副本 |
 
 - 覆盖层实际内容：**22 文件 / 48 hunk**（`--reverse --check` 通过、repatch 幂等）；
-  **md5 `6138cc1bece9a94312572d8685c845a4`**，与 `~/.config/omarchy/niri-port/niri.patch` 一致（2026-09-21 晚重导出核；
-  比 2026-09-20 那版多 `shell/shell.qml` 的 boot reveal 标记 + `pushBootReveal()` 推送、以及 `shell/plugins/bar/Bar.qml` 的滑入，见 §9 / `docs/visual.md` 第 33 条；
+  **md5 `ef920a66ece784dfc207c7c87c479f5b`**，与 `~/.config/omarchy/niri-port/niri.patch` 一致（2026-09-23 重导出核：新增菜单 `style.avatar.*` 三行，见 `docs/lock.md` §11.29；上一版 `6138cc1bece9a94312572d8685c845a4` 是 2026-09-21 晚那版，
+  它比 2026-09-20 那版多 `shell/shell.qml` 的 boot reveal 标记 + `pushBootReveal()` 推送、以及 `shell/plugins/bar/Bar.qml` 的滑入，见 §9 / `docs/visual.md` 第 33 条；
   比 2026-09-21 01:29 那版（46 hunk）多 `Background.qml` 的 `paintedOnce` 与 `shell.qml` 的推送增补 —— 那两处活体先改、补丁没跟上，曾让 repatch 判 exit 2）。
 - **在用的 bar 是第三方插件，不在 `niri.patch` 里**：`~/.config/omarchy/shell.json` 的 `bar.id = charlieras262.floating-bar`，
   它的 boot reveal 走 `niri-port/plugin-patches/charlieras262.floating-bar.patch`（md5 `0d36c626a9992de5a457e3f2880bc99a`，7 hunk，2026-09-21 核；含加载期底部 `Thinking…` 卡片——卡片照 OSD 关机吐司的尺寸/字体做，表面是**卡片大小 + 借用 `omarchy-osd` 那条霜化规则**，收卡时机等宿主推的"壁纸已画"而不是固定时长），
@@ -195,11 +195,16 @@
   主要是主题删除）→ **重生成 `niri.patch` 必须限路径**，否则 22 文件会膨胀成 250+：
 
 ```bash
-# 旧 patch 的文件清单 + 本次新增的文件
-git diff -- $(grep '^diff --git' niri.patch | sed 's|.* b/||') <新增文件> > niri.patch
-git apply --reverse --check niri.patch   # 必须通过
-~/bin/omarchy-niri-repatch               # 应回 "already applied"
+# 重生成（在 $OMARCHY_PATH 里跑；路径表取自旧 patch）
+cd ~/.local/share/omarchy
+git diff -- $(grep '^diff --git' ~/Projects/omarchy-on-niri/niri-port/niri.patch | sed 's|.* b/||') > /tmp/niri.patch
+git apply --reverse --check /tmp/niri.patch                            # 必须通过
+cp /tmp/niri.patch ~/Projects/omarchy-on-niri/niri-port/niri.patch     # 仓库正本
+cp /tmp/niri.patch ~/.config/omarchy/niri-port/niri.patch              # 重放用覆盖层；两份必须同 md5
+~/bin/omarchy-niri-repatch                                            # 应回 "already applied"
 ```
+
+- **仓库 `default/`、`shell/`、`bin/` 下那批"被补丁覆盖的文件"副本不是机器镜像**（2026-09-23 逐字节核：22 个里只有 9 个与机器一致，13 个不同。例：`shell/plugins/menu/Menu.qml` 少机器上的 `_BackgroundEffect` 导入与 jsonc 自愈重试、`shell/plugins/bar/Bar.qml` 少插件注册表兜底；反向也有——仓库那份 `omarchy-menu.jsonc` 比机器少 4 条 agent 行，`setup.*` 还指回根 `config.kdl`，而机器/文档都是拆分的 `monitor.kdl`/`binds.kdl`/`input.kdl`）。⇒ **改这类文件一律改机器工作区**再按上面配方重生成，编辑器/`git show` 里那份仓库副本只能当旧快照看，**别 `cp` 仓库→机器**（会把机器上的 port 增补和上游新行一起抹掉）；要更新仓库副本就按机器真身同步（2026-09-23 已把 `default/omarchy/omarchy-menu.jsonc` 这样同步，并带上头像 3 行；其余 13 个尚未同步，属已知欠账）。
 
 - `~/Documents/omarchy-niri-*.md`（九个）**已删**（2026-09-21）：2026-09-20 文档归一时它们曾是指向 `docs/` 的软链，
   守它们的 `./scripts/check-doc-links.sh` 一并退役。正本只在 `docs/`，不再有入口层。归一前的真副本备份仍在
