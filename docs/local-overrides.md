@@ -296,6 +296,29 @@ git apply --reverse --check niri.patch   # 必须通过
     改动前的两份都在备份根：`config.jsonc.bak-20260922`（`XeroArch` 内置 logo 的简版，632 B，用户原来的）
     与 `config.jsonc.bak-20260923-greenlogo`（照抄上游、还留着绿覆盖的中间版）；更早还有
     `config.jsonc.bak-20260921-033651`（655 B）。
+15. **字体与 CJK 回退（2026-09-23）**：三套**用户级**字体在 `~/.local/share/fonts/`（免 root、立即生效，
+    `omarchy update` 不管它们）：`pingFang/` PingFang SC 6 字重（只取 SC，TC/HK/MO 与 UI/开苹方三个变体没装）、
+    `GoogleSans/` Google Sans + Google Sans Display 12 个、`GoogleSansCode/` Google Sans Code 可变字体（OFL）。
+    来源都不是包，是从发布页直接下的：PingFang = GitHub `witt-bit/applePingFangFonts` release `3.0.1`
+    （网友二次打包，专有字体、版权灰色）；Google Sans = `flutter.googlesource.com/gallery-assets` 的
+    `lib/fonts.tar.gz`；Google Sans Code = `googlefonts/googlesans-code` release `v7.001`（`GoogleSansCode-v7.001.zip`）。
+    没有走 AUR（有同款 `otf-apple-pingfang` / `ttf-google-sans`）：本机 `sudo` 要密码、`base-devel` 未装
+    ⇒ agent 装不了包，只能下到用户目录或把命令交给用户。
+    - **`~/.config/fontconfig/fonts.conf` 不要手改**：`omarchy-font-set`（`menu → style → font` 背后那条命令）
+      用 `cat >` **整份重写**它，只留菜单选中的 monospace `prepend_first`。2026-09-23 就是这么把写在那里的
+      中文回退冲掉的 —— 中文掉到 **MS Gothic**（日文字形）、Nerd Font 图标也没了回退。⚠ 同一个坑对
+      `omarchy font set` 换任何字体都成立。
+    - **自定义规则住 `~/.config/fontconfig/conf.d/60-cjk-fallback.conf`**（**已收进仓库
+      `local-config/fontconfig/conf.d/`**，`local-files-sync.sh` 核过逐字节一致）：sans-serif / SF Pro /
+      Adwaita Sans → `SF Pro, PingFang SC, Noto Sans CJK SC`；`lang=zh` append 苹方；monospace
+      `assign` 回退链 = `SFMono Nerd Font, Noto Sans Mono CJK SC`（首个等宽族仍由 fonts.conf 决定）。
+      **实测 xdg 的 conf.d 在 `fonts.conf` 之后加载** ⇒ 菜单里选的字体照样排第一，两边不打架。
+      另注：fontconfig 的 edit mode **没有 `append_first`**（只有 assign/assign_replace/prepend/
+      prepend_first/append/append_last/delete/delete_all），写错只得到一句 warning 然后静默无效。
+    - 备份/回退：`~/.local/state/backups/.config/fontconfig/fonts.conf.bak-20260923-pingfang` 是**改前的雅黑版**
+      —— 别拿它覆盖回去（现行 fonts.conf 由菜单管，覆盖会把菜单选择抹掉）。要退回系统默认就
+      `rm ~/.config/fontconfig/conf.d/60-cjk-fallback.conf`；不要苹方/Google Sans 了再
+      `rm -rf ~/.local/share/fonts/{pingFang,GoogleSans,GoogleSansCode}`。
 
 ---
 
@@ -318,3 +341,4 @@ git apply --reverse --check niri.patch   # 必须通过
 | 选择器预热 | `touch ~/.local/state/omarchy/toggles/picker-warmup-off`（或 `systemctl --user disable --now omarchy-picker-warmup`） |
 | 插件本地魔改 | 在该插件目录 `git apply -R ~/.config/omarchy/niri-port/plugin-patches/<id>.patch` |
 | fastfetch 配置改坏 | `cp ~/.local/state/backups/.config/fastfetch/config.jsonc.bak-20260922 ~/.config/fastfetch/config.jsonc`（改前那份，`XeroArch` 简版；想回到"绿 logo"的中间版用 `…bak-20260923-greenlogo`；想回上游展示配置就直接 `cp $OMARCHY_PATH/etc/fastfetch/config.jsonc` 过来，但那条 `color: green` 会把 Arch 染绿） |
+| 字体/中文回退改坏 | `rm ~/.config/fontconfig/conf.d/60-cjk-fallback.conf`（回系统默认：中文会落到 MS Gothic、图标无回退）；`fonts.conf` 本身由菜单管，`menu → style → font` 重选一次即重建；仓库副本 `local-config/fontconfig/conf.d/` 可拷回来（见 §8 第 15 条） |

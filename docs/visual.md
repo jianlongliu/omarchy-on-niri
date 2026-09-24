@@ -303,6 +303,18 @@ GTK/Qt 应用**重启后才生效**（截图核对：Nautilus 与 bar 文字同�
 上游 `Style.qml` 的 `[bar]` 分支只认两个 size 键，补全后 `shell.toml` 写 `[bar] icon-font = 12` 即可让内置部件的
 图标+数字跟纯文本同档（本机现状，整条 bar 都是 12）。详见 §8 第 31 条。
 
+**2026-09-23 补记（fontconfig 层的规则搬家：字体别名不再写在 `fonts.conf`）**：上表那行
+「别名 → `SFMono Nerd Font` / `Noto Sans Mono CJK SC`」是当时的落点 —— 现在 `~/.config/fontconfig/fonts.conf`
+**由 omarchy 自己生成**：`omarchy-font-set`（`menu → style → font` 背后那条命令）用 `cat >` **整份重写**它，
+只留一条 monospace `prepend_first`（本机当前首选 = Google Sans Code，`omarchy-font-current` 与
+`fc-match monospace` 都指向它）。所以自定义规则搬到了 `~/.config/fontconfig/conf.d/60-cjk-fallback.conf`：
+中文回退改为 `SF Pro → PingFang SC → Noto Sans CJK SC`（替掉原先的 Microsoft YaHei），
+monospace 补回 `SFMono Nerd Font`（Nerd 图标）与 `Noto Sans Mono CJK SC`（中文等宽）。
+**实测 xdg 的 `conf.d` 在 `fonts.conf` 之后加载**，所以在那里写整条回退链不会顶掉菜单选的字体；
+另注 fontconfig 没有 `append_first` 这个 edit mode（写了只有 warning、静默无效）。
+改前警告：写进 `fonts.conf` 的中文规则会被下一次选字体抹掉（当时中文掉到 MS Gothic）。
+详见 `local-overrides.md` §8 第 15 条。
+
 ---
 
 ---
