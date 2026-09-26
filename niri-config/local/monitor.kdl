@@ -1,3 +1,32 @@
+// niri port: runtime "internal monitor off" switch -- written and removed by ~/bin/hyprctl
+// when Omarchy's monitor scripts ask for hl.monitor({ disabled = true|false })
+// (the clamshell reconcile, and the menu's Laptop Display toggle). Optional include, so
+// "output enabled" is simply "the file is absent"; the file is the state.
+//
+// It MUST stay first, ahead of the output block below: niri keeps the *first* definition
+// of a key, and a later duplicate block for an already-configured output is inert. Both
+// halves of that were measured on niri 26.04 (2026-09-24) with a second block for eDP-1:
+//   * trailing include -> `off` did nothing (`logical` unchanged);
+//   * leading include  -> it applied (`logical` went null).
+//
+// One part of that reading was wrong, re-measured 2026-09-25: the *mode list* is built from
+// the first block too, and this block carries no `modeline`, so while the overlay exists the
+// panel sits on the 3840x2400 preferred mode rather than the tuned 2560x1600 one. The old
+// note read `logical 2560x1600 at scale 1.5` as "the custom modeline below still applied",
+// but 3840/1.5 x 2400/1.5 is exactly 2560x1600 -- that *was* the 4K fallback, as the journal
+// settles it: `journalctl --user -b | grep "picking mode"` shows 18:27:46 picking
+// "3840x2400" PREFERRED and 18:29:55 picking "2560x1600@59.97" USERDEF again, once the
+// overlay was gone. The off-switch is still fine as it stands, because it is only ever in
+// place while that output is off. Do NOT extend the trick to a key that is wanted *while the
+// output is on*. Scale is the one that tempts, and it was tried: writing the Display panel's
+// SCALE row through such an overlay dropped this panel to 4K for the rest of the session.
+// The scale lives in the output block below instead, and the panel's SCALE row deliberately
+// only runs `niri msg output … scale`, i.e. runtime-only -- it is this line that persists.
+//
+// monitor.kdl itself stays byte-identical to the repo mirror (scripts/kdl-sync.sh compares
+// it); the overlay name is outside the seven *.kdl names that script walks.
+include optional=true "output-toggle-off.kdl"
+
 // Output / monitor configuration.
 // You can configure outputs by their name, which you can find
 // by running `niri msg outputs` while inside a niri instance.
@@ -7,10 +36,12 @@
 output "eDP-1" {
     // Tuned for this machine: CSO1411 panel with custom EDID DTD2 = 2560x1600@60
     // (cvt -r timing, matches vantage "均衡（默认）" preset). Do NOT add a `mode`
-    // line — niri won't rebuild custom modelines on reload and falls back to 4K.
-    // scale 2.0 = integer scale -> crisp X11 apps, bigger UI than 1.5/1.6.
-    // logical = 2560/2.0 x 1600/2.0 = 1280x800.
-    modeline 268.50 2560 2608 2640 2720 1600 1603 1609 1646 "+hsync" "-vsync"
-    scale 2.0
+    // line: naming the custom mode does not survive a reload (measured 2026-09-24)
+    // and the panel falls back to 4K.
+    // scale 1.6 = what the bar's Display panel last settled on; logical = 1600x1000.
+    // This line is the only thing that outlives the session (see the top of this file).
+    // 2.0 = an integer scale, crisper X11 apps, but 1280x800, i.e. a bigger UI than this.
+    modeline 337.50 2880 2928 2960 3040 1800 1803 1809 1852 "+hsync" "-vsync"
+    scale 1.8
     position x=0 y=0
 }

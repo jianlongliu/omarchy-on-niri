@@ -10,6 +10,8 @@
 
 ## 本卷目录
 
+- **功能覆盖账：还剩什么没实现（2026-09-24 清点）** —— 见本卷末尾同名一节（**不占全局编号**）：口径、8 → 6 条的数字、未实现/用户遗弃/环境不成立三张清单、三项待拍板
+
 
 - 3. **快捷键重映射已按用户方案落地**（2026-08-24）：tiling 改成方向键方案、移除 vim 键，
 - 24. **按键表去重 + 应用启动键统一走 Omarchy 包装器（2026-09-19/20，用户要求）**：用户原话"好多都重复"，
@@ -159,6 +161,39 @@
        `~/bin/omarchy-powerprofiles-{list,set}` 适配脚本——它们仅经 `busctl` 读写 D-Bus
        `net.hadess.PowerProfiles`（由 tlp-pd 翻译执行），**不写 `/etc/tlp.conf`、不持久化**，重启后回落到
        `/etc/tlp.conf` 静态策略。
+     - **更正（2026-09-24 实测）：真正决定档位的是壳层记忆，不是 `TLP_PROFILE_AC/BAT`。** 电源事件其实是
+       **两路并发**——TLP 核心那路（`/usr/lib/udev/rules.d/85-tlp.rules` → `tlp auto`，按 `TLP_PROFILE_AC/BAT`
+       算）和壳层那路（`plugins/services/battery/Service.qml` 的
+       `UPower.onOnBatteryChanged → applyPowerProfile()` → 经本适配脚本把**记忆档位**写进 D-Bus）。
+       实测壳层那次随后覆盖 TLP 那次 ⇒ `TLP_PROFILE_AC/BAT` 在本机**等于空转**（改 `/etc/tlp.conf` 看不到效果
+       时就是它）。记忆档位在 `~/.local/state/omarchy/powerprofiles/{ac,battery}`（纯文本 profile 名，
+       **跨重启保留**，与上面"不持久化"一句指的适配脚本自身不写 TLP 配置并不矛盾）。要改插电/电池各用哪档：
+       `omarchy-powerprofiles-set {ac,battery} <profile>`。
+     - **power-saver 联动屏幕亮度（2026-09-24 加，在适配脚本内）**：切到 power-saver 时把面板压到 10%
+       （先用 `omarchy-brightness-display` 读当前值，**仅当 >10%** 才把原值存进
+       `…/powerprofiles/brightness`）；离开 power-saver 时**只在亮度仍等于那个 10%** 才恢复原值，
+       用户手动改过则尊重用户并清档。目标百分比三级优先：
+       `$OMARCHY_POWERPROFILES_SAVER_BRIGHTNESS` → `…/powerprofiles/saver-brightness` → `10`
+       （**要长期改就写文件**：`echo 25 > ~/.local/state/omarchy/powerprofiles/saver-brightness`，
+       白天/晚上想要不同值时改这里即可，下次套档生效）；
+       走 `--no-osd`（拔插电不弹 OSD），只操作背光（`omarchy-brightness-display` 的 Apple/DDC 外接屏分支
+       不参与）。
+     - **`/etc/tlp.conf` 的改动 + "两档到底差什么"（2026-09-24 实测）**：`CPU_BOOST_ON_SAV` **0 → 1**
+       （用户要求"powersave 也带上睿频"；root 改，备份与原件同目录 `/etc/tlp.conf.bak-20260924`）。
+       A/B 验法：`tlp power-saver` 后 `no_turbo=0`；`tlp power-saver -- CPU_BOOST_ON_SAV=0` 后 `no_turbo=1`
+       ⇒ 证明旋钮真在起作用（用 in-command config 临时覆盖，**别改文件**）。切档后直读 sysfs 的结论：
+       **balanced vs power-saver 只差 2 项** —— `platform_profile` balanced→low-power、`EPP`
+       balance_power→power；**其余全同**：`no_turbo`、`max_perf_pct`（两边都 **80**，因 `CPU_MAX_PERF_ON_SAV`
+       仍被注释 ⇒ 继承 `CPU_MAX_PERF_ON_BAT=80`）、`min_perf_pct=8`、governor=powersave、hwp_dynamic_boost、
+       Wi-Fi 省电、磁盘 APM、PCI/USB runtime PM、SATA LPM、声卡 power_save。
+       **本机空转项**（改了没用，排查时先排除）：`PCIE_ASPM_ON_BAT/SAV`（TLP 写
+       `/sys/module/pcie_aspm/parameters/policy`，**内核拒写**——root 直接 echo 也 `rc=1`，active 恒为
+       `[default]`，TLP 源码自称 `set_pcie_aspm.disabled_by_kernel`）；`AMDGPU_ABM_LEVEL` /
+       `RADEON_DPM_PERF_LEVEL`（本机无 AMD GPU）。
+       ⚠ 两个坑：`tlp ac|bat` 会写 `/run/tlp/manual_mode` **盖住自动切换**（别拿它收尾验证，要干净就用
+       `tlp balanced|power-saver|performance`，它会 `clear_manual_mode`）；`/etc/tlp.d/*.conf`
+       **覆盖不了** `/etc/tlp.conf`（读序 `defaults.conf` → `tlp.d/*.conf` → `tlp.conf` 最后读、优先级最高），
+       要改就得动 `/etc/tlp.conf` 本体。
 
 ---
 
@@ -176,7 +211,7 @@
 ---
 
 23. **screensaver 关掉并屏蔽（2026-09-20，用户要求「很烦，屏蔽和禁用他」）**：本机
-    `~/.config/omarchy/shell.json` 是 `idle = {lock: 300, screensaver: 150}`，所以空闲 2.5 分钟先弹
+    `~/.config/omarchy/shell.json` 是 `idle = {lock: 300, screensaver: 150}`（**这是当时的值；现况见本节末尾那条**），所以空闲 2.5 分钟先弹
     screensaver（在终端里跑 ASCII art）、5 分钟才锁屏。处置分两层，**都走官方机制、不碰 omarchy 本体**：
     - **禁用（本体）**：官方开关 `~/.local/state/omarchy/toggles/screensaver-off`（`omarchy-toggle
       screensaver-off` 打开）。`bin/omarchy-launch-screensaver` 开头就是
@@ -189,6 +224,22 @@
       不屏蔽就等于开关形同虚设。备份 `~/.local/state/backups/.config/omarchy/extensions/omarchy-menu.jsonc.bak-20260920-prescreensaver`。
     - **别去动 `idle.screensaver`**：计时是 `min(screensaver, lock)` + 差值的两段式，把它调成等于 `lock`
       会让 screensaver 在锁屏那一刻抢跑（`screensaverDelay = 0`），比现在更糟。停掉的功能不需要改超时。
+    - **（2026-09-24 补）这条闲置腿现在的职责 = 不插电时的「到点锁屏」，顺带记三条现况**：
+      ① `idle.lock` 现在是 **1800**（不是上面写的 300）；② `idle.screensaver` 当天从 150 改成 **300**
+      （改动前备份 `~/.local/state/backups/.config/omarchy/shell.json.bak-20260924-idle300`；本机
+      `~/.config/omarchy/shell.json` 与仓库 `local-config/omarchy/shell.json` 两份同步改、逐字节一致）；
+      ③ 屏保被禁用 ⇒ 300 秒到 1800 秒之间原本屏幕一直亮着，而 10% 亮度下那块面板仍占 ~2 W 量级。
+      **用户规格**（第一版"150 秒自己灭屏"被他否掉：「不好吧？我就想了一会屏幕就灭了」）：**不插电 + 非全屏 +
+      没在播放视频** ⇒ 闲置到点**先锁屏**，灭屏交给锁本身（`jianlongliu.split-lock` 的 `idleBlankTimer`，5 秒）；
+      **插电** ⇒ 这条腿完全不干预，交回 `idle.lock`（30 分钟）。实现 = 垫片
+      `port-bin/omarchy-launch-screensaver`（`install -m 0755` → `~/bin`，`bash -lc` 下 PATH-first 命中）：
+      非 `force` 时不再跑 ASCII 屏保，而是「已锁屏→退；插电→退；全屏（窗口尺寸 == 输出逻辑尺寸）→退；
+      否则 `exec omarchy-system-lock`」。`force` 仍转发上游那份；播放视频由
+      `IdleMonitor { respectInhibitors: true }` 兜住（压根不进空闲）。
+      **唯一的计时值改动就是 `screensaver=300`**（与 `lock` 不等 ⇒ 不触发上面那个"抢跑"坑）。
+      回退：`rm ~/bin/omarchy-launch-screensaver`（回落上游 = 回到"什么都不做"）。
+      四分支 2026-09-24 用一个 `/tmp` 副本（stub 掉 `omarchy-system-lock` 与 `omarchy-shell`）实测过：
+      电池+非全屏→锁、插电→不锁、已锁→不锁、全屏→不锁（`window_size` `1280x800` 命中输出逻辑尺寸）。
     - 回退：`omarchy-toggle screensaver-off off` + 还原上面那个备份。触发点已全局扫过：没有 systemd 单元、
       没有 niri 绑定（`Indicators` 里的 StayAwake 是手动「别睡」开关，与此无关）。
     - 同一次还修掉这份 override 文件里 **5 处超长 `\u` 转义**（2 处历史遗留 + 3 处新增），规则见 §8.6
@@ -521,7 +572,30 @@ Omarchy 有两层配置，只有层1在 niri 上真正生效：
 
 20. **换主题时 `omarchy-theme-set-browser-policy` 因 sudo 要密码失败**（日志成片
     "a password is required"）→ Chromium 系主题色不跟着变；`materal-recolor` 也因此在 2026-09-19
-    02:01 失败过一次。下次查上游是否预期 polkit/sudoers 放行，或我们这层该跳过这一步。
+    02:01 失败过一次。**根因（2026-09-24 查清）：两半都缺** ——
+    ① 脚本 `require_root` 最终 `exec sudo|pkexec /usr/bin/omarchy-theme-set-browser-policy`，
+    而本机**根本没有 `/usr/bin/omarchy-*`**（`/usr/bin` 里 omarchy 条目数 = 0）⇒ 路径不存在，怎么提权都失败；
+    ② `/etc/sudoers.d/omarchy-theme-browser`（上游那条 NOPASSWD 规则）本机**没装**，
+    而本机没有 polkit agent UI ⇒ 退到 `pkexec` 也没法弹认证框。
+    **修法（2026-09-24 已落地，两条 root 动作）**：
+    - `install -m 0755 -o root -g root $OMARCHY_PATH/bin/omarchy-theme-set-browser-policy /usr/bin/omarchy-theme-set-browser-policy`
+      —— **root 属主的副本，不是指回用户可写树的软链**：规则放行的那个路径一旦能被普通用户改写，
+      就等于给了无密码 root（上游脚本自己的注释也在防这件事，其 dev-link 场景靠 `PATH` 固定兜）。
+    - `install -m 0440 -o root -g root $OMARCHY_PATH/etc/sudoers.d/omarchy-theme-browser /etc/sudoers.d/omarchy-theme-browser`
+      —— 规则逐字照抄上游（`%wheel … NOPASSWD: <该路径> [0-9a-f]×6`），装前 `visudo -cf` 验过 parsed OK。
+    **验证**：`sudo -n -l -l /usr/bin/omarchy-theme-set-browser-policy aabbcc` 出
+    `Options: !authenticate` + `Matched: …`；以**普通用户**跑 `omarchy-theme-set-browser-policy 7aa2f7`，
+    经 sudo 落地的 `color.json` 内容 `{"BrowserThemeColor": "#7aa2f7", "BrowserColorScheme": "device"}`、
+    属主 root、模式 0644；`omarchy-theme-set-browser` 整体 rc=0。
+    **验证局限**：本机**没装任何 Chromium 系浏览器**（chromium / chrome / edge / brave 全无）
+    ⇒ 四个策略目录都不存在，脚本按设计**不创建**它们（"creating one here would hand a browser a
+    managed-policy root it does not otherwise have"）。所以端到端只验到"提权链 + 写入落盘"：
+    上面那次写入是靠临时 `install -d /etc/chromium/policies/managed` 造出真目录做的，**验完已 `rm -rf`**
+    （`/etc/chromium` 一并删回原样）。真浏览器装好后，色值才会被读走 —— 那时才谈得上"看得见的变色"。
+    **维护**：`/usr/bin` 那份是副本，`omarchy update` **不会**刷新它；上游改了那个脚本，
+    要重跑上面第一条 `install`（其余无需改动）。
+    另注（同次发现，**未动**）：`/etc/sudoers.d/fprint-timer` 权限不是 0440（`visudo -c` 因此 rc=1 报
+    "bad permissions, should be mode 0440"），sudo 会因此**忽略整份文件** —— 与本次无关，别顺手改。
 
 ---
 
@@ -641,3 +715,56 @@ Omarchy 有两层配置，只有层1在 niri 上真正生效：
     - **顺带修正 §5.5 的旧结论**：那儿写的「因本机不用 tmux/herdr，不再绑定」只对**键位面板**成立
       （`Super+Alt+K` Tmux keybindings、`Super+Ctrl+K` Herdr keybindings 确实没绑，`Mod+K` 已让给
       `omarchy-menu-keybindings`），**herdr 本身是在用的**，现在也直接从键位进。
+
+---
+
+## 功能覆盖账：还剩什么没实现（2026-09-24 清点）
+
+> **本节不占全局编号**（`§8 第 N 条` 那个号段），只是把"移植到什么程度、还差什么"记在仓库里，
+> 免得只活在对话里。口径是**估算**，不是上游给的现成数字。
+
+**怎么算的**：菜单树共 **346 条**（`scripts/menu-model-render.js` 渲染 `MenuModel.js` 的口径），
+10 个菜单组（Learn / Trigger / Style / Setup / Install / Remove / Update / About / System / Capture）
+与 **15 个**插件目录**没有一个整块缺席**；被 niri 缺口挡住或降级的条目 **8 → 6**（本轮关掉窗口缝隙、
+浏览器策略两项）**→ 5**（同日再修掉内屏开关那条假成功）⇒ **菜单口径 ≈ 98.6%**；
+**功能口径 ≈ 96–97%**（clamshell 的显示半边同日补齐 —— 它不是菜单项，只影响这个口径；
+剩下扣分的是"能用但语义打折"的那些，如 `hl.device` 只能按设备**类型**关、单窗口方形比例只能是"定宽"）。
+
+### A. 还没实现（用户没遗弃，按可行性排）
+
+| 项 | 现状 | 差什么 |
+|---|---|---|
+| 弹窗让位浮栏（toast/面板被浮动 bar 压住 `floatGap` 8） | **随时可做**，答案已查清 | 两处上游文件要改（`shell/plugins/notifications/Service.qml` 的 `barClearance`、`shell/Ui/KeyboardPanel.qml` 的 `gap`）。**做不了垫片**（`readonly` 计算值，外部无从覆盖）⇒ 正解是进 `niri.patch`（+2 hunk、限路径重导）。按插件 README 用 root 手改会在 `omarchy update` 后静默丢掉 |
+| clamshell 的"不挂起"那半（合盖 + 外屏 ⇒ 继续用外屏） | 显示半边已做（2026-09-24，见 D 表）；这一半**没动** | `/etc/systemd/logind.conf.d/lid-suspend.conf`（装机写入）是 `HandleLidSwitchDocked=suspend`，"插着外屏"也算 docked ⇒ 合盖+外屏照样挂起。要改成 `ignore` 才谈得上"合盖不挂起" —— **root 改动，等用户拍板**（备份 + 回退命令见 `docs/shims.md` §4 的 clamshell 小节） |
+| 单窗口方形比例（上游 Hyprland `single_window_aspect_ratio = 1,1`） | 没有 | niri **没有 aspect 约束**；最近的是列宽（`default-column-width` / window-rule 定宽），效果是"定宽"而非"正方"。要做先定口径：要正方，还是只要"别太宽" |
+| 色温（手动，低优先） | 没有 | `wlsunset` **已在 `/usr/bin`**（唯一现成的 niri 可用件）但全树无引用；`gammastep`/`hyprsunset` 未装（后者是 Hyprland 专有）。**与"夜灯"歧义未清**（见 B 表末注） |
+| 内屏开关（`omarchy-hyprland-monitor-internal off`） | ~~假成功~~ → **2026-09-24 已修**（见 D 表） | — |
+
+### B. 用户主动遗弃（别再提议）
+
+- **镜像输出**：`niri msg output` 只有 `off/on/mode/scale/transform/position/vrr`，**没有 mirror** ⇒ 补不了。
+- **夜灯（日落自动那套）**：`omarchy-toggle-nightlight` / `omarchy-refresh-hyprsunset` /
+  `omarchy-restart-hyprsunset` 都在，但走的是 hyprsunset（Hyprland 专有），本机也没装。
+- 更早的遗弃项另见 `docs/shims.md` §4 末尾（workspace-layout / window-transparency「不需要，别补」）。
+- ⚠ **歧义**：「夜灯遗弃」与「色温做低优先垫片」在同一台机器上是**同一个功能面**。
+  目前的记法是"**日落自动夜灯不做，纯手动色温以后再说**"；若用户的意思是"色温整个不要"，把 A 表最后一行划掉。
+
+### C. 环境不成立（用户明确**不算**移植缺口）
+
+`style.unlock`（本机无 LUKS）、`install.webapp` / `install.preinstalls`（没装 chromium）、
+`update.channel`（没配 Omarchy 仓库）、`update.password.drive`（无 LUKS 加密盘）。
+这 5 条都在用户 override 里 `when:"false"` 隐藏，属"机器没有这个能力"，不是移植欠账。
+
+### D. 本轮关掉的项（2026-09-24）
+
+- **窗口缝隙开关**：已实现并端到端验过 —— 规格、坑（壳层 watch 只在启动时 `…/toggles/hypr/` 已存在才挂得上，
+  `install.sh` 已补 `mkdir -p`）与截图为证见 `docs/shims.md` §4。
+- **浏览器主题策略**：已修（root 属主副本 `/usr/bin/omarchy-theme-set-browser-policy` + 上游那条
+  NOPASSWD 规则），根因与验证局限见 §8 第 20 条与 `docs/local-overrides.md` §5。
+- **内屏开关 + clamshell 的显示半边**（同一条链子，2026-09-24）：`_eval_monitor()` 补上 `disabled`
+  （写/删 `output-toggle-off.kdl` 覆盖文件，`niri validate` + 读回核对），`cmd_monitors` 的
+  `disabled`/`active` 改成真实值；新增 `omarchy-hyprland-monitor-watch` 垫片 + 常驻用户单元
+  `omarchy-clamshell-watch.service`（niri 没有外屏事件源、也没有 `switch:Lid Switch` 绑定 ⇒ 轮询
+  盖子状态，只在**盖子合上**时才查一次 `niri msg outputs`）。规格、实测（真屏关了再开、模式没掉回 4K）、
+  **没验到的分支**（本机无外屏、没合过盖）与 include 顺序规则见 `docs/shims.md` §4 的「内屏开关 / clamshell」小节。
+

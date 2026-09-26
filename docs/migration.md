@@ -33,7 +33,8 @@
 - **greeter 就是登录界面**：`/etc/greetd/config.toml`（主账户 0600）指向 dms-greeter；卸掉它 = 没有登录界面，只能 TTY 救。备选：已装 `greetd-agreety`（控制台），`greetd-tuigreet` / `greetd-gtkgreet` / `greetd-regreet` 在 extra 里。**本轮不动 greeter**——它与"壳层用哪套"无关，卸它零收益、风险最大。
 - **主账户不在 `video` 组**（`video:x:983:greeter,<dev-user>`）→ 背光写不进去、亮度条失效 → 迁移前 `sudo usermod -aG video "$USER"`。
 - 本机**没有** `hyprland` / `hyprlock` / `uwsm`，也没有 `/usr/bin/hyprctl` → 移植那个 PATH-first 的 `~/bin/hyprctl` 垫片在主账户**不会顶掉任何真东西**；DMS 也不调 `hyprctl`（grep 无命中）。
-- **显示分工**（用户定）：分辨率固定 `2560x1600@60`——modeline 写死在 niri 的 `output` 块，唯一来源，不需要开机跑工具；**scale 归 Omarchy bar 的 Monitor 面板**（`niri msg output` 是临时的，所以 output 块里留一个默认值当开机值）。bar 的 Monitor 面板**改不了分辨率**：它发的 `mode` 被垫片故意忽略（见 §5.7 与 §8.8 相关条目）。`vantage`（用户自写的 TUI，`/usr/local/bin`，系统级、无状态、niri 原生）与本迁移无耦合；它的预设自带 scale 1.5，使用时会临时覆盖 bar 设的值。
+- **显示分工**（用户定）：**分辨率/缩放的唯一来源 = niri 的 `output` 块**（`monitor.kdl` 里写死 modeline，不需要开机跑工具；`niri msg output` 是临时的，所以块里留一个默认值当开机值）。档位一共**五档**（4K 原生 / 3200×2000 / 2880×1800 / 2560×1600 / 1920×1200），正本表见 `local-overrides.md` §4「显示档位」；**开机值 = 面板最后切的那档**（2026-09-26 收工 = `2880×1800@1.8`，
+随时看 `omarchy-niri-monitor-modes status`），选型上的主力档是 3200×2000@2.0。**scale 与分辨率都归 Omarchy bar 的 Monitor 面板**：SCALE 行调 scale；**RESOLUTION 行（2026-09-26 新增的 notch 滑块，形状照 TEXT SIZE）改分辨率，点一档就同时落盘 ⇒ 切到哪档、下次开机就是哪档**（后端垫片 `omarchy-niri-monitor-modes`，语义见 `local-overrides.md` §4）。垫片仍**故意忽略**面板发的 `mode`（见 §5.7 与 §8.8 相关条目）—— 分辨率靠 modeline 注入，不走 `mode`。`vantage`（用户自写的 TUI，`/usr/local/bin`，系统级、无状态、niri 原生）与本迁移无耦合；它的三档预设（原生 4K/2.25、均衡 2560×1600/1.5、省电 1920×1200/1.25）自带 scale，使用时会临时覆盖 bar 设的值 —— **2026-09-25 起被 `src/tools/res.rs:51` 的 `DISPLAY_LOCKED = true` 屏蔽**。
 
 ### 11.2 交付通道（必须先解决）
 
@@ -231,7 +232,7 @@ omarchy plugin list | grep lock     # 应只有 jianlongliu.split-lock enabled
 - `Mod+Ctrl+L` 锁屏 → 输密码能解开（插件设计 = `design: "split"`）。
 - bar：floating-bar 浮栏在位；左 `jianlongliu.arch-logo` + `jianlongliu.workspaces`；右 `ronald.input-sources` 徽章；Monitor 面板能改缩放。
 - 主题取色（`materal-recolor`）、壁纸、字体 12px、fcitx5 输入源（单源会自动隐藏）。
-- 显示：固定 2560x1600@60（分辨率用 `vantage`，缩放走 bar 的 Monitor 面板）。
+- 显示：分辨率五档可切（正本见 `local-overrides.md` §4「显示档位」），**开机值 = 面板最后切的那档**（2026-09-26 收工 = 2880×1800@1.8）；面板 RESOLUTION 滑块 = 立即应用 + 写 `monitor.kdl`，只想临时切的走 `omarchy-niri-monitor-modes set-runtime`。
 - `niri msg action do-screen-transition` 之类基础 IPC、以及 `Super+Alt+L`（swaylock）/`Mod+Ctrl+L`（omarchy 锁）两条路都不冲突。
 
 **7. 回滚**：`snapper` undo（第 0 步）+ 配置文件级回退见 §11.9；greetd 有 `config.toml.omarchy-greeter-backup` 备份。

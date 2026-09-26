@@ -36,6 +36,7 @@
 | 账户迁移 | `docs/migration.md` | 实验账户 → 主账户的完整方案与执行清单（原 §11） |
 | 锁屏 / 登录 | `docs/lock.md` | 锁面、greeter、人脸、greetd wedge |
 | 本机改动总账 | `docs/local-overrides.md` | 这台机器相对仓库**多出/改过**的一切与回退方式 |
+| 待办 | `docs/todo.md` | 还没做 / 等拍板的事（**不占全局编号**，做完即删行；已完成的不在这里留档）|
 
 文档只有一份，就在仓库里（上表第三列），没有第二处副本；`~/Documents` 下曾有的那九个软链
 （2026-09-20 文档归一的产物）与守它们的 `scripts/check-doc-links.sh` 于 2026-09-21 一并删掉。
@@ -117,8 +118,11 @@ hyprctl 调用面有界、可直接映射。
 | `~/bin/omarchy-display-text-size` (+x) | bar 的 Display 面板 TEXT SIZE 滑块垫片：官方脚本只管 shell `[font]`/GTK factor/终端 pt，这个补 GTK dconf+settings.ini、Qt(qt6ct)、fcitx5、XSETTINGS 各层（§8.19）。仓库 `port-bin/omarchy-display-text-size` |
 | `~/.config/omarchy/hooks/theme-set.d/10-niri-border` | 换 style 时自动 `omarchy-niri-apply-theme`（只写不重载，保护 SCALE）|
 | `~/.config/omarchy/hooks/post-update.d/10-niri-repatch` | `omarchy update` 后自动重放覆盖层 |
-| `~/.config/omarchy/niri-port/`（`niri.patch` + `Niri.qml` + `plugins/` + `plugin-patches/`）| 移植覆盖层产物（仓库外，重放用）。**当前：`niri.patch` 22 文件 / 48 hunk**，`--reverse --check` 通过、repatch 幂等，md5 `ef920a66ece784dfc207c7c87c479f5b`（2026-09-23 重导出核，与仓库 `niri-port/niri.patch` 一致：本次新增菜单 `style.avatar.*` 三行，见 `docs/lock.md` §11.29）；上一版重导出是把活体先改、补丁没跟上的两处（`Background.qml` 的 `paintedOnce`、`shell.qml` 的 `pushBootReveal()` 增补）补进补丁 —— 补上之前 repatch 判 exit 2。**`backups/` 已不在这里**（2026-09-21 全部备份搬进 `~/.local/state/backups/`，见 `local-overrides.md` §0.1），安全网是断的；本机在用的浮动 bar 的改动在 `niri-port/plugin-patches/charlieras262.floating-bar.patch`（无自动重放器）|
+| `~/.config/omarchy/niri-port/`（`niri.patch` + `Niri.qml` + `plugins/` + `plugin-patches/`）| 移植覆盖层产物（仓库外，重放用）。**当前：`niri.patch` 23 文件 / 62 hunk**，`--reverse --check` 通过、repatch 幂等，md5 `4ec279cf7f4e6a3294fd36518c43ff6d`（2026-09-26 重导出核，与仓库 `niri-port/niri.patch` 逐字节一致：本次新增 `shell/plugins/panels/monitor/Panel.qml` 的**分辨率滑块**；上一版 `ef920a66…` = 2026-09-23 加菜单 `style.avatar.*` 三行，见 `docs/lock.md` §11.29）；上一版重导出是把活体先改、补丁没跟上的两处（`Background.qml` 的 `paintedOnce`、`shell.qml` 的 `pushBootReveal()` 增补）补进补丁 —— 补上之前 repatch 判 exit 2。**`backups/` 已不在这里**（2026-09-21 全部备份搬进 `~/.local/state/backups/`，见 `local-overrides.md` §0.1），安全网是断的；本机在用的浮动 bar 的改动在 `niri-port/plugin-patches/charlieras262.floating-bar.patch`（无自动重放器）|
 | `~/bin/omarchy-sleep-lock-start` (+x) | **合盖/挂起锁屏的启动包装器**（上游 `omarchy-sleep-lock.service` 在本机两条 `ConditionEnvironment=` 都过不去，改由它拉起）：有界等（30s 封顶）会话把环境发布进用户管理器 → 采纳 `WAYLAND_DISPLAY`/`XDG_RUNTIME_DIR`/`XDG_SESSION_TYPE`/`NIRI_SOCKET`/`XDG_CURRENT_DESKTOP`/`DBUS_SESSION_BUS_ADDRESS` → `exec` 上游 `omarchy-system-sleep-monitor`；单元见 `local-config/systemd/user/omarchy-sleep-lock.service`，全过程见 `lock.md` §11.28 |
+| `~/bin/omarchy-hyprland-window-gaps-toggle` (+x) | **窗口缝隙开关垫片**（2026-09-24）：上游靠 `default/hypr/toggles/window-no-gaps.lua` 把 gaps/border/rounding 归零；niri 侧改成写/删 `~/.config/niri/layout-no-gaps.kdl`（`layout.kdl` 尾部 `include optional=true` 读它，include 是位置性的 ⇒ 只覆盖它点名的属性），并按上游语义写同一个 flag 文件；`~/bin/hyprctl` 的 `getoption` 在 flag 在时对 `general:gaps_out`/`decoration:rounding` 返回 0 ⇒ **壳层跟着塌**（`Style.gapsOut`/`cornerRadius`）。规格、坑与实测见 `docs/shims.md` §4；仓库副本 `port-bin/omarchy-hyprland-window-gaps-toggle` |
+| `~/bin/omarchy-launch-screensaver` (+x) | **闲置策略垫片**（2026-09-24）：上游这份在终端跑 ASCII 屏保（早被 `screensaver-off` flag 停用），本机改成「**不插电 + 非全屏 + 非播放视频**才 `omarchy-system-lock`，灭屏交给锁自己（5 秒）；插电/全屏/已锁一概不动」，触发点 = `shell.json` 的 `idle.screensaver`（那天 150 → 300）。规格与四分支实测见 `docs/behavior.md` 的 §8 第 23 条；仓库副本 `port-bin/omarchy-launch-screensaver`，PATH-first（改动必须 `install -m 0755` 同步两份） |
+| `~/bin/omarchy-hyprland-monitor-watch` (+x) + `~/.config/systemd/user/omarchy-clamshell-watch.service` | **clamshell 触发器垫片 + 常驻单元**（2026-09-24）：上游那个 watcher 读 Hyprland 的 `.socket2.sock`、盖子靠 `switch:*:Lid Switch` 绑定 —— 两者与 niri 都无交集，且拉起它的 `default/hypr/autostart.lua` 在本移植里整体 no-op ⇒ 必须自带单元。垫片每 2 s 读 `/proc/acpi/button/lid/*/state`，**只在盖子合上时**才查 `niri msg outputs`（开盖零 IPC），状态变了才调上游 `omarchy-hyprland-monitor-clamshell`（逻辑不重写）；`toggles/clamshell-watch-off` 即关。配套：`~/bin/hyprctl` 的 `hl.monitor({ disabled })` 与 `monitors` 的 `disabled/active`（见 §8 覆盖账 D 表）。规格、include 顺序规则、真屏实测与**没验到的分支**见 `docs/shims.md` §4；仓库副本 `port-bin/omarchy-hyprland-monitor-watch` + `default/systemd/user/omarchy-clamshell-watch.service`
 | `~/.ante/projects/-home-<user>/memory/`（`omarchy-niri-migration.md` 等） | 项目记忆（旧实验账户侧那份已废弃） |
 
 ### 3.2 修改
@@ -376,8 +380,8 @@ niri 上这个颜色由 `focus-ring` 块决定（模块化拆分后位于 `~/.co
 |---|---|
 | `config.kdl` | 编排器：`environment` / `spawn` / `animations` / `screenshot-path` + 6 个 `include` |
 | `input.kdl` | 输入设备（键盘 / 触摸板 / 鼠标 / trackpoint） |
-| `monitor.kdl` | `output "eDP-1"`：分辨率 / modeline / scale |
-| `layout.kdl` | gaps / focus-ring / border / shadow / struts；`focus-ring` 与 `border` 里的 `active-color` / `active-gradient`（以及 `border` 的 on/off）是**脚本生成值**（首次运行 `omarchy-niri-apply-theme` 自动插入，§5.6） |
+| `monitor.kdl` | `output "eDP-1"`：分辨率 / modeline / scale。**首行另有一行 `include optional=true "output-toggle-off.kdl"`**（内屏开关 / clamshell 的覆盖文件落点，见 `docs/shims.md` §4）。位置**必须**在最前：niri 同名键取第一次定义，放后面整块被忽略（同日晚实测）|
+| `layout.kdl` | gaps / focus-ring / border / shadow / struts；`focus-ring` 与 `border` 里的 `active-color` / `active-gradient`（以及 `border` 的 on/off）是**脚本生成值**（首次运行 `omarchy-niri-apply-theme` 自动插入，§5.6）。**尾部另有一行 `include optional=true "layout-no-gaps.kdl"`**（窗口缝隙开关的覆盖文件落点，见 §3.1 的 `~/bin/omarchy-hyprland-window-gaps-toggle`）。⚠ **该位置待改**：按 2026-09-24 实测的顺序规则（niri 同名键取第一次定义），覆盖文件放在 `layout {` 块之后很可能整块被忽略 —— 见 `docs/shims.md` §4 那条「更正」 |
 | `window-rules.kdl` | 逐应用规则 + 全局圆角 |
 | `effects.kdl` | 磨砂 blur 参数 + layer-rule（§8.8，2026-08-26 磨砂时追加，注意它也被 include）|
 | `binds.kdl` | 全部按键绑定（须包在 `binds { }` 内） |
@@ -387,24 +391,34 @@ niri 上这个颜色由 `focus-ring` 块决定（模块化拆分后位于 `~/.co
 模块文件不会触发重载（niri 只监听 `config.kdl` 的 mtime），需 touch/改一下 `config.kdl`
 或显式 `load-config-file`。
 
-**显示器（monitor.kdl）** — 本机 eDP-1 是 CSO1411 面板，自定义 EDID 把
-`2560x1600@60`（cvt -r 时序 268.5MHz）写进基础块 DTD2。调校值：
+**显示器（monitor.kdl）** — 本机 eDP-1 是 CSO1411 面板（CSOT 14" 3840×2400），自定义 EDID 覆盖件
+（`drm.edid_firmware` + initramfs `FILES=`）给基础块加了 `2560x1600@60`（cvt -r 时序 268.5MHz）当 DTD2。
+**保留下来的分辨率档位共五档**（4K 原生 / 3200×2000 / 2880×1800 / 2560×1600 / 1920×1200，各带 modeline、
+scale、逻辑分辨率与实测 GPU 数据）——**正本在 `local-overrides.md` §4 的「显示档位」那条**，
+这里只记一次快照（**持久值 = 最后切的那档**，不是固定的 —— 随时 `omarchy-niri-monitor-modes status` 看 `boot` 行；
+下面是 2026-09-26 收工时的状态）：
 
 ```kdl
 output "eDP-1" {
-    modeline 268.50 2560 2608 2640 2720 1600 1603 1609 1646 "+hsync" "-vsync"
-    scale 2.0
+    modeline 337.50 2880 2928 2960 3040 1800 1803 1809 1852 "+hsync" "-vsync"
+    scale 1.8
     position x=0 y=0
 }
 ```
 
+- **怎么改**：bar → Display 面板的 **RESOLUTION 滑块**（2026-09-26 上线，与同行 SCALE 一样是即时生效的控件，
+  但它是 notch 滑块；点一档 = 注入 modeline + 该档自带的 scale **并且写进 `monitor.kdl`**，所以"切到哪档、
+  下次开机就是哪档"）。后端是垫片 `omarchy-niri-monitor-modes`（`~/bin`，正本 `port-bin/`；`set` / `set-runtime` /
+  `set-boot --dry-run` / `status|list|current|boot`），面板另开 IPC `omarchy-shell omarchy.monitor resolution <tier>`。
 - **只写 `modeline`，绝不写 `mode` 行**：niri 重载时不会重建自定义时序，写了 `mode` 名会
-  fallback 回 4K 并报 `GL_INVALID_VALUE`，也更耗电。
-- `scale 2.0` 是整数缩放 → X11 应用锐利，且比 1.5/1.6 更大更舒适；逻辑分辨率
-  = 2560/2 × 1600/2 = 1280×800。
+  fallback 回 4K 并报 `GL_INVALID_VALUE`，也更耗电。（垫片 `persist_tier` 也遵守这条。）
+- `scale` 决定逻辑分辨率；本机五档里有四档落在 **1600×1000** 那张桌面（4K@2.4 也是 1600×1000 —— 2.25 于
+  2026-09-26 改掉，为的是五档同桌面 + 面板 SCALE 行能对上；1920×1200 档是 1536×960）。**主力档 = 3200×2000@2.0**（放大只 1.2×、
+  整数 scale、iGPU 留约 20% 余量）；**2026-09-26 起面板点一下就能落盘**（当时收工值 = 2880×1800@1.8）。
 - 参考邻居主账户的 `~/Projects/vantage/README.md`（pkexec 可读；2026-09-21 项目统一收进 `~/Projects/`）：vantage `res`
-  三档为 **原生 4K/2.25、均衡 2560×1600/1.5、省电 1920×1200/1.25**。本机最终用
-  「均衡模式 + scale 2.0」。
+  三档为 **原生 4K/2.25、均衡 2560×1600/1.5、省电 1920×1200/1.25**（口径**尚未**跟上上面五档），
+  且自 2026-09-25 起被 `src/tools/res.rs:51` 的 `DISPLAY_LOCKED = true` 屏蔽（切换会覆盖手调值）。
+  分辨率/缩放的持久化一律走 `monitor.kdl`（`niri msg output` 是临时的）。
 
 **字体（12px ≡ 9pt，2026-09-20 全桌面对齐，见 §8.19）**
 
@@ -603,6 +617,7 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
 | `§8 第 34 条` | AUR 助手 `yay` → paru 垫片 | `docs/shims.md` |
 | `§8 第 35 条` | Herdr 键位必须经终端启动（裸 `herdr` 在 niri 下没有 tty） | `docs/behavior.md` |
 | `§8 第 36 条` | About 窗口（fastfetch TUI）的磨砂与尺寸 | `docs/visual.md`（2026-09-24 从 34 让号，见该条末尾） |
+| `§8 第 37 条` | 浮动工具窗"太黑"：alpha 没用、旋钮是底色 | `docs/visual.md`（**还没定稿**，三个选项在 `docs/todo.md` 等拍板表） |
 | `§8.6` | A 层 | `docs/behavior.md` |
 | `§8.7` | 更新覆盖层 | `docs/upstream.md` |
 | `§8.8` | 视觉磨砂 | `docs/visual.md` |
@@ -671,7 +686,7 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
 - [ ] 运行实测：注销、关机、重启（会结束会话/重启，交给用户）。
 - [x] **overview 背景统一**：`shell/plugins/blurwallpaper/`，图层**常驻映射**、由 niri 只在 overview 内合成（见 §3.1、§6、§8.16）。
 - [x] **菜单 override label+icon 修复（2026-08-27）**：`extensions/omarchy-menu.jsonc` 的 3 个 setup 项补全 label+icon，合并后显示 "Monitors"/"Keybindings"/"Input" 且图标正常（不再显示 raw id `setup.monitors` 之类）；根因是 `normalizeItem` 的 `label: value.label || id` 把 action-only override 的 label 退化成 id 并覆盖默认项。
-- [x] **screensaver 禁用 + 屏蔽（2026-09-20，用户要求）**：官方 flag `~/.local/state/omarchy/toggles/screensaver-off`（`omarchy-launch-screensaver` 实测 exit 1、无窗口）+ 用户 override 6 条 `when:"false"` 盖住仅有的 `force` 入口；`idle.screensaver`（150s）超时值**未动**。同时修掉该文件 5 处超长 `\u` 转义（§8 第 23 条）。
+- [x] **screensaver 禁用 + 屏蔽（2026-09-20，用户要求）**：官方 flag `~/.local/state/omarchy/toggles/screensaver-off`（`omarchy-launch-screensaver` 实测 exit 1、无窗口）+ 用户 override 6 条 `when:"false"` 盖住仅有的 `force` 入口；`idle.screensaver`（150s）超时值**当时未动** —— **2026-09-24 已改**：150 → 300，且这条腿被垫片接管成「不插电到点锁屏、锁后灭屏」（插电/全屏不干预），规格与实测见 `docs/behavior.md` 的 §8 第 23 条。同时修掉该文件 5 处超长 `\u` 转义（§8 第 23 条）。
 - [x] **按键去重 + 应用启动键（2026-09-19/20）**：`niri validate` 通过、生效行无重复键；`Mod+Return` / `Mod+Y` / `Ctrl+Shift+Esc`（终端类）、`Mod+E`（nautilus）、`Mod+Z`（浏览器）实测均开出窗口；过程中顶出并修掉垫片 v1.0 的 `setsid` 坑（§8 第 22、24 条）。
 - [x] **用户已肉眼确认（2026-09-21）：菜单 System 里 Screensaver 已看不见**（`when:"false"` 的效果只能看渲染；文件本身早先已按 `stripJsonc` + `JSON.parse` 校验通过）。
 - [x] **视觉磨砂（frosted Quickshell）**：`Menu.qml` + `KeyboardPanel.qml` 挂 `BackgroundEffect.blurRegion`（只磨砂卡片，不全屏）；`effects.kdl` 给 `omarchy-keyboard-panel` 设 `xray false`（实时窗口毛玻璃）；`[popups]` alpha 0.8→0.65。面板开/关屏幕底部清晰度 on/off≈0.995 → 无全屏霜化。

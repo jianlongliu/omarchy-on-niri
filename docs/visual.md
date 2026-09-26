@@ -13,7 +13,8 @@
 
 - 8.8 视觉磨砂（frosted Quickshell / 状态栏面板毛玻璃）
 - 36. **About 窗口（fastfetch TUI）的磨砂与尺寸（2026-09-22，用户 "我原汁原味的blur咋没了? … 是fastfetch的blur没了" → "我看着还是没blur"）**：上游 Hyprland 的 blur 是**全局**的、float/center/920×480 在 `default/hypr/apps/system.lua`，About 窗口白拿；niri 两样都得显式写 ⇒ 补 `match app-id=r#"^org\.omarchy\.about$"#`（`open-floating` + 920×540 + 磨砂块）。误判记录：先按 logo 配色查、被用户否掉
-- 33. **交接过渡的桌面侧：加载期什么都不显示，bar 到点整块出现（boot reveal，2026-09-21；起因 "输入完密码确认后…有文字" → "能掩盖 quickshell 的启动过程吗? 那个有点丑了" → 用户否决黑幕与一切全屏遮罩 "不黑, 先放壁纸不行吗?" → 一度定稿 "bar 从上面慢慢浮下来"，最终因霜化的机制问题改成"到点整块出现"，过程见 33b ④⑤⑥）**：登录交接到桌面之间隔着一段文本 VT（根因与另外三处改动见 `docs/lock.md` §11.26）。做法：**壁纸照原样铺底、不加任何遮罩**，桌面壳层启动时把标记 `$XDG_RUNTIME_DIR/omarchy-boot-splash` 当作"这次是真登录"，据此让 bar 的 surface 先不上屏、**等壳层真正组装完**再整块出现——2026-09-21 起这个"组装完"由宿主播报：`omarchy.background` 服务里新增 `paintedOnce`（壁纸首帧解码上屏；实测冷启动 ~1.35s，是整条启动链上最晚的一件事），宿主读它并推给 bar（地板 600ms / 天花板 6000ms 兜底），**不再用固定时长**（同一台机器各次冷启动差几百毫秒，开机那次还要多 ~0.5s）（**不做滑入**：霜化是 niri 按区域自己画的，滑入会先露一块空磨砂矩形，见 33b ⑥），重启壳层不重放。**关键事实：本机在用的 bar 是第三方插件 `charlieras262.floating-bar`，不是内置 `plugins/bar/Bar.qml`**——插件只拿到受限 shell API、看不到标记，所以标记由宿主**推**过去（`shell.qml` 新增 `pushBootReveal()`，在 `configureBar` 与标记 `onLoaded` 两处调用）；推给"谁被配置成 bar"，内置/插件都适用。**落点**：`shell/shell.qml`（标记 + 推送）+ `shell/plugins/bar/Bar.qml`（内置 bar：整块 surface 停屏外再滑入）+ **`~/.config/omarchy/plugins/charlieras262.floating-bar/Bar.qml`（真正生效的那个，见 `niri-port/plugin-patches/charlieras262.floating-bar.patch`）**：浮动 bar 用 **`PanelWindow.visible` 开关**（加载期整块不上屏、到点整块出现；不再有 `barVisual` 位移），`blurRegion` 指向不动的 `barBlurAnchor`（region 跟位移对象走会丢霜化，见 33b ④）。**`niri.patch` 22 文件/48 hunk、md5 `ef920a66ece784dfc207c7c87c479f5b`（2026-09-23 重导出核：新增菜单 `style.avatar.*` 三行，见 `docs/lock.md` §11.29；上几版重导出是把活体先改、补丁没跟上的 `paintedOnce`/`pushBootReveal()` 增补补进来）；插件补丁 md5 `0d36c626a9992de5a457e3f2880bc99a`（7 hunk，2026-09-21 核）**；**加载期底部居中的 `Thinking…` 卡片（脑形 U+F09D1，插件自带的第二个 `PanelWindow`，常驻映射、藏在屏下，arming 后立刻上屏；表面是**卡片大小 + 借 `^omarchy-osd$` 那条霜化规则**，尺寸/字体/离底照 OSD 关机吐司）已实施，收卡等宿主推的"壁纸已画"而不是固定时长；plymouth 盖交接空窗仍搁置 —— 两条都见 `docs/lock.md` §11.27**；**2026-09-21 晚补：那 ~1.4s 空窗已被 `swaybg` 填掉**（niri `spawn-at-startup` 先铺同一张图、几十 ms 上屏，与插件那份逐像素一致 ⇒ 无缝），平色底色现在只剩头 ~100ms 的台阶 —— 见 `docs/local-overrides.md` §4
+- 37. **浮动工具窗"太黑"：alpha 实测没用，真正的旋钮是底色（2026-09-25，用户 "ctrl + shift + esc, super + e, super + y 这些太黑了。是不是和之前 omarchy menu 黑一个道理?"）**：`Mod+Y`/`Ctrl+Shift+Esc` 走 `--app-id=org.omarchy.float-tui`，那条规则**整条缺 `opacity`** ⇒ 一直是半透明近黑板子；已补 `opacity 0.85`（float-tui / `org.omarchy.terminal` / `org.omarchy.about`），nautilus 单独 0.72。但实测 alpha 只值 2–3/255（底下就是终端，透出来的还是黑）；主因是底色 = 主题 `background = #111318`（跟菜单卡片同一 token），换成 `lighter_background = #282a2f` 可亮 +14~17/255。ghostty 不吃 CLI 覆盖（`--background=` 不生效、`--config-file` 不存在）⇒ 提亮只能全局或加 `XDG_CONFIG_HOME` 垫片。**三选一未定，见 `docs/todo.md`**
+- 33. **交接过渡的桌面侧：加载期什么都不显示，bar 到点整块出现（boot reveal，2026-09-21；起因 "输入完密码确认后…有文字" → "能掩盖 quickshell 的启动过程吗? 那个有点丑了" → 用户否决黑幕与一切全屏遮罩 "不黑, 先放壁纸不行吗?" → 一度定稿 "bar 从上面慢慢浮下来"，最终因霜化的机制问题改成"到点整块出现"，过程见 33b ④⑤⑥）**：登录交接到桌面之间隔着一段文本 VT（根因与另外三处改动见 `docs/lock.md` §11.26）。做法：**壁纸照原样铺底、不加任何遮罩**，桌面壳层启动时把标记 `$XDG_RUNTIME_DIR/omarchy-boot-splash` 当作"这次是真登录"，据此让 bar 的 surface 先不上屏、**等壳层真正组装完**再整块出现——2026-09-21 起这个"组装完"由宿主播报：`omarchy.background` 服务里新增 `paintedOnce`（壁纸首帧解码上屏；实测冷启动 ~1.35s，是整条启动链上最晚的一件事），宿主读它并推给 bar（地板 600ms / 天花板 6000ms 兜底），**不再用固定时长**（同一台机器各次冷启动差几百毫秒，开机那次还要多 ~0.5s）（**不做滑入**：霜化是 niri 按区域自己画的，滑入会先露一块空磨砂矩形，见 33b ⑥），重启壳层不重放。**关键事实：本机在用的 bar 是第三方插件 `charlieras262.floating-bar`，不是内置 `plugins/bar/Bar.qml`**——插件只拿到受限 shell API、看不到标记，所以标记由宿主**推**过去（`shell.qml` 新增 `pushBootReveal()`，在 `configureBar` 与标记 `onLoaded` 两处调用）；推给"谁被配置成 bar"，内置/插件都适用。**落点**：`shell/shell.qml`（标记 + 推送）+ `shell/plugins/bar/Bar.qml`（内置 bar：整块 surface 停屏外再滑入）+ **`~/.config/omarchy/plugins/charlieras262.floating-bar/Bar.qml`（真正生效的那个，见 `niri-port/plugin-patches/charlieras262.floating-bar.patch`）**：浮动 bar 用 **`PanelWindow.visible` 开关**（加载期整块不上屏、到点整块出现；不再有 `barVisual` 位移），`blurRegion` 指向不动的 `barBlurAnchor`（region 跟位移对象走会丢霜化，见 33b ④）。**`niri.patch` 2026-09-26 起 23 文件/62 hunk、md5 `4ec279cf7f4e6a3294fd36518c43ff6d`（此前 `ef920a66…` = 2026-09-23 那版：新增菜单 `style.avatar.*` 三行，见 `docs/lock.md` §11.29；上几版重导出是把活体先改、补丁没跟上的 `paintedOnce`/`pushBootReveal()` 增补补进来）；插件补丁 md5 `0d36c626a9992de5a457e3f2880bc99a`（7 hunk，2026-09-21 核）**；**加载期底部居中的 `Thinking…` 卡片（脑形 U+F09D1，插件自带的第二个 `PanelWindow`，常驻映射、藏在屏下，arming 后立刻上屏；表面是**卡片大小 + 借 `^omarchy-osd$` 那条霜化规则**，尺寸/字体/离底照 OSD 关机吐司）已实施，收卡等宿主推的"壁纸已画"而不是固定时长；plymouth 盖交接空窗仍搁置 —— 两条都见 `docs/lock.md` §11.27**；**2026-09-21 晚补：那 ~1.4s 空窗已被 `swaybg` 填掉**（niri `spawn-at-startup` 先铺同一张图、几十 ms 上屏，与插件那份逐像素一致 ⇒ 无缝），平色底色现在只剩头 ~100ms 的台阶 —— 见 `docs/local-overrides.md` §4
 - 33b. **boot reveal 的三个坑（2026-09-21，全是实测）**：① **别用 QML 动画排片**——bar 停屏外时 surface 不在屏上，动画的钟照走但不出版本帧，名义 1800+1400 的 `PauseAnimation+NumberAnimation` 实测在 0.9s 内一次落位；改用**普通 Timer 做 hold + 每帧按墙钟算进度的 Timer 做滑入**（实测节拍稳定 16ms/次，`bootReveal` 逐帧平滑 0.001→0.999）。② **`anchors.fill: parent` 会接管 x/y**，包一层 `Item` 做位移时必须写 `width/height`，否则只剩淡入、位移被静默忽略。③ **bar 的可见内容要包在同一个 Item 里**再位移：只动 surface 会带着独占区一起动，屏幕上的窗口跟着上下跳。④ **`BackgroundEffect.blurRegion` 不能跟会被位移的 item**：包上 `barVisual` 之后霜化整块消失（用户："没blur"）——niri 磨的是**它拿到的那块矩形**，而 reveal 开始时 bar 停在上边之外，区域采样在屏外，frost 就跟着没了；改成指向一个**不动的替身**（`barBlurAnchor`：`anchors.fill: parent` + 同 `radius` + `color: "transparent"`，只当形状不画画），几何与静止时的 bar 相同（bar 填满 surface）。⑤ **"只有 opacity" 是缓动的锅，不是位移没生效**：surface 高只到 bar 的底边，**顶边以上全是被裁掉的**，能看见的只有"裸露高度 = barSize − offset"这一段 ⇒ **缓动决定看得见多少下降**：InOutCubic 的前一半在爬坡时 bar 还只是顶边一条，又跟淡入同速，眼睛只读到"淡"；换 **OutCubic** 并把淡入提前结束（`Math.min(1, bootReveal * 3.5)`，约 100ms 就全不透明），让下降当主角。另：offset 满值 50 逻辑像素 > bar 高 32 ⇒ 前约 14% 的位移是看不见的（等价于把 hold 稍微延长，正常）。⑥ **滑入方案最终废弃（2026-09-21）**：霜化是 **niri 按它拿到的 region 自己画的**（不看客户端画了什么、也不看 alpha），所以任何「bar 滑进来」的做法都会先露出一块**空的磨砂矩形**、再有个 bar 追下来（用户原话：「屏幕顶部有个 blur 的 bar, 然后再浮下来一个 bar」），而 region 又跟不上位移（④）⇒ 最终改成「surface 先不上屏（`PanelWindow.visible`）、到点整块出现」，两个问题一起消失；⑤ 那段缓动/淡入的调试过程留作记录。
 - 32. **吐司"一来通知整屏变糊"：全屏 surface 撞上 niri 侧 `blur true`（2026-09-20，用户 "我的吐司通知,
 - 27. **不透明 app 的磨砂：只写 `background-effect { blur true }` 是看不见的（2026-09-20，用户要求「微信加上 blur，
@@ -238,6 +239,42 @@ quickshell：`pkill -x quickshell && niri msg action spawn -- quickshell -n -p $
 
 ---
 
+37. **浮动工具窗"太黑"：alpha 实测没用，真正的旋钮是底色（2026-09-25，用户「`ctrl + shift + esc, super + e,
+    super + y` 这些太黑了。是不是和之前 omarchy menu 黑一个道理?」→ 用户「这玩意理论上不是ghostty吗?」→
+    「我晚上看看文档」）**：
+    - **答案：不是同一个道理**。第 30 条那次靠 alpha 见效，是因为菜单底下是**亮壁纸**；这三个是浮动窗，
+      底下通常就是终端本身（近黑），透出来的还是黑。
+    - **真漏项（已修）**：`Mod+Y`（yazi）/`Ctrl+Shift+Esc`（btop）走 `--app-id=org.omarchy.float-tui`，
+      而 `window-rules.kdl` 里那条规则**整条缺 `opacity`**（`com.mitchellh.ghostty` 那条有 0.85）⇒ 按第 27 条
+      「不透明窗口看不见磨砂」，这两个键的窗口一直是半透明的近黑板子。已给 `org.omarchy.float-tui` /
+      `org.omarchy.terminal` / `org.omarchy.about` 各补 `opacity 0.85`（= 和普通终端同档的等效 0.72），
+      并给 `org.gnome.Nautilus` 那条**单独定 0.72**（它本来靠"Ghostty/Nautilus 共用规则"拿 0.85）。
+      **niri 里后写的规则覆盖先写的**（同一条窗口上先 0.85、后写 0.0 / 1.0，两头都实测生效）。
+      回退：`~/.local/state/backups/.config/niri/window-rules.kdl.bak-20260925-141801-pretuiopacity`；
+      仓库副本 `niri-config/local/window-rules.kdl` 已同步（`scripts/kdl-sync.sh` 七份全 ok）。
+    - **效果只有 2–3/255**（同会话同坐标 A/B）：无 `opacity` 行（eff 0.85）`(37,39,45)` → 加 `opacity 0.85`
+      （eff 0.72）`(37,40,48)`；把 float-tui 压到 eff 0.42 / 0.26 也只到 `(38,43,55)` / `(39,45,58)`
+      ⇒ **对浮动窗口压 alpha 基本无感**（底下是终端）。判断"太黑"别拿跨会话数字比：背后窗口内容一变，读数就变。
+    - **主因是底色**：ghostty / btop / nautilus 的底色都是主题 `background = #111318` —— **跟菜单卡片同一个 token**
+      （第 30 条）。实测把主题那份 `current/theme/ghostty.conf` 的 `background` 临时换成 `lighter_background = #282a2f`
+      （bar/卡片那档）后，**同一窗口同坐标**：`(1100,750) (25,30,38)→(39,44,55)`、`(900,300) (31,30,35)→(48,47,54)`
+      （btop 自己画盒子的地方只 +3）。测完已把主题文件还原（`#111318`）。
+    - **机制限制（别再试第二遍）**：ghostty 只有**一份**配置，命令行覆盖不生效 —— `ghostty --background='#ff0000'
+      -e btop` 开出来的窗口**一点都不红**（推断：主题那行 `config-file` include 在 CLI 之后读、把 `background` 盖回去）；
+      `ghostty --config-file=…` **不是合法选项**（退出码 1、无输出）。要"只给这两个键"只能加 `XDG_CONFIG_HOME`
+      垫片把该 ghostty 实例指到另一份配置，代价是子进程（btop 等）继承同一变量、连自己的配置目录一起被换掉。
+    - **btop 侧**：`~/.config/btop/btop.conf` 是 `color_theme = "TTY"`、`~/.config/btop/themes/` 空 ⇒ 它用终端调色板、
+      整窗跟着 ghostty 底色走；主题生成的 `current/theme/btop.theme`（`main_bg = #111318`）**根本没被引用**（要不要收口另说）。
+    - **nautilus 不是 ghostty**：GTK4 + `adw-gtk3-dark`，`~/.config/gtk-4.0/` 里只有 `settings.ini`、没有 `gtk.css`
+      （上游 `default/themed/` 也没有 gtk 模板）⇒ 它的底色跟主题无关。
+    - **待拍板（三选一，见 `docs/todo.md` 等拍板表）**：① 全局提亮一档（`~/.config/ghostty/config` 的 include 之后
+      再写一行 `background`，**连 Mod+Return 的终端一起变亮**；nautilus 另配一个跟主题走的 `gtk.css`）；
+      ② 只这两个键加 `XDG_CONFIG_HOME` 垫片；③ 到此为止（只留已补的 `opacity`）。
+    - 量法（复现用）：`grim` 全屏（物理 = 逻辑 × 1.6）→ PIL 裁 24×24 逻辑像素取**中位色**。**窗外叠着别的窗口会毁掉读数**
+      —— 第一轮我把同位置叠着的 nautilus 当成"壁纸背景"，整组数全错（同会话 A/B 才能救回来）。
+
+---
+
 ### 8.19 全桌面字号 / DPI 一致性：一切向 bar 的 Display 面板看齐（2026-09-20）
 
 需求（原话「所有 APP DPI 和 Text size 都向 bar 上的 monitor 看齐」）：bar 右侧 `omarchy.monitor`
@@ -408,7 +445,9 @@ monospace 补回 `SFMono Nerd Font`（Nerd 图标）与 `Noto Sans Mono CJK SC`�
 ---
 
 29. **窗口缝隙 16 → 8（2026-09-20，用户 "窗口缝隙过大调小些"）**：`~/.config/niri/layout.kdl` 的 `gaps`（逻辑像素，
-    内缝与外缝共用一个值；这里没有单独的 `window-gaps`）。实测：窗口**上缘物理 112 → 96**（= 逻辑 56 → 48 =
+    内缝与外缝共用一个值；这里没有单独的 `window-gaps`）。**2026-09-24 起有"归零"开关了**
+    （`omarchy-hyprland-window-gaps-toggle`，菜单 `Trigger ▸ Window Gaps`；那条覆盖文件与壳层联动见
+    `docs/shims.md` §4），上面这个 8 仍是**默认值**——开关只是临时把它压到 0。实测：窗口**上缘物理 112 → 96**（= 逻辑 56 → 48 =
     32 bar + 8 floatGap + 8 gaps）、**右缘 +16 物理**、整屏 22.6% 像素重排（niri 重载配置即重排，不用重启）。
     `niri msg --json windows` 的 `tile_size` 616×728 → 628×744、`window_size` 612×724 → 624×740。
     **坑：`window_size` 是"减过窗口边框"的数**（`window_offset_in_tile [2,2]` → 每边 2 逻辑），别拿它直接套

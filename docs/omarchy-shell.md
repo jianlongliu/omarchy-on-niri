@@ -131,6 +131,10 @@ string on a miss.
 
 ## shell.json
 
+> 下面这段是**上游文档里的 schema / 默认示例**（本机不是这些值：bar 换成了
+> `charlieras262.floating-bar`，`idle` 见 2026-09-24 那次改动）。本机实况看
+> `docs/local-overrides.md` §3 与 `docs/behavior.md` 的 §8 第 23 条。
+
 ```json
 {
   "version": 1,

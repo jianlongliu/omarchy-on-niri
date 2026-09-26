@@ -61,7 +61,7 @@
 | 路径 | 内容 | 生效方式 |
 |---|---|---|
 | `shell/` | 移植后的 Omarchy Quickshell 源码（层 1） | `install.sh` 把覆盖层 `git apply` 进 `$OMARCHY_PATH`（幂等），或手工 `~/bin/omarchy-niri-repatch` |
-| `port-bin/*`（13 个） | `hyprctl`、`uwsm-app`、`materal-update`、`omarchy-update`、`omarchy-niri-system`、`omarchy-niri-apply-theme`、`omarchy-niri-repatch`、`omarchy-picker-warmup`、`omarchy-display-text-size`、`omarchy-powerprofiles-{list,set}`、`omarchy-sleep-lock-start`、`omarchy-avatar` | `install.sh` 拷进 `~/bin`（PATH-first） |
+| `port-bin/*`（14 个） | `hyprctl`、`uwsm-app`、`materal-update`、`omarchy-update`、`omarchy-niri-system`、`omarchy-niri-apply-theme`、`omarchy-niri-repatch`、`omarchy-picker-warmup`、`omarchy-display-text-size`、`omarchy-powerprofiles-{list,set}`、`omarchy-sleep-lock-start`、`omarchy-launch-screensaver`、`omarchy-avatar` | `install.sh` 拷进 `~/bin`（PATH-first） |
 | `niri-port/niri.patch` + `Niri.qml` + `plugins/blurwallpaper` | 覆盖层，挺过 `omarchy update` | `~/bin/omarchy-niri-repatch`（幂等） |
 | `niri-port/plugin-patches/` | 4 个第三方插件的本地魔改补丁（+ README 说明怎么生成/怎么重放） | 手工 `git apply`（无自动重放器） |
 | `scripts/kdl-sync.sh`、`scripts/local-files-sync.sh` | 机器 ↔ 仓库的对账：前者比 `niri-config/local/*.kdl`（家目录占位符），后者比 `local-config/` + `plugins/` + `split-lock/ir-light`（逐字节） | 各自直接跑；不在本机则 `skip` |
@@ -75,17 +75,19 @@
 | `default/omarchy/omarchy-menu.jsonc` | `install.package`/`install.aur`/`remove.package` 的 `xdg-terminal-exec` 回退 | 随仓库/覆盖层 |
 | `docs/` | `INSTALL{,.zh}.md` + **主文档 `omarchy-on-niri-port.md`（当前事实 + 映射表）** + 模块卷 `visual/behavior/plugins/shims/upstream/migration/lock/local-overrides`（编号沿用原号），**正本就在 `docs/`** | 直接改 `docs/`，无第二副本 |
 
-- 覆盖层实际内容：**22 文件 / 48 hunk**（`--reverse --check` 通过、repatch 幂等）；
-  **md5 `ef920a66ece784dfc207c7c87c479f5b`**，与 `~/.config/omarchy/niri-port/niri.patch` 一致（2026-09-23 重导出核：新增菜单 `style.avatar.*` 三行，见 `docs/lock.md` §11.29；上一版 `6138cc1bece9a94312572d8685c845a4` 是 2026-09-21 晚那版，
-  它比 2026-09-20 那版多 `shell/shell.qml` 的 boot reveal 标记 + `pushBootReveal()` 推送、以及 `shell/plugins/bar/Bar.qml` 的滑入，见 §9 / `docs/visual.md` 第 33 条；
-  比 2026-09-21 01:29 那版（46 hunk）多 `Background.qml` 的 `paintedOnce` 与 `shell.qml` 的推送增补 —— 那两处活体先改、补丁没跟上，曾让 repatch 判 exit 2）。
+- 覆盖层实际内容：**23 文件 / 62 hunk**（`--reverse --check` 通过、repatch 幂等）；**md5 `4ec279cf7f4e6a3294fd36518c43ff6d`**
+  （2026-09-26 重导出核，与 `~/.config/omarchy/niri-port/niri.patch` 逐字节一致；本次新增
+  `shell/plugins/panels/monitor/Panel.qml` 的**分辨率滑块** —— 22→23 文件、48→62 hunk）。
+  版本链（只留 md5，明细在各自卷）：`ef920a66ece784dfc207c7c87c479f5b`（2026-09-23，加菜单 `style.avatar.*` 三行，`docs/lock.md` §11.29）
+  ← `6138cc1bece9a94312572d8685c845a4`（2026-09-21 晚：`shell/shell.qml` 的 boot reveal 标记 + `pushBootReveal()`、内置 bar 的滑入，见 §9 / `docs/visual.md` 第 33 条）
+  ← 46 hunk 版（2026-09-21 01:29：活体先改了 `Background.qml` 的 `paintedOnce` 与 `shell.qml` 的推送、补丁没跟上，曾让 repatch 判 exit 2）。
 - **在用的 bar 是第三方插件，不在 `niri.patch` 里**：`~/.config/omarchy/shell.json` 的 `bar.id = charlieras262.floating-bar`，
   它的 boot reveal 走 `niri-port/plugin-patches/charlieras262.floating-bar.patch`（md5 `0d36c626a9992de5a457e3f2880bc99a`，7 hunk，2026-09-21 核；含加载期底部 `Thinking…` 卡片——卡片照 OSD 关机吐司的尺寸/字体做，表面是**卡片大小 + 借用 `omarchy-osd` 那条霜化规则**，收卡时机等宿主推的"壁纸已画"而不是固定时长），
   该补丁**没有自动重放器**，插件被更新覆盖后要手工 `git apply`。
 
 ---
 
-## 2. `~/bin` 垫片（本机 PATH 层，20 项含隐藏文件；2026-09-23 实测 `ls -A ~/bin | wc -l`）
+## 2. `~/bin` 垫片（本机 PATH 层，25 项含隐藏文件；2026-09-26 实测 `ls -A ~/bin | wc -l`）
 
 | 名字 | 说明 | 仓库里有? |
 |---|---|---|
@@ -100,6 +102,7 @@
 | `omarchy-picker-warmup` | 配合用户单元延迟预热选择器缩略图 | ✅ `port-bin/`（2026-09-20 收进） |
 | `omarchy-display-text-size` | bar 的 Display 面板字号滑块驱动全桌面（CLI 路径绕过它） | ✅ `port-bin/`（2026-09-20 收进） |
 | `omarchy-toggle-input-device` | 触控板 / 触摸屏开关。上游脚本走 `hl.device`（niri 侧被垫片 no-op ⇒ 只弹 OSD、设备不关的"假成功"）；本垫片改成**写 / 删** `~/.config/niri/input-toggle-{touchpad,touchscreen}.kdl`，由 `input.kdl` 里两行 `include optional=true` 引入。菜单里的 Touchpad 项现在**真生效**，见垫片卷 `docs/shims.md` §4 | ✅ `port-bin/`（2026-09-23 收进） |
+| `omarchy-niri-monitor-modes` | Display 面板**分辨率滑块**的后端：`set` = 立即注入 modeline+scale **并**写 `monitor.kdl`（切到哪档、下次开机就是哪档），另有 `set-runtime`（只切本次）/`set-boot`/`status`/`list`/`current`/`boot`。档位表与口径见 §4「显示档位」 | ✅ `port-bin/`（2026-09-26 收进） |
 | `wechat`、`clipboard-sync.sh`、`clipboard-handler.sh` | 移植之前的老自建，保留 | ❌（与本移植无关） |
 
 - 上表 12 项与仓库 `port-bin/` 的对账：**11 项**于 2026-09-20 `md5sum` 逐个核过（**10 项逐字节一致**；
@@ -107,6 +110,17 @@
   **代码体逐行相同**（`diff <(grep -v '^#' ~/bin/omarchy-update) <(grep -v '^#' port-bin/omarchy-update)` 为空））；
   **`omarchy-toggle-input-device`** 2026-09-23 新增 —— 它进 `~/bin` 时就是 `install(1)` 从 `port-bin/` 复制的，
   已 `diff` 核过逐字节一致。
+- （2026-09-24 追加）**`omarchy-powerprofiles-set` 改了内容**：加了 power-saver 档的亮度联动
+  （语义与调法见 `docs/behavior.md` 的「电池面板 POWER PROFILE 区为空」一条）。仓库版与 `~/bin` 已重新
+  `install -m 0755` 同步，两侧 md5 同为 `e8e52cc0…`；同批的 `omarchy-powerprofiles-list` 未动。
+- （2026-09-24 追加之二）**新增 `omarchy-launch-screensaver` 垫片**（闲置策略：**不插电到点锁屏**、
+  不自己灭屏；规格见 `docs/behavior.md` 的 §8 第 23 条）。它是 `install -m 0755` 从 `port-bin/` 进的 `~/bin`，
+  两侧 md5 同为 `659efbdd…`；`port-bin/` 因此从 13 个变 14 个。
+- （同上）`~/.config/omarchy/shell.json`（与仓库 `local-config/omarchy/shell.json` 两份同步、逐字节一致）
+  的 `idle.screensaver` **150 → 300**；改前备份
+  `~/.local/state/backups/.config/omarchy/shell.json.bak-20260924-idle300`。
+- （2026-09-26 追加）**新增 `omarchy-niri-monitor-modes` 垫片**（Display 面板的分辨率滑块后端，规格见 §4）。
+  同样是 `install -m 0755` 从 `port-bin/` 进的 `~/bin`，两侧 md5 同为 `2a8c22d6…`；`port-bin/` 因此从 14 个变 15 个。
 - 回退：`rm ~/bin/<名字>`（若 `$OMARCHY_PATH/bin` 有同原件，会自动回退到它）。
 
 ---
@@ -115,7 +129,7 @@
 
 | 文件 | 关键内容 | 回退 |
 |---|---|---|
-| `shell.json` | bar 用 `charlieras262.floating-bar`（`centerAnchor: omarchy.clock`、`cornerRadius 10`、`floatGap 8`）；`omarchy.tray.hidden: ["Fcitx"]`（藏掉 fcitx5 的托盘图标）；`omarchy.power.showPercentage`；`ronald.input-sources.showSourceName=false`；`meviusisback.ai-subs`（`barDisplay: Data`、900s）；`idle.lock 300` / `idle.screensaver 150`（**screensaver 已由 flag 禁用**）；`disabledPlugins: ["omarchy.lock"]`；`plugins: [jianlongliu.split-lock, io.github.claudsondouglas.arcdock]` | `.bak-20260919-preaisubs`、`.bak-20260919-prehidetray`、`.bak-20260920-bar`、`.bak-20260920-bardisplay` |
+| `shell.json` | bar 用 `charlieras262.floating-bar`（`centerAnchor: omarchy.clock`、`cornerRadius 10`、`floatGap 8`）；`omarchy.tray.hidden: ["Fcitx"]`（藏掉 fcitx5 的托盘图标）；`omarchy.power.showPercentage`；`ronald.input-sources.showSourceName=false`；`meviusisback.ai-subs`（`barDisplay: Data`、900s）；`idle.lock 1800` / `idle.screensaver 300`（**screensaver 功能仍由 flag 禁用**；那条腿 2026-09-24 起由垫片 `omarchy-launch-screensaver` 接管成"不插电到点锁屏、锁后灭屏"，见 §8 第 23 条）；`disabledPlugins: ["omarchy.lock"]`；`plugins: [jianlongliu.split-lock, io.github.claudsondouglas.arcdock]` | `.bak-20260919-preaisubs`、`.bak-20260919-prehidetray`、`.bak-20260920-bar`、`.bak-20260920-bardisplay`、`.bak-20260924-idle300` |
 | `shell.toml` | `[font] base-size 12`；`[bar]` 尺寸 + `background-alpha 0.45` + **`icon-font 12`**（要 `Style.qml` 的白名单，已进覆盖层）；`[popups]/[notifications]/[tooltip]` alpha；`[menu]` 只有 `background-alpha 0.45`、**不写底色**（走主题的 `[menu] background` ＝ matugen 出的 `colors.toml` `background`，跟 `[bar]` 同档半透明磨砂；2026-09-21 起，替掉 9-20 写死的 `"#2a2a22"` @ 0.7） | `.bak-20260920-{consistency,iconfont,menu}`、`.bak-20260921-menu` |
 | `extensions/omarchy-menu.jsonc` | 菜单用户层 override：`trigger.*` 屏蔽、`setup.input` 指 `niri/input.kdl`、screensaver 6 条 `when:"false"`、**2026-09-22 再屏蔽 6 条**（`style.unlock` / `install.webapp` / `install.preinstalls` / `update.channel` / `update.config.{plymouth,shell}`，逐条根因与验证见 §8 第 27 条）、**Update 菜单改造**（`update.omarchy` 显示成 "Pacman"、新增 `update.aur` = `paru -Sua` 与 `update.plugins` = `omarchy plugin update`，见 §8 第 28 条）、**再屏蔽 `update.password.drive`**（无 LUKS，同 §8 第 28 条体检）。⚠ 同一 id 别写两遍；**别写行内注释**（`stripJsonc` 只删整行注释） | `.bak-20260919-{prehide,prelearn}`、`.bak-20260920-prescreensaver`、`.bak-20260922-{menuhides,updatemenu,updaudit}` |
 | `niri-port/` | `niri.patch`（与仓库同 md5）、`Niri.qml`、`plugin-patches/*.patch`（4 个，机器独有，见 §6） | 各自的 `.bak-*` |
@@ -152,6 +166,65 @@
   改完必须 `niri validate`，再看 `journalctl | grep 'niri\['`。
 - KDL 普通字符串里 `\.` 非法（`invalid escape char`）→ 用 `r#"…"#` 或不转义。
 - 磨砂五处（effects + window-rules + ghostty + shell.toml + 覆盖层 QML）缺一不可，且**一律 `xray false`**。
+- **显示档位（五档，ThinkPad CSO1411 专属补丁；2026-09-26 用户拍板「全留」）** — 面板 `CSO1411` =
+  CSOT 华星光电，14.0" 3840×2400 16:10，302×189 mm（≈325 PPI）。**硬边界写在 EDID 自己身上**：
+  40–60 Hz V / 80–250 kHz H / dotclock ≤ **600 MHz**（原生 4K@60 吃 595.2 MHz，已经贴顶 ⇒ 上不了 60 Hz 以上）。
+  四档自定义全部走 `niri msg output eDP-1 modeline`（或 `monitor.kdl` 的 `modeline`），时序一律 `cvt -r` 算：
+
+  | 档位 | modeline | scale | 逻辑桌面 | 面板放大 | 8bpc 链路 |
+  |---|---|---|---|---|---|
+  | 3840×2400@60（原生，EDID DTD1） | 不写（595.2 MHz） | 2.4 | 1600×1000 | 1.000×（1:1） | 17.9 Gbps |
+  | **3200×2000@60（主力）** | `414.50 3200 3248 3280 3360 2000 2003 2009 2057 "+hsync" "-vsync"` | 2.0 | 1600×1000 | 1.200× | 12.4 Gbps |
+  | 2880×1800@60 | `337.50 2880 2928 2960 3040 1800 1803 1809 1852 "+hsync" "-vsync"` | 1.8 | 1600×1000 | 1.333× | 10.1 Gbps |
+  | 2560×1600@60 | `268.50 2560 2608 2640 2720 1600 1603 1609 1646 "+hsync" "-vsync"` | 1.6 | 1600×1000 | 1.500× | 8.1 Gbps |
+  | 1920×1200@60 | `154.00 1920 1968 2000 2080 1200 1203 1209 1235 "+hsync" "-vsync"` | 1.25 | 1536×960 | 2.000× | 4.6 Gbps |
+
+  - **「开机值」不是固定某一档**：点一下面板滑块，`set` 就把那档（modeline + 配对 scale）写进 `monitor.kdl`，
+    所以**最后切的那一档就是下次开机的档**（随时读 `omarchy-niri-monitor-modes status` 的 `boot` 行；
+    2026-09-26 收工时 = `2880×1800@1.8`）。表里 3200×2000 的"主力"是选型结论，不是被钉死的开机值。
+  - **锐度只由「面板放大比」决定**（模式像素 vs 面板 3840×2400），**与 `scale` 无关**：niri 合成的是
+    模式像素，`scale` 是免费旋钮，放大由 i915 panel fitter 或面板 TCON 做（哪一层没验）。
+    ⇒ 在 2560 模式下怎么调 `scale` 都换不到锐度，只能换大小/空间。
+  - **3200×2000@2.0 = 主力**：三样都占住、又不吃 4K 的像素账 —— 放大只 1.2×（锐度接近原生）、`scale` 是
+    **整数**（X11/Qt 那批"按 1x 渲染、由合成器放大"的应用也清晰；1.8 / 1.6 对它们是非整数重采样）、
+    逻辑仍是 **1600×1000**（与 2560×1600@1.6、4K@2.4 逐像素同布局，切过去不重排窗口）。
+    代价：像素 6.40 Mpx（2560 是 4.10 Mpx，+56%）。**4K@2.4 同样落在 1600×1000、scale 也能整分**（3840 = 1600×2.4），
+    但像素 9.22 Mpx ⇒ RC6 顶满（75.3%，比 3200 高约 17 个点，见下），所以"主力"仍是 3200。
+  - **2880×1800 只是谱中间点**（5.18 Mpx / 1.333×），没有独占优势：`scale` 三选一都要丢一样 ——
+    `2.0` → 逻辑只剩 1440×900（横向挤 19%）、`1.8` → 同桌面但非整数、`1.5` → 1920×1200 空间最大但非整数。
+    留档理由 = "想省一点、又不想退到 2560 那么糊"（2026-09-26 上屏看过，用户认可）。
+  - **实测（2026-09-26；同一任务 = 8 次全屏 overview 开合，各档交替两轮）**：`niri` 的 CPU 分不出档
+    （22.6–24.4% —— 全屏动画的 CPU 是每帧固定成本，像素账全在 iGPU）；分得出的是 **RC6 醒着**
+    （GPU 不进省电的时间占比，越高越吃紧）：4K **75.3 / 75.7%** > 3200 **55.5 / 58.6 / 59.1%** >
+    2560 28.6 / 50.0%（两轮不一致，噪声大）；iGPU 频率均值 4K 1306 / 1321、3200 1277 / 1292 / 1302、
+    2560 1044 / 1267（上限 1350 MHz）。⇒ **4K 一开就把 iGPU 顶到没余量**（"4K 卡"的机器数字版），
+    3200 还留约 20%。⚠ 口径：突发型负载；持续型（视频、大面积滚动）差距会更大。掉帧率测不到（要 DRM 统计 / root）。
+  - **怎么切**：**bar → Display 面板的 RESOLUTION 滑块**（2026-09-26 上线；形状照同行 TEXT SIZE 的 notch 滑块，
+    点/按一档即应用，档位名 + 放大比就显示在右侧）。它驱动垫片 `omarchy-niri-monitor-modes set <tier>`：
+    **注入 modeline + 该档自带的 scale**，并把同两行写进 `monitor.kdl` ⇒ **切到哪档、下次开机就是哪档**
+    （没有单独的"设为开机值"按钮 —— 用户 2026-09-26 拍板要这个语义）。
+    命令面：`set-runtime <tier>` 只切本次、`set-boot <tier> [--dry-run]` 只写文件（`--dry-run` 先看 diff）、
+    `status|list|current|boot` 读；面板自己另开了一个 IPC 方法
+    `omarchy-shell omarchy.monitor resolution <tier>`（与上游 `brightness <percent>` 同构，给脚本/菜单用）。
+    `set` 同时**跟随仓库镜像** `niri-config/local/monitor.kdl`（只在镜像原本与旧文件逐字节一致时才写，
+    手改过的镜像只提示、不覆盖），`scripts/kdl-sync.sh` 仍守这条一致性。
+    等价的手工口径：`niri msg output eDP-1 modeline <上面那串>`，再
+    `niri msg output eDP-1 scale <对应值>`；回原生档用 `niri msg output eDP-1 mode "3840x2400@60.000"`。
+    该文件顶部那两条坑（**绝不写 `mode` 行**、覆盖层 include 必须排第一）继续有效。
+  - **同一面板的 SCALE 行**（scale 轴，与分辨率正交）：预置表 2026-09-26 补上本机的**配对值** ——
+    加了 `1.8` / `2.25`（原来只有上游那六个 `1/1.25/1.6/2/3/4`，**2880 档要的 1.8 根本拨不到**；
+    1.25/1.6/2.0 本来就有）。那行显示的是**吸附后的实际值**（`Model.cleanScale` 把请求值向上取到能整分模式的
+    1/120 步长），所以：**2880 上出现 `1.8x` = 逻辑 1600×1000**（正是配对）；**4K 的配对值 2026-09-26 从 2.25 改成 `2.4`**
+    ⇒ 逻辑 **1600×1000**（原本 2.25 只有 1706×1066），**五档从此落在同一张桌面上**（切档不重排窗口），
+    面板 SCALE 行也终于能在 4K 下亮起（2.25 那种值上游 `cleanScale` 只认吸附后的 2.4，留着会让那行取不到匹配、一格都不亮）；
+    **3200 上 `1.8` 与 `2` 吸附成同一档、
+    被去重**，只多出一个 `2.5x`。**SCALE 仍只改运行时**（重启回 `monitor.kdl` 的值；要落盘就拨 RESOLUTION 档，
+    它连 scale 一起写）。附带事实：上游"Hyprland 只接受能整分模式的 scale"在本机**只是偏好不是硬限制** ——
+    niri 实测吃任意精确值（3200×2000 给 1.8 → 逻辑 1777×1111），保留吸附是为了逻辑尺寸整齐。
+  - ⚠ **色深**：本机 **10bpc 会花屏、8bpc 正常**（用户实测）。链路账（**本大小姐推断，未在用户态验证**）：
+    4K@60 的 595.2 MHz 在链路上 10bpc 要 ≈22.3 Gbps，超 4-lane HBR2 的 21.6 Gbps；8bpc 只要 17.9 Gbps。
+    1600p 模式下 10bpc 才 ≈10.1 Gbps ⇒ 花屏是"4K + 10bpc"的组合问题。**别碰 EDID 的位深字段，也别去掉那份覆盖件**
+    （它是承重墙：四条自定义模式能不能上屏靠它，细节见 §5 那行）。
 
 ---
 
@@ -168,6 +241,10 @@
 | ~~`/etc/systemd/system/flclash-helper.service`~~ **2026-09-21 已删**（用户点名） | FlClash 的 TUN 特权助手：`ExecStart="/usr/lib/flclash/FlClashHelperService"`、`RuntimeDirectory=flclash`、`Environment=FLCLASH_HELPER_OWNER_{UID,GID}=1000`、`WantedBy=multi-user.target`。**FlClash 卸载后单元还留着 `enabled`**，于是每次开机 `203/EXEC`（可执行文件没了）重试 5 次 → `start-limit-hit`，白刷一屏红字（`--since "-3 days"` 里 12 次）。删前核过：`/usr/lib/flclash`、`~/.config/FlClash`、`/run/flclash` **都不存在**（FlClash 包也没装），残留为零；同目录 `vpn-hotspot.service` 只在 Description 文字里提 flclash、**没有任何 `Requires=`/`After=` 依赖**（它自己 `disabled`+`inactive`；2026-09-21 也一并删了，见下一行）。代理已由系统级 `mihomo` 接管 | `pkexec cp ~/.local/state/backups/etc/systemd/system/flclash-helper.service.bak-20260921-deleted /etc/systemd/system/ && pkexec systemctl daemon-reload && pkexec systemctl enable --now flclash-helper.service`（**前提是 FlClash 重新装上**，否则又是 203/EXEC） |
 | ~~`/etc/systemd/system/vpn-hotspot.service`、`/usr/local/bin/vpn-hotspot`、`/etc/dnsmasq-vpn-hotspot.conf`、`/etc/hostapd/hostapd.conf`~~ **2026-09-21 已删**（用户点名「一起删」） | flclash 时代「把 VPN 共享成 `ap0` 热点」的整套：单元 `Type=oneshot`+`RemainAfterExit=yes`，脚本写死 `VPN_IFACE=FlClash`（hostapd + dnsmasq + iptables NAT 那一套）。FlClash 没了以后全是死件：单元 `disabled`+`inactive`（**没有像 `flclash-helper` 那样每次开机报错**，所以一直没人注意）、`ap0` 接口不存在、`hostapd`/`dnsmasq` 两个服务也 `inactive`+`disabled`（删前核过：没有别的用途）、`/etc/NetworkManager/conf.d/99-ap0-unmanaged.conf` 更早就不存在了 | 四份备份都在备份根下同名 `.bak-20260921-deleted`（`etc/systemd/system/`、`usr/local/bin/`、`etc/`、`etc/hostapd/`），`cp` 回原位 + `systemctl daemon-reload` 即可；真要再用得先把 FlClash 装回来 |
 | `/etc/systemd/logind.conf.d/20-inhibit-delay.conf` | `[Login] InhibitDelayMaxSec=15`（2026-09-21 装，用户拍板）：`omarchy-sleep-lock.service` 的延迟抑制剂窗口上限，给"合盖→锁"留 ~12s 预算（不装只有默认 5s ⇒ 4s 预算）。源件是上游 `$OMARCHY_PATH/etc/systemd/logind.conf.d/20-inhibit-delay.conf`，逐字照抄 | `pkexec rm /etc/systemd/logind.conf.d/20-inhibit-delay.conf && systemctl reload systemd-logind`（**改前本机没有这个文件**；同目录另有更早的 `lid-suspend.conf`，三档合盖都设 `suspend`，2026-05-19 装机写入） |
+| `/etc/tlp.conf` | **`CPU_BOOST_ON_SAV` 0 → 1**（2026-09-24，用户要求"powersave 也带上睿频"）：TLP 1.10 里 `PP_SAV` 映射 `*_ON_SAV`，默认不让 power-saver 睿频。同批实测的"两档差异""空转项""`tlp ac/bat` manual_mode 坑""`tlp.d` 覆盖不了本文件"四条都记在 `docs/behavior.md` 的「电池面板 POWER PROFILE 区为空」一条里 | 备份与原件**同目录**：`pkexec cp /etc/tlp.conf.bak-20260924 /etc/tlp.conf && sudo tlp start` |
+| `/usr/bin/omarchy-theme-set-browser-policy` | **换主题时把色值写进浏览器策略目录的 root 半身**（2026-09-24 装，修 `behavior.md` §8 第 20 条）：本机 `/usr/bin` 里**原本没有任何 `omarchy-*`**（dev-link 装机把命令都留在 `~/.local/share/omarchy/bin`），而脚本 `PACKAGED_PATH` 写死这个名字 ⇒ 提权目标不存在，换主题必失败。这里装的是 `$OMARCHY_PATH/bin/omarchy-theme-set-browser-policy` 的**root 属主副本**（`install -m 0755 -o root -g root`），**不是指回用户可写树的软链** —— 规则放行的路径若能被普通用户改写就等于无密码 root | `pkexec rm /usr/bin/omarchy-theme-set-browser-policy`（**改前本机没有这个文件**）。**上游改了那个脚本要重跑同一条 `install`**，`omarchy update` 不会刷新它 |
+| `/etc/sudoers.d/omarchy-theme-browser` | 上游那条 NOPASSWD 规则，逐字照抄（`%wheel … NOPASSWD: /usr/bin/omarchy-theme-set-browser-policy` + 六个 `[0-9a-f]`）：菜单换主题时没有终端承接密码提示，而本机**没有 polkit agent UI**（`pkexec` 只在认证缓存热着时才过）⇒ 不放行就等于浏览器主题色永远不更新。装前 `pkexec visudo -cf <源件>` 验过 parsed OK，装后模式 0440 root:root | `pkexec rm /etc/sudoers.d/omarchy-theme-browser`（**改前本机没有这个文件**）。⚠ 同目录 `fprint-timer` 权限不是 0440（sudo 会整份忽略它）—— 与本条无关，别顺手改 |
+| `/usr/lib/firmware/edid/CSO1411.bin`（+ `/etc/kernel/cmdline` 的 `drm.edid_firmware=eDP-1:edid/CSO1411.bin`、`/etc/mkinitcpio.conf` 的 `FILES=(… /lib/firmware/edid/CSO1411.bin …)`） | **面板 EDID 覆盖件**（256 B = base + CTA 扩展）。`pacman -Qo` 查过**无包拥有**（包升级不会覆盖）；靠 `FILES=` 打进 initramfs、靠 cmdline 在 i915 之前加载 ⇒ **改动后必须 `pkexec mkinitcpio -P` + 重启**才生效（本机 systemd-boot + UKI + Secure Boot，**没有**"启动菜单里临时删参数"这条路）。**2026-09-26 逐字节核过**：现行件（md5 `bd15a152…`）相对 `/data/App/firmware/CSO1411.bin.backup.20260722_235519`（`6ad0583a…`）**只差 19 字节**，全在 base 块描述符区 —— ① 加了一条 **DTD2 = 2560×1600@59.97**（`cvt -r` 268.5 MHz，"均衡档"那条模式）② 水平范围从 **149–149 kHz 放宽到 80–250 kHz**（旧件把行频钉死在 4K 那一条上；不放宽则任何自定义模式都判不合法）③ 描述符区重排 + 校验和。CTA 块（HDR 静态元数据 / AMD FreeSync 40–60）逐字节相同。⚠ **存疑**：用户记得注入件是"强制 8bit 色深"，但**两份 base 的"每通道位深"字段都写着 8bpc**（原厂原始值机器上已无副本可查）⇒ "注入 EDID = 钉 8bpc"在字节层面**没有证据**，别当结论用；"10bpc 花屏"本身是用户实测事实 | `pkexec cp ~/.local/state/backups/usr/lib/firmware/edid/CSO1411.bin.bak-20260926 /usr/lib/firmware/edid/CSO1411.bin && pkexec mkinitcpio -P`，重启生效（备份 2026-09-26 补的，与在用件同 md5；`/data/App/firmware/` 另有两份**旧件**副本，拿它回退会丢掉 DTD2 那条 1600p 模式）。屏幕万一黑：Ctrl+Alt+F3 进 TTY，走同一条 `cp` + `mkinitcpio -P` + 重启 |
 
 - 换主题/壁纸后同步到登录页：`sudo split-greeter-sync "$USER"`（还有实验账户时要一起列）。
 - 登录页切换是唯一会把自己锁在外面的步骤，所以 `split-greeter/install.sh` **故意不碰 `config.toml`**。
@@ -182,6 +259,7 @@
 | `omarchy-picker-warmup.service` | `PICKER_WARMUP_DELAY=45` + `ExecStartPre=/bin/sleep`；`toggles/picker-warmup-off` 存在即跳过 | ✅ `default/systemd/user/`（`%h` 模板，2026-09-20 收进；`install.sh` 第 4 步装并链接） |
 | `omarchy-sleep-lock.service` | **本机版**：上游那两条 `ConditionEnvironment=` 全删 —— ① `OMARCHY_PATH` 那条读的是**用户管理器**环境、**看不见单元自己的 `Environment=`**（2026-09-21 探针实证），本机又没 UWSM 去 import 它；② 另一条 `WAYLAND_DISPLAY` 看着满足，但**条件是单元被拉起那刻评估的，而单元由 `graphical-session.target` 拉起、那会儿会话还没把环境发布进用户管理器**（2026-09-21 重启实证：20:10:17 被跳过、20:10:18 niri 才起来）⇒ 抑制剂挂不上、合盖不锁。本机版显式给 `OMARCHY_PATH`/`PATH`（`omarchy-system-sleep-lock` 里是裸 `omarchy-shell`），`ExecStart` 指包装器 `%h/bin/omarchy-sleep-lock-start`（`port-bin/omarchy-sleep-lock-start`：有界等会话环境发布 → 采纳 `WAYLAND_DISPLAY`/`XDG_RUNTIME_DIR`/`NIRI_SOCKET` 等 → `exec` 上游 monitor）。**合盖/挂起锁屏就靠它**，见 `lock.md` §11.28 | ✅ `local-config/systemd/user/` + `port-bin/`（2026-09-21 收进） |
 | `materal-recolor.{path,service}` | **是本移植的一部分**（不是无关物件）：`.path` 盯 Omarchy 壁纸文件，一变就拉起 oneshot `.service` 跑 `%h/bin/materal-update`（`port-bin/` 里的 matugen 包装，机制见主文档 §8.10）。上游没有、也没有包认领 | ✅ `local-config/systemd/user/`（2026-09-20 收进；装法 `systemctl --user enable --now materal-recolor.path`） |
+| `omarchy-clamshell-watch.service` | **本移植的一部分**（2026-09-24）：常驻轮询盖子状态，只在合盖时才查 `niri msg outputs`，变了就调上游 `omarchy-hyprland-monitor-clamshell`。上游那个 watcher 由 `default/hypr/autostart.lua` 拉起，而那棵 layer-2 树在本移植里整体 no-op ⇒ 不装单元它永不运行。与 sleep-lock 同款：显式给 `PATH`/`OMARCHY_PATH`（用户管理器环境里没有），**但没有**那两条 `ConditionEnvironment=`（本机过不去；这个单元不需要会话环境：socket 自己找、通知走 DBus），`ConditionPathExists=!…/toggles/clamshell-watch-off` 当开关 | ✅ `default/systemd/user/`（`%h` 模板 + `install.sh` 装 + 软链进 `graphical-session.target.wants/`，2026-09-24 收进）|
 | `wechat-clipboard-sync`、`wl-clip-persist`、`wl-gammarelay`、`xsettingsd` | 与本移植无关（第一个是私人物件，后三个是通用 Wayland 守护进程；四者都无包认领），仅共存。**`wechat-clipboard-sync` 2026-09-21 修过脚本里的 flock 写法**（同步链真的死了，详见 §8 缺口第 13 项）、**并补上 X11→Wayland 反向同步**；它是 `Type=oneshot`+`RemainAfterExit=yes` 而 `ExecStart` 永不退出 ⇒ 永远停在 `activating`、**`systemctl restart` 会挂住**（要 `stop` 再 `start --no-block`） | — |
 
 - 三个 omarchy 单元都软链进 `graphical-session.target.wants/`（**`omarchy-sleep-lock` 是 2026-09-21 才补上的**：本机走 dev-link 装机、绕过上游 first-run 的 `enable-user-units.sh`，所以那批单元集体没装；逐个查过后只有它是真缺口，见 `lock.md` §11.28）。
@@ -192,7 +270,7 @@
 
 - `~/.local/state/omarchy/toggles/screensaver-off` = **screensaver 禁用 flag**（用户明确要关，别恢复）。
 - `~/.local/share/omarchy` = `$OMARCHY_PATH`，**工作区里有非移植改动**（2026-09-20 核：`git status` 265 条，
-  主要是主题删除）→ **重生成 `niri.patch` 必须限路径**，否则 22 文件会膨胀成 250+：
+  主要是主题删除）→ **重生成 `niri.patch` 必须限路径**，否则 23 文件会膨胀成 250+：
 
 ```bash
 # 重生成（在 $OMARCHY_PATH 里跑；路径表取自旧 patch）
@@ -327,6 +405,26 @@ cp /tmp/niri.patch ~/.config/omarchy/niri-port/niri.patch              # 重放�
       —— 别拿它覆盖回去（现行 fonts.conf 由菜单管，覆盖会把菜单选择抹掉）。要退回系统默认就
       `rm ~/.config/fontconfig/conf.d/60-cjk-fallback.conf`；不要苹方/Google Sans 了再
       `rm -rf ~/.local/share/fonts/{pingFang,GoogleSans,GoogleSansCode}`。
+16. **面板 EDID 覆盖件（256 B 二进制）只在机器上**：仓库里没有（二进制、且机型专属），换机/重装要单独带。
+    机器上三处副本：`/usr/lib/firmware/edid/CSO1411.bin`（在用，`bd15a152…`）、
+    `/data/App/firmware/CSO1411.bin` 与 `/data/App/firmware/CSO1411.bin.backup.20260722_235519`
+    （`6ad0583a…`，互为同一内容 = 加 DTD2 **之前**的旧件）、备份根
+    `~/.local/state/backups/usr/lib/firmware/edid/CSO1411.bin.bak-20260926`（与在用件同 md5）。
+    它撑着"五档里四条自定义模式能不能上屏"，注入链条 / 回退 / 字节差异见 §5 里 EDID 那行。
+    **2026-09-26 复核（用户认为"四档分辨率应该在注入件里"，实测不成立）**：
+    - 件里**只有两条 DTD**：DTD1 = `3840x2400@60`（preferred）、DTD2 = `2560x1600@59.97`；**3200×2000 / 2880×1800 /
+      1920×1200 根本不在文件里**，只活在 §4 的档位表与运行时 modeline 里。
+    - **DTD2 是死的**：`/sys/class/drm/card1-eDP-1/modes` 只列 `3840x2400`；`edid-decode --check` 报
+      `DTD #2: Invalid detailed timing descriptor ordering`（FAIL，DTD 必须按像素时钟降序），且它的 flags 字节 `0x01`
+      被解成"模拟复合 + sync-on-green"（数字屏上非法）；内核因此不提供这条模式。
+    - ⇒ 那次改 EDID **唯一真正生效的是把行频放宽到 80–250 kHz**（不放宽，任何自定义时序都被判非法）。EDID 的
+      "承重墙"性质仍然成立，但撑的是**行频窗口**，不是档位本身。
+    - **别想用 `debugfs` 热验 EDID**（2026-09-26 试完，此路不通）：`/sys/kernel/debug/dri/0000:00:02.0/eDP-1/edid_override`
+      能写、内核也真存住了（读回 md5 一致），但 **eDP-1 不会重新探测** —— 该目录**没有 `trigger_hotplug`**、
+      `status` 写不进（已连接）、`detect` 刷不出新 EDID，`/sys/…/edid` 与 `modes` 都不变；该文件**也不能 unlink**
+      （属内存态、重启即消失）。**唯一验证路径**仍是：改 `/usr/lib/firmware/edid/CSO1411.bin`（先备份）→
+      `pkexec mkinitcpio -P` → 重启；事故恢复 `Ctrl+Alt+F3` + 备份件。试件与脚本留在
+      `~/.local/state/omarchy/edid-trial/`（`build-trial-edid.py`、`trial-1.bin` 合法重排、`trial-2.bin` 再加三条 CTA DTD）。
 
 ---
 
@@ -347,6 +445,7 @@ cp /tmp/niri.patch ~/.config/omarchy/niri-port/niri.patch              # 重放�
 | 删掉的 `vpn-hotspot` 整套（其实没必要恢复） | 见 §5 那行；四份备份都在 `~/.local/state/backups/` 下同名 `.bak-20260921-deleted` |
 | screensaver 恢复 | 删 `~/.local/state/omarchy/toggles/screensaver-off` + 复原 `omarchy-menu.jsonc.bak-20260920-prescreensaver` |
 | 选择器预热 | `touch ~/.local/state/omarchy/toggles/picker-warmup-off`（或 `systemctl --user disable --now omarchy-picker-warmup`） |
+| clamshell 触发器 | `touch ~/.local/state/omarchy/toggles/clamshell-watch-off`（脚本下一 tick 干净退出、单元转 inactive；恢复＝删 flag + `systemctl --user start omarchy-clamshell-watch.service`，或下次登录跳过。也可直接 `systemctl --user disable --now omarchy-clamshell-watch.service`）；内屏被留住就 `rm ~/.config/niri/output-toggle-off.kdl && niri msg action load-config-file`。**"合盖不挂起"那半从没做过** —— `/etc/systemd/logind.conf.d/lid-suspend.conf` 仍是装机原样（三档 `suspend`）|
 | 插件本地魔改 | 在该插件目录 `git apply -R ~/.config/omarchy/niri-port/plugin-patches/<id>.patch` |
 | fastfetch 配置改坏 | `cp ~/.local/state/backups/.config/fastfetch/config.jsonc.bak-20260922 ~/.config/fastfetch/config.jsonc`（改前那份，`XeroArch` 简版；想回到"绿 logo"的中间版用 `…bak-20260923-greenlogo`；想回上游展示配置就直接 `cp $OMARCHY_PATH/etc/fastfetch/config.jsonc` 过来，但那条 `color: green` 会把 Arch 染绿） |
 | 字体/中文回退改坏 | `rm ~/.config/fontconfig/conf.d/60-cjk-fallback.conf`（回系统默认：中文会落到 MS Gothic、图标无回退）；`fonts.conf` 本身由菜单管，`menu → style → font` 重选一次即重建；仓库副本 `local-config/fontconfig/conf.d/` 可拷回来（见 §8 缺口第 15 项） |
