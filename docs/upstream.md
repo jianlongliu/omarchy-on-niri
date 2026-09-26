@@ -23,14 +23,15 @@
 
 - `omarchy update` = `git pull --ff-only`（`omarchy-update-dev`，在 `post-update` 钩子**之前**）+ 迁移。
 - **仓库外不碰**：`config.kdl` / `shell.json` / `~/bin/hyprctl` 都不在 omarchy 仓库内，`git pull` 动不到。
-- **仓库内会撞**：我们改了仓库内 **23 个文件**。权威清单就是补丁自己的 `diff --git` 行：
+- **仓库内会撞**：我们改了仓库内 **24 个文件**。权威清单就是补丁自己的 `diff --git` 行：
   `grep '^diff --git' ~/.config/omarchy/niri-port/niri.patch | sed 's|.* b/||'`（换机器/换仓库路径也别抄下面的名单）。
   起步那 19 个是 `launch-{tui,editor,floating-terminal-with-presentation}`、`refresh-hyprland`、`theme-set`、
   `menu.jsonc`、`qmldir`、`Background.qml`、`ImagePicker.qml`、`Bar.qml`、`Workspaces.qml`、`Menu.qml`、
   `KeyboardPanel.qml`、`osd/Osd.qml`、`AppLibrary.qml`、`panels/power/Panel.qml`，以及 2026-08-25 加的 3 个
   `omarchy-system-{logout,reboot,shutdown}`；之后又加了 `shell/shell.qml`（boot reveal 推送）、
-  `notifications/Service.qml`、`Commons/Style.qml`、`panels/monitor/Panel.qml`（分辨率滑块，2026-09-26）。
-  ——这 23 个文件正是 `niri.patch` 的内容（**23 个文件 / 62 hunk**，2026-09-26 核；2026-09-18 合并上游时为 30 hunk，
+  `notifications/Service.qml`、`Commons/Style.qml`、`panels/monitor/Panel.qml`（分辨率滑块，2026-09-26）、
+  `bin/omarchy-battery-status`（充电阈值改 sysfs 优先，2026-09-26，见 `docs/behavior.md` §8 第 38 条）。
+  ——这 24 个文件正是 `niri.patch` 的内容（**24 个文件 / 72 hunk**，2026-09-26 核；2026-09-18 合并上游时为 30 hunk，
   2026-09-19 菜单自愈守卫 +2（§8.14）、Install/Remove 终端回退 +1（§8 第 21 条）、
   2026-09-20 选择器异步解码 +1（§8 第 25 条）、电量数字置右 +1（§8 第 28 条））。
   上游改到其中任何一个，`git pull --ff-only` 会因本地未提交改动而**失败中止**整个更新——这是需要
@@ -199,7 +200,7 @@ laravel 从 `~/.config/composer/vendor/bin/laravel` 改成 `~/.local/bin/laravel
 - **238 条主题删除未受影响**：上游这 5 个提交没碰 `themes/`，`--ff-only` 因此不会被本地删除挡住；
   更新后 `git status` 仍是 17 M + 238 D + 3 未跟踪（`shell/Commons/Niri.qml`、`shell/plugins/blurwallpaper/`、
   `shell/test-debug.qml`）。
-- **下次更新的预期**：上游一旦改到我们那 23 个文件（当时 17，2026-09-20 起 18、当晚 19；2026-09-26 起 23，见 §8.7）里的**同一函数**，`omarchy-niri-repatch` 会以退出码 2
+- **下次更新的预期**：上游一旦改到我们那 24 个文件（当时 17，2026-09-20 起 18、当晚 19；2026-09-26 起 23，同日再加 `bin/omarchy-battery-status` 成 24，见 §8.7）里的**同一函数**，`omarchy-niri-repatch` 会以退出码 2
   明确报冲突且不动仓库（见 §8.7），那时才需要手工翻译合并。
 
 ---

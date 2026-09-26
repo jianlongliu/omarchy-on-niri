@@ -32,6 +32,7 @@
 - 25. **桌面双击弹窗慢（壁纸/主题切换器"要等会"）（2026-09-20，用户要求）**：入口是 `shell/plugins/background/Background.qml`
 - 19. **耗电/续航专项（2026-09-19 测过一轮，下次接着做）**：表现为"感觉慢 + 续航差"。已排除的
 - 35. **Herdr 键位：`Super+Ctrl+Return` 必须经终端启动（裸 `herdr` 在 niri 下没有 tty，必死）（2026-09-24）**：`binds.kdl` 里那行原本是裸调 `herdr`
+- 38. **电池面板加 CHARGE LIMIT 档位切换（充电阈值可写）（2026-09-26）**：两档 Protect 75–80 / Full 95–100，点击走 `pkexec tlp setcharge`（规则 `/etc/polkit-1/rules.d/49-tlp.rules`）；**真根因＝`omarchy-battery-status` 优先信 UPower 而 UPower 缓存阈值不重读 ⇒ 已改成 sysfs 优先**；`setcharge` 只写运行时 ⇒ Full 一次性
 
 ---
 
@@ -715,6 +716,73 @@ Omarchy 有两层配置，只有层1在 niri 上真正生效：
     - **顺带修正 §5.5 的旧结论**：那儿写的「因本机不用 tmux/herdr，不再绑定」只对**键位面板**成立
       （`Super+Alt+K` Tmux keybindings、`Super+Ctrl+K` Herdr keybindings 确实没绑，`Mod+K` 已让给
       `omarchy-menu-keybindings`），**herdr 本身是在用的**，现在也直接从键位进。
+
+38. **电池面板加 CHARGE LIMIT 档位切换（充电阈值可写，2026-09-26）**：用户要求「把充电阈值做进 bar 的电池
+    图标」（bar 右侧 `omarchy.power` 那个 🔋）。**读路径原本就有** —— `omarchy-battery-status --shell`
+    早就输出 `threshold<TAB>75-80%`，面板也一直在右下角显示它，缺的只有**写回**。
+    - **两档**（用户拍板「一档可以充满，一档 0-75/80 就行」，数值由我润色）：**Protect 75–80** 与
+      **Full 95–100**。起点取 75 而不是 0，是因为 0 会让电芯长期停在 80% 上、每次小幅回落都触发微循环；
+      75 是"放到 75 再充"，对电芯友好。75/80 同时**正是本机出厂值**（`/etc/tlp.conf:592` 与 `:594`
+      的 `START/STOP_CHARGE_THRESH_BAT0`，sysfs 实测一致）。
+    - **实现**（`shell/plugins/panels/power/Panel.qml`，活体）：在 POWER PROFILE 之后追加 CHARGE LIMIT 区
+      —— `PanelSeparator` + `PanelSectionHeader` + `Row`/`Repeater` 的 `Button`，按钮样式**照抄**同一面板里
+      POWER PROFILE 那排（`active`/`hasCursor`/`onHovered`/`onClicked`），没新造零件。点击 →
+      `Process` 跑 `pkexec tlp setcharge <start> <stop>`。键盘导航从"一段"扩成"两段"：上下键在两排之间
+      跳（`focusSection`），左右键在**当前那排内**走（`chargeLimitIndex`），回车激活。
+    - **按钮点亮的判据**：读回的 `threshold` 去掉 `%` 后与 `start + "-" + stop` **逐字符相等**才点亮；
+      手工设的第三组值（如 60–90）两边都不亮 —— 这是有意的诚实行为，代码里已注释。实测 Protect 亮、
+      配色与 POWER PROFILE 里 active 那颗一致（截图取样 rgb `129,116,123` vs `125,115,121`）。
+    - **为什么必须 pkexec**：本机从终端裸跑 `pkexec`（无匹配规则时）**会永久挂住**（`exit=124`，polkitd 记
+      `FAILED to authenticate … unix-process:unknown`）。放行方式选的是 **polkit 规则**（而非 sudoers
+      NOPASSWD，也非只读展示）：`/etc/polkit-1/rules.d/49-tlp.rules`，匹配
+      `action.id == "org.freedesktop.policykit.exec"` 且 `action.lookup("program") == "/usr/bin/tlp"`
+      且 `subject.isInGroup("wheel")` → `polkit.Result.YES`。**规则只对 `/usr/bin/tlp` 生效**，其余程序
+      仍照旧卡住（这既是验证方法，也是"别把口子开大"的边界）。
+    - ⚠ **壳层自己也注册了 polkit agent**（`journalctl -t omarchy-shell` 里的 `omarchy polkit agent registered`）——
+      所以面板里 `Process` 发的 `pkexec` 有可能本来就够、这条规则只是保险；但**没去撤验**（撤验要 root 动
+      `/etc`，而前一轮已经因为给 polkitd 加 `--debug`（**127 版不认这个开关**，正确的是 `--log-level=debug`）
+      把它弄进过 `start-limit-hit` 重启循环）。**别拿那段时间"pkexec 免密过了"当结论** —— 那是瞬态假象，
+      `pkcheck … --process $$` 同时报 `exit=2`（需要认证）。另：`pkexec` 一次只发一条命令，并发两条会双双
+      静默挂死。
+    - **`tlp setcharge` 只写运行时 sysfs、不落任何配置** ⇒ **Full 是一次性的**：重启（或 TLP 重启）后一律
+      回落 `/etc/tlp.conf` 的 75/80，面板也会重新亮 Protect。想真正持久化得改 `/etc/tlp.conf` —— 那是另一件
+      系统级改动（备份/验证/回退），**尚未做、也没擅自做**。
+    - **实测到的**：`pkexec tlp setcharge 95 100` → sysfs 读回 `95/100` → 再 `75/80`，`exit=0`、无提示、
+      无挂起；用临时 Quickshell 配置（`Process` 跑同一条命令，等价于面板里的执行环境）复验也是 `exit=0`
+      且 sysfs 落地。**没验到的**：鼠标点击那一步本身 —— 本机只有 `wtype`（无 `dotool`/`ydotool`/指针注入
+      工具），而 `wtype` 的按键**送不进面板的 `PanelKeyCatcher`**（连按三次 Down/Right 前后两张截图**逐字节
+      相同**，面板纹丝不动），所以"点一下按钮"这条路只能靠代码审读 + 上述等价链路取证。
+    - **手感问题与修法（2026-09-26 当轮追加）**：用户反馈"xx 太慢了"。实测：**延迟不在 TLP 而在 pkexec 的
+      polkit 握手** —— `tlp setcharge` 本体 **87 ms**，套上 `pkexec` 变 **1.7–4.5 s**（`pkexec tlp --version`
+      也 1.87 s，与写不写 sysfs 无关）⇒ 点下去要 ~2 秒后那颗按钮才亮，看起来像"没反应 / 写反了"。
+      用户同时问"下面的模块不能显示当前状态吗"，于是两处一起改（同一文件）：
+      ① **乐观高亮** —— 新增 `property int chargePendingIndex`，点击瞬间就把高亮挪过去（不等进程返回）；
+      `setChargeLimit` 签名改成 `(index, preset)`，下标由 `Repeater` / 键盘选择**显式传入**（不拿 `indexOf`
+      反查对象 —— 那样一旦查不到就会把"高亮丢了"变成静默失败，而且这条没法靠点击复验）；
+      `actionProc.onExited` 里先清 pending 再 `refresh()`，**以读回的真值为准**，写入失败会自动退回不亮；
+      打开面板时（`onOpenedChanged`）也清一次，免得"pkexec 永久挂住"把假高亮留在屏上。
+      ⚠ 那个 5 秒的自动 `refresh()` 计时器**不碰** pending（否则会在进程飞行中闪回旧档一次）。
+      ② **CHARGE LIMIT 标题行右侧加 `now 75-80%`** 当前值读数（照抄 network 面板 `bandHeader` + 右侧
+      `Row` 的 `Item{width:parent.width}` + 左贴/右贴布局），不再只靠"哪颗亮着"去推断。
+      **顺带修一句旧注释**：代码里原来写"本机没有认证 agent"，实测不准（见下条）。
+    - **⚠ 真根因（2026-09-26 用户追问"功能是不是写反了 / 是 omarchy 的 charge limit 慢还是我的不准"时挖出来的）**：
+      `omarchy-battery-status` **优先读 UPower**（`upower -i` 的 `charge-*-threshold:` 两行），sysfs 只是**兜底**；
+      而 **UPower 这两个字段是设备建立时缓存、运行期不重读** —— 实测 `tlp setcharge 95 100` 之后 sysfs 立刻是
+      `100`，UPower 在 **45 秒内一直报 `80%`**，于是脚本照样输出 `threshold 75-80%`。
+      ⇒ 所以"点了 Full 但高亮没动 / 像写反了"**不是命令错，是读数陈旧**：sysfs 真的变了，面板读回来的还是旧值。
+      ⚠ 这也意味着**上一版"只加乐观高亮"会更糟**（亮一下再弹回旧档）—— 两处必须一起改。
+      - **修法**：把 `bin/omarchy-battery-status` 那两行改成 **sysfs 优先、UPower 兜底**（← 这个上游文件已进
+        补丁，是第 24 个文件；sysfs 读不到时不至于是空值）。**验证**：写入 95/100 后**同一秒**读
+        `omarchy-battery-status --shell` = `95-100%`，而同一刻 `upower -i` 仍 `80%`；还原 75/80 同理。
+      - ⚠ **`pkexec` 单趟耗时是飘的**：同一晚量到 **1.7 / 2.9 / 4.5 s**，后来同一条命令涨到 **~20 s**。
+        所以"慢"这件事不要按固定值记；乐观高亮就是为了不把手感绑在这个握手上。
+    - **"电池停在阈值之上"不是失准**：EC 只会**停止充电、不会主动放电**。用户切到 Full 会让充电重启，
+      切回 Protect 时包已经在阈值之上 ⇒ 停在 82%（当场实测它从 82 一路爬到 88；AC 在线而 `status=Not charging`
+      正说明阈值在生效）。想降回去只能让它放电。
+    - **补丁要跟着动**：`Panel.qml` 在覆盖层里 ⇒ 用同一份路径清单重导出
+      （`git diff -- <niri.patch 里那 24 个路径>`）⇒ **24 文件 / 62 → 72 hunk**，新 md5
+      `e6868080f48c5f7cd1711a22e163de86`（`--reverse --check` 通过；旧版 `4ec279cf…` 已退役）。
+      注意 `omarchy-niri-repatch` **只负责重放、不会重生成**补丁文件。
 
 ---
 

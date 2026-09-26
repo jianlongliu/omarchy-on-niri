@@ -1,3 +1,27 @@
+diff --git a/bin/omarchy-battery-status b/bin/omarchy-battery-status
+index cc0a602..0d044e2 100755
+--- a/bin/omarchy-battery-status
++++ b/bin/omarchy-battery-status
+@@ -62,11 +62,14 @@ power_rate=$(awk -v rate="${power_rate_raw:-0}" 'BEGIN {
+   print rounded
+ }')
+ state=$(awk '/state/ { print $2; exit }' <<<"$battery_info")
+-threshold_start=$(awk '/charge-start-threshold:/ { gsub(/%/, "", $2); print int($2); exit }' <<<"$battery_info")
+-threshold_end=$(awk '/charge-end-threshold:/ { gsub(/%/, "", $2); print int($2); exit }' <<<"$battery_info")
+-
+-[[ -z $threshold_end ]] && threshold_end=$(cat "$power_supply_path"/BAT*/charge_control_end_threshold 2>/dev/null | head -1)
+-[[ -z $threshold_start ]] && threshold_start=$(cat "$power_supply_path"/BAT*/charge_control_start_threshold 2>/dev/null | head -1)
++# sysfs first: UPower latches charge-*-threshold when it sets the device up and
++# never re-reads it, so its copy goes stale the moment anything calls
++# `tlp setcharge` — the panel then keeps showing (and lighting) the old pair.
++threshold_start=$(cat "$power_supply_path"/BAT*/charge_control_start_threshold 2>/dev/null | head -1)
++threshold_end=$(cat "$power_supply_path"/BAT*/charge_control_end_threshold 2>/dev/null | head -1)
++
++[[ -z $threshold_end ]] && threshold_end=$(awk '/charge-end-threshold:/ { gsub(/%/, "", $2); print int($2); exit }' <<<"$battery_info")
++[[ -z $threshold_start ]] && threshold_start=$(awk '/charge-start-threshold:/ { gsub(/%/, "", $2); print int($2); exit }' <<<"$battery_info")
+ 
+ ac_online=false
+ for supply in "$power_supply_path"/*; do
 diff --git a/bin/omarchy-launch-editor b/bin/omarchy-launch-editor
 index 8a69dab..2b66583 100755
 --- a/bin/omarchy-launch-editor
@@ -1086,10 +1110,104 @@ index bec3882..9878550 100644
            PanelSeparator {
              foreground: root.bar.foreground
 diff --git a/shell/plugins/panels/power/Panel.qml b/shell/plugins/panels/power/Panel.qml
-index b1c34da..168779c 100644
+index b1c34da..a46be0e 100644
 --- a/shell/plugins/panels/power/Panel.qml
 +++ b/shell/plugins/panels/power/Panel.qml
-@@ -277,8 +277,10 @@ Panel {
+@@ -18,6 +18,14 @@ Panel {
+   property var profiles: []
+   property string activeProfile: ""
+   property int profileIndex: 0
++  property int chargeLimitIndex: 0
++  // Set the moment a preset is clicked so the highlight moves before pkexec
++  // returns — the polkit round trip costs 2-4s on this machine, which made the
++  // button look unresponsive. refresh() on exit overwrites it with the value
++  // actually read back from sysfs, so a write that silently fails unlights it.
++  property int chargePendingIndex: -1
++  // Which picker the keyboard cursor sits in: 0 = power profile, 1 = charge limit.
++  property int focusSection: 0
+   property bool cursorActive: false
+   readonly property bool showPercentage: setting("showPercentage", false) === true
+   // With the percentage shown the button paints a text block wider than an
+@@ -47,6 +55,15 @@ Panel {
+     setProfile(profiles[profileIndex])
+   }
+ 
++  function selectChargeLimitByDelta(delta) {
++    chargeLimitIndex = Model.clampIndex(chargeLimitIndex + delta, chargeLimits.length)
++  }
++
++  function activateSelectedChargeLimit() {
++    if (chargeLimitIndex < 0 || chargeLimitIndex >= chargeLimits.length) return
++    setChargeLimit(chargeLimitIndex, chargeLimits[chargeLimitIndex])
++  }
++
+   function batteryIcon() {
+     var device = UPower.displayDevice
+     return Model.batteryIcon(device, root.discharging, upowerStates())
+@@ -61,6 +78,20 @@ Panel {
+     return Model.profileIcon(name)
+   }
+ 
++  // Charge-threshold presets, mapped onto TLP's START/STOP_CHARGE_THRESH_BAT0.
++  // Protect keeps the pack off the top and matches what /etc/tlp.conf ships;
++  // Full is a one-shot — tlp setcharge only writes the runtime sysfs values, so
++  // a TLP restart or a reboot falls back to the config file.
++  readonly property var chargeLimits: [
++    { label: "Protect", start: 75, stop: 80, icon: "󰁾" },
++    { label: "Full", start: 95, stop: 100, icon: "󰂅" }
++  ]
++
++  // What the battery is holding right now as "START-STOP" — omarchy-battery-status
++  // prints the threshold field as e.g. "75-80%". A hand-set pair matches neither
++  // preset, and then neither button lights up, which is the honest answer.
++  readonly property string currentChargeLimit: String(root.batteryInfo.threshold || "").replace("%", "")
++
+   readonly property bool fullyCharged: {
+     var device = UPower.displayDevice
+     return device && device.isPresent && device.state === UPowerDeviceState.FullyCharged && !root.chargeThresholdActive
+@@ -169,6 +200,18 @@ Panel {
+     actionProc.running = true
+   }
+ 
++  // pkexec so the sysfs write lands as root. It only returns without a prompt
++  // because /etc/polkit-1/rules.d/49-tlp.rules pre-authorises /usr/bin/tlp.
++  // Without that rule an unruled pkexec stalls here instead of prompting: the
++  // shell does register a polkit agent, but it fails to authenticate on this
++  // machine, so a stalled call never surfaces a password box.
++  function setChargeLimit(index, preset) {
++    if (!preset || actionProc.running) return
++    chargePendingIndex = index
++    actionProc.command = ["pkexec", "tlp", "setcharge", String(preset.start), String(preset.stop)]
++    actionProc.running = true
++  }
++
+   function togglePercentage() {
+     root.settings = Object.assign({}, root.settings, { showPercentage: !root.showPercentage })
+     if (root.bar && root.bar.shell) root.bar.shell.updateEntryInline(root.moduleName, root.settings)
+@@ -196,6 +239,10 @@ Panel {
+       var idx = profiles.indexOf(activeProfile)
+       profileIndex = idx >= 0 ? idx : 0
+       cursorActive = false
++      focusSection = 0
++      // A reopened panel always states the truth, even if a click's pkexec
++      // never returned (then the pending mark would otherwise still be shown).
++      chargePendingIndex = -1
+     }
+   }
+ 
+@@ -225,7 +272,10 @@ Panel {
+ 
+   Process {
+     id: actionProc
+-    onExited: root.refresh()
++    onExited: {
++      root.chargePendingIndex = -1
++      root.refresh()
++    }
+   }
+ 
+   Timer { interval: 5000; running: root.opened; repeat: true; onTriggered: root.refresh() }
+@@ -277,8 +327,10 @@ Panel {
      id: button
      anchors.fill: parent
      bar: root.bar
@@ -1101,6 +1219,126 @@ index b1c34da..168779c 100644
        : root.batteryIcon()
      slotSize: Style.bar.iconSlot * (root.showPercentage && !vertical ? 2 : 1)
      tooltipText: ""
+@@ -302,12 +354,22 @@ Panel {
+     PanelKeyCatcher {
+       id: keyCatcher
+       anchors.fill: parent
++      // Vertical moves hop between the two pickers; horizontal moves walk the
++      // buttons inside whichever picker currently holds the cursor.
+       onMoveRequested: function(dx, dy) {
+         if (!root.cursorActive) { root.cursorActive = true; return }
+-        if (dx !== 0) root.selectProfileByDelta(dx)
+-        else if (dy !== 0) root.selectProfileByDelta(dy)
++        if (dy !== 0) {
++          root.focusSection = root.focusSection === 0 ? 1 : 0
++        } else if (dx !== 0) {
++          if (root.focusSection === 0) root.selectProfileByDelta(dx)
++          else root.selectChargeLimitByDelta(dx)
++        }
++      }
++      onActivateRequested: {
++        if (!root.cursorActive) return
++        if (root.focusSection === 0) root.activateSelectedProfile()
++        else root.activateSelectedChargeLimit()
+       }
+-      onActivateRequested: if (root.cursorActive) root.activateSelectedProfile()
+       onCloseRequested: root.close()
+       onTabRequested: function(direction) { root.switchPanel(direction) }
+ 
+@@ -491,7 +553,7 @@ Panel {
+                 verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
+                 bordered: true
+                 active: root.activeProfile === modelData
+-                hasCursor: root.cursorActive && root.profileIndex === index
++                hasCursor: root.cursorActive && root.focusSection === 0 && root.profileIndex === index
+                 onClicked: root.setProfile(modelData)
+                 onHovered: function(h) {
+                   if (h) {
+@@ -503,6 +565,84 @@ Panel {
+             }
+           }
+         }
++
++        // ---------- Charge limit picker ----------
++        PanelSeparator {
++          foreground: root.bar.foreground
++        }
++
++        Column {
++          width: parent.width
++          spacing: Style.space(10)
++
++          // Header plus a right-aligned readout of what the pack is actually
++          // holding, so the section states the current value itself instead of
++          // leaving it to be inferred from which button is lit.
++          Item {
++            width: parent.width
++            implicitHeight: Math.max(chargeHeader.implicitHeight, chargeNow.implicitHeight)
++
++            PanelSectionHeader {
++              id: chargeHeader
++              text: "CHARGE LIMIT"
++              foreground: root.bar.foreground
++              fontFamily: root.bar.fontFamily
++              anchors.left: parent.left
++              anchors.verticalCenter: parent.verticalCenter
++            }
++
++            Text {
++              id: chargeNow
++              text: "now " + (root.batteryInfo.threshold || "—")
++              color: chargeHeader.color
++              font.family: chargeHeader.font.family
++              font.pixelSize: chargeHeader.font.pixelSize
++              font.bold: true
++              anchors.right: parent.right
++              anchors.verticalCenter: parent.verticalCenter
++            }
++          }
++
++          Row {
++            id: chargeRow
++            width: parent.width
++            spacing: Style.space(6)
++
++            readonly property real cellWidth: root.chargeLimits.length > 0
++              ? (width - spacing * (root.chargeLimits.length - 1)) / root.chargeLimits.length
++              : 0
++
++            Repeater {
++              model: root.chargeLimits
++              Button {
++                required property var modelData
++                required property int index
++                width: chargeRow.cellWidth
++                iconText: modelData.icon
++                iconSize: Style.font.title
++                text: modelData.label + " " + modelData.stop + "%"
++                fontSize: Style.font.bodySmall
++                foreground: root.bar.foreground
++                fontFamily: root.bar.fontFamily
++                horizontalPadding: Style.spacing.controlPaddingX
++                verticalPadding: Style.spacing.controlPaddingY + Style.space(2)
++                bordered: true
++                active: root.chargePendingIndex >= 0
++                  ? root.chargePendingIndex === index
++                  : root.currentChargeLimit === (modelData.start + "-" + modelData.stop)
++                hasCursor: root.cursorActive && root.focusSection === 1 && root.chargeLimitIndex === index
++                onClicked: root.setChargeLimit(index, modelData)
++                onHovered: function(h) {
++                  if (h) {
++                    root.cursorActive = true
++                    root.focusSection = 1
++                    root.chargeLimitIndex = index
++                  }
++                }
++              }
++            }
++          }
++        }
+       }
+     }
+   }
 diff --git a/shell/services/AppLibrary.qml b/shell/services/AppLibrary.qml
 index 738529d..460565c 100644
 --- a/shell/services/AppLibrary.qml

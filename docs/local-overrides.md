@@ -75,7 +75,7 @@
 | `default/omarchy/omarchy-menu.jsonc` | `install.package`/`install.aur`/`remove.package` 的 `xdg-terminal-exec` 回退 | 随仓库/覆盖层 |
 | `docs/` | `INSTALL{,.zh}.md` + **主文档 `omarchy-on-niri-port.md`（当前事实 + 映射表）** + 模块卷 `visual/behavior/plugins/shims/upstream/migration/lock/local-overrides`（编号沿用原号），**正本就在 `docs/`** | 直接改 `docs/`，无第二副本 |
 
-- 覆盖层实际内容：**23 文件 / 62 hunk**（`--reverse --check` 通过、repatch 幂等）；**md5 `4ec279cf7f4e6a3294fd36518c43ff6d`**
+- 覆盖层实际内容：**24 文件 / 72 hunk**（`--reverse --check` 通过、repatch 幂等）；**md5 `e6868080f48c5f7cd1711a22e163de86`**
   （2026-09-26 重导出核，与 `~/.config/omarchy/niri-port/niri.patch` 逐字节一致；本次新增
   `shell/plugins/panels/monitor/Panel.qml` 的**分辨率滑块** —— 22→23 文件、48→62 hunk）。
   版本链（只留 md5，明细在各自卷）：`ef920a66ece784dfc207c7c87c479f5b`（2026-09-23，加菜单 `style.avatar.*` 三行，`docs/lock.md` §11.29）
@@ -243,7 +243,8 @@
 | `/etc/systemd/logind.conf.d/20-inhibit-delay.conf` | `[Login] InhibitDelayMaxSec=15`（2026-09-21 装，用户拍板）：`omarchy-sleep-lock.service` 的延迟抑制剂窗口上限，给"合盖→锁"留 ~12s 预算（不装只有默认 5s ⇒ 4s 预算）。源件是上游 `$OMARCHY_PATH/etc/systemd/logind.conf.d/20-inhibit-delay.conf`，逐字照抄 | `pkexec rm /etc/systemd/logind.conf.d/20-inhibit-delay.conf && systemctl reload systemd-logind`（**改前本机没有这个文件**；同目录另有更早的 `lid-suspend.conf`，三档合盖都设 `suspend`，2026-05-19 装机写入） |
 | `/etc/tlp.conf` | **`CPU_BOOST_ON_SAV` 0 → 1**（2026-09-24，用户要求"powersave 也带上睿频"）：TLP 1.10 里 `PP_SAV` 映射 `*_ON_SAV`，默认不让 power-saver 睿频。同批实测的"两档差异""空转项""`tlp ac/bat` manual_mode 坑""`tlp.d` 覆盖不了本文件"四条都记在 `docs/behavior.md` 的「电池面板 POWER PROFILE 区为空」一条里 | 备份与原件**同目录**：`pkexec cp /etc/tlp.conf.bak-20260924 /etc/tlp.conf && sudo tlp start` |
 | `/usr/bin/omarchy-theme-set-browser-policy` | **换主题时把色值写进浏览器策略目录的 root 半身**（2026-09-24 装，修 `behavior.md` §8 第 20 条）：本机 `/usr/bin` 里**原本没有任何 `omarchy-*`**（dev-link 装机把命令都留在 `~/.local/share/omarchy/bin`），而脚本 `PACKAGED_PATH` 写死这个名字 ⇒ 提权目标不存在，换主题必失败。这里装的是 `$OMARCHY_PATH/bin/omarchy-theme-set-browser-policy` 的**root 属主副本**（`install -m 0755 -o root -g root`），**不是指回用户可写树的软链** —— 规则放行的路径若能被普通用户改写就等于无密码 root | `pkexec rm /usr/bin/omarchy-theme-set-browser-policy`（**改前本机没有这个文件**）。**上游改了那个脚本要重跑同一条 `install`**，`omarchy update` 不会刷新它 |
-| `/etc/sudoers.d/omarchy-theme-browser` | 上游那条 NOPASSWD 规则，逐字照抄（`%wheel … NOPASSWD: /usr/bin/omarchy-theme-set-browser-policy` + 六个 `[0-9a-f]`）：菜单换主题时没有终端承接密码提示，而本机**没有 polkit agent UI**（`pkexec` 只在认证缓存热着时才过）⇒ 不放行就等于浏览器主题色永远不更新。装前 `pkexec visudo -cf <源件>` 验过 parsed OK，装后模式 0440 root:root | `pkexec rm /etc/sudoers.d/omarchy-theme-browser`（**改前本机没有这个文件**）。⚠ 同目录 `fprint-timer` 权限不是 0440（sudo 会整份忽略它）—— 与本条无关，别顺手改 |
+| `/etc/sudoers.d/omarchy-theme-browser` | 上游那条 NOPASSWD 规则，逐字照抄（`%wheel … NOPASSWD: /usr/bin/omarchy-theme-set-browser-policy` + 六个 `[0-9a-f]`）：菜单换主题时没有终端承接密码提示，而本机**没有可用的 polkit agent UI**（见下一条的更正：壳层注册了 agent，但认证实际失败 ⇒ `pkexec` 只在认证缓存热着时才过）⇒ 不放行就等于浏览器主题色永远不更新。装前 `pkexec visudo -cf <源件>` 验过 parsed OK，装后模式 0440 root:root | `pkexec rm /etc/sudoers.d/omarchy-theme-browser`（**改前本机没有这个文件**）。⚠ 同目录 `fprint-timer` 权限不是 0440（sudo 会整份忽略它）—— 与本条无关，别顺手改 |
+| `/etc/polkit-1/rules.d/49-tlp.rules` | **放行 `/usr/bin/tlp` 的 pkexec**（2026-09-26 装，为电池面板新增的 CHARGE LIMIT 档位写入，见 `behavior.md` §8 第 38 条）：`org.freedesktop.policykit.exec` + `action.lookup("program") == "/usr/bin/tlp"` + `subject.isInGroup("wheel")` → `polkit.Result.YES`。**rule 窄到只认这一个程序**。为什么必须放行：本机从终端裸跑 `pkexec`（无匹配规则）会**永久挂住**（`exit=124`，polkitd 记 `FAILED to authenticate … unix-process:unknown`）；放行之后每次调用仍要付 **1.7–4.5 s 的 polkit 握手**（`tlp` 本体只 87 ms，所以慢的是握手不是 TLP），面板为此做了乐观高亮。⚠ **更正旧结论**：`journalctl -t omarchy-shell` 里有 `omarchy polkit agent registered` ⇒ 壳层**确实注册了自己的 polkit agent**（旧稿写"本机没有 polkit agent"是不准的）；但它实测 `FAILED to authenticate`（弹不出可用密码框），所以"得靠规则/缓存"这个结论不变。⚠ 诊断坑：**polkit 127 不认 `pkexec`/polkitd 的 `--debug`**（正确是 `--log-level=debug`），加错曾把 polkitd 拖进 `start-limit-hit` 重启循环，且无免密 sudo 时自己撤不掉 | `pkexec rm /etc/polkit-1/rules.d/49-tlp.rules`（**改前本机没有这个文件**；本机 `/etc/polkit-1/rules.d/` 下原有的是别的规则）。删掉后充电档位按钮会卡住不返回，面板其余功能不受影响 |
 | `/usr/lib/firmware/edid/CSO1411.bin`（+ `/etc/kernel/cmdline` 的 `drm.edid_firmware=eDP-1:edid/CSO1411.bin`、`/etc/mkinitcpio.conf` 的 `FILES=(… /lib/firmware/edid/CSO1411.bin …)`） | **面板 EDID 覆盖件**（256 B = base + CTA 扩展）。`pacman -Qo` 查过**无包拥有**（包升级不会覆盖）；靠 `FILES=` 打进 initramfs、靠 cmdline 在 i915 之前加载 ⇒ **改动后必须 `pkexec mkinitcpio -P` + 重启**才生效（本机 systemd-boot + UKI + Secure Boot，**没有**"启动菜单里临时删参数"这条路）。**2026-09-26 逐字节核过**：现行件（md5 `bd15a152…`）相对 `/data/App/firmware/CSO1411.bin.backup.20260722_235519`（`6ad0583a…`）**只差 19 字节**，全在 base 块描述符区 —— ① 加了一条 **DTD2 = 2560×1600@59.97**（`cvt -r` 268.5 MHz，"均衡档"那条模式）② 水平范围从 **149–149 kHz 放宽到 80–250 kHz**（旧件把行频钉死在 4K 那一条上；不放宽则任何自定义模式都判不合法）③ 描述符区重排 + 校验和。CTA 块（HDR 静态元数据 / AMD FreeSync 40–60）逐字节相同。⚠ **存疑**：用户记得注入件是"强制 8bit 色深"，但**两份 base 的"每通道位深"字段都写着 8bpc**（原厂原始值机器上已无副本可查）⇒ "注入 EDID = 钉 8bpc"在字节层面**没有证据**，别当结论用；"10bpc 花屏"本身是用户实测事实 | `pkexec cp ~/.local/state/backups/usr/lib/firmware/edid/CSO1411.bin.bak-20260926 /usr/lib/firmware/edid/CSO1411.bin && pkexec mkinitcpio -P`，重启生效（备份 2026-09-26 补的，与在用件同 md5；`/data/App/firmware/` 另有两份**旧件**副本，拿它回退会丢掉 DTD2 那条 1600p 模式）。屏幕万一黑：Ctrl+Alt+F3 进 TTY，走同一条 `cp` + `mkinitcpio -P` + 重启 |
 
 - 换主题/壁纸后同步到登录页：`sudo split-greeter-sync "$USER"`（还有实验账户时要一起列）。
@@ -270,7 +271,7 @@
 
 - `~/.local/state/omarchy/toggles/screensaver-off` = **screensaver 禁用 flag**（用户明确要关，别恢复）。
 - `~/.local/share/omarchy` = `$OMARCHY_PATH`，**工作区里有非移植改动**（2026-09-20 核：`git status` 265 条，
-  主要是主题删除）→ **重生成 `niri.patch` 必须限路径**，否则 23 文件会膨胀成 250+：
+  主要是主题删除）→ **重生成 `niri.patch` 必须限路径**，否则 24 文件会膨胀成 250+：
 
 ```bash
 # 重生成（在 $OMARCHY_PATH 里跑；路径表取自旧 patch）

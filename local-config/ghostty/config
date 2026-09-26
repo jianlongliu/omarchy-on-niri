@@ -2,7 +2,7 @@
 # font-family = FiraCode Nerd Font Mono
 font-family = SFMono Nerd Font
 font-family = Microsoft YaHei
-font-size = 9
+font-size = 10
 
 # Window Configuration
 window-decoration = false
