@@ -27,6 +27,24 @@ Panel {
   property var displays: []
   property int enabledDisplayCount: 0
 
+  // Resolution tiers for the internal panel, straight from
+  // `omarchy-niri-monitor-modes list` -- the single source of truth for this
+  // machine's modelines (see docs/local-overrides.md §4). Switching resolution on
+  // niri means injecting a `modeline` plus the tier's scale, so the slider drives
+  // that CLI instead of `hyprctl keyword monitor`, which the port's shim treats as a
+  // no-op for modes. The tier you pick is also written to monitor.kdl, so what you
+  // switch to is what you boot into; resolutionBoot is that persisted value, kept
+  // here only to witness that the write landed.
+  property var resolutionTiers: []
+  property string resolutionBoot: ""
+  property int resolutionPreviewIndex: -1
+
+  // Tier in effect, derived from the live mode rather than polled.
+  readonly property string resolutionCurrentId: {
+    var index = activeResolutionIndex()
+    return index >= 0 ? String(resolutionTiers[index].id) : ""
+  }
+
   // Carry sub-notch touchpad deltas between wheel events.
   property real wheelAccumulator: 0
 
@@ -37,11 +55,19 @@ Panel {
   //   "scale"      - 6 Button scale presets; treated as a single
   //                  horizontal row from j/k's perspective. h/l moves
   //                  between presets, identical to bluetooth's header.
+  //   "resolution" - lone slider over this machine's panel tiers, h/l steps it;
+  //                  same shape as text size, and it applies the tier's own scale.
   //   "monitors"   - vertical display row list for enabling/disabling displays;
   //                  j/k walks each row.
   // Mouse hover on a target updates root state via the components' `hovered`
   // signal so keyboard cursor and pointer share one highlight.
-  readonly property var scalePresets: ["1", "1.25", "1.6", "2", "3", "4"]
+  // Resolution tiers are documented in pairs (docs/local-overrides.md §4), so the
+  // presets carry those scales: 1.25 / 1.6 / 1.8 / 2 ride the four custom modelines
+  // and 2.25 is the native tier's. `availableScales` snaps each one to a value that
+  // divides the mode cleanly and the notch label prints that effective value, so what
+  // the row shows is what niri gets -- e.g. 2.25 reads "2.4x" on the 4K mode (which
+  // lands on the same 1600x1000 desktop as the others) and 1.8 stays exact at 2880.
+  readonly property var scalePresets: ["1", "1.25", "1.6", "1.8", "2", "2.25", "3", "4"]
   readonly property var scaleValues: {
     for (var i = 0; i < displays.length; i++) {
       var display = displays[i]
@@ -76,6 +102,7 @@ Panel {
     var list = []
     if (brightnessAvailable) list.push("brightness")
     list.push("textsize")
+    if (resolutionTiers.length > 0) list.push("resolution")
     list.push("scale")
     if (displays.length > 1) list.push("monitors")
     return list
@@ -84,18 +111,21 @@ Panel {
   function sectionCount(section) {
     if (section === "brightness") return 0  // only the slider sentinel at -1
     if (section === "textsize") return 0    // slider sentinel at -1, like brightness
+    if (section === "resolution") return 0  // slider sentinel at -1, like text size
     if (section === "scale") return scaleValues.length
     if (section === "monitors") return displays.length
     return 0
   }
 
   function sectionIsSingleRow(section) {
-    // brightness and text size are lone sliders; scale presets sit horizontally.
-    return section === "brightness" || section === "textsize" || section === "scale"
+    // brightness, text size and resolution are lone sliders; scale presets sit
+    // horizontally.
+    return section === "brightness" || section === "textsize"
+      || section === "resolution" || section === "scale"
   }
 
   function sectionFirstIndex(section) {
-    if (section === "brightness" || section === "textsize") return -1
+    if (section === "brightness" || section === "textsize" || section === "resolution") return -1
     return 0
   }
 
@@ -168,9 +198,12 @@ Panel {
     }
     var count = sectionCount(focusSection)
     if (sectionIsSingleRow(focusSection)) {
-      // brightness/text size use the -1 sentinel; scale clamps into the presets.
-      if (focusSection === "brightness" || focusSection === "textsize") selectedIndex = -1
-      else if (selectedIndex < 0 || selectedIndex >= count) selectedIndex = 0
+      // brightness/text size/resolution use the -1 sentinel; scale clamps into the presets.
+      if (focusSection === "scale") {
+        if (selectedIndex < 0 || selectedIndex >= count) selectedIndex = 0
+      } else {
+        selectedIndex = -1
+      }
       return
     }
     if (count === 0) {
@@ -213,6 +246,9 @@ Panel {
       brightnessAvailable: root.brightnessAvailable,
       focusedMonitor: root.focusedMonitor,
       scale: root.monitorScale,
+      resolution: root.resolutionCurrentId,
+      resolutionBoot: root.resolutionBoot,
+      resolutionTiers: root.resolutionTiers,
       displays: root.displays
     })
   }
@@ -222,6 +258,9 @@ Panel {
 
     function brightness(percent: string): string { return root.brightnessIpc(percent) }
     function state(): string { return root.stateIpc() }
+    // Same entry point the slider uses, for scripts and the menu: takes a tier id
+    // from `omarchy-niri-monitor-modes list` and applies + persists it.
+    function resolution(tier: string): string { return root.resolutionIpc(tier) }
     function open() { root.open() }
     function close() { root.close() }
     function toggle() { root.toggle() }
@@ -309,6 +348,91 @@ Panel {
     if (!actionProc.running) actionProc.running = true
   }
 
+  // ---- Resolution (this panel's modeline tiers, via one CLI) ----
+
+  function focusedDisplay() {
+    for (var i = 0; i < displays.length; i++) {
+      var display = displays[i]
+      if (display && display.focused) return display
+    }
+    return null
+  }
+
+  // Which tier is on screen right now, matched on the live mode's pixel geometry
+  // (the shim reports Hyprland-shaped width/height, i.e. mode pixels, not logical).
+  function activeResolutionIndex() {
+    var display = focusedDisplay()
+    if (!display || resolutionTiers.length === 0) return -1
+    for (var i = 0; i < resolutionTiers.length; i++) {
+      var tier = resolutionTiers[i]
+      if (tier && tier.width === display.width && tier.height === display.height) return i
+    }
+    return -1
+  }
+
+  // While a switch is in flight the pending tier owns the label and the knob, same
+  // as the text-size slider's preview index.
+  function resolutionIndexForPreview() {
+    if (resolutionPreviewIndex >= 0 && resolutionPreviewIndex < resolutionTiers.length)
+      return resolutionPreviewIndex
+    var index = activeResolutionIndex()
+    return index >= 0 ? index : 0
+  }
+
+  // Just the tier's name. The scale a tier pairs with is applied on switch anyway, and the
+  // live value is the SCALE row's job -- it stays right even when the scale is then tweaked
+  // by hand, which a static pairing figure printed here could not.
+  function resolutionLabel(index) {
+    if (index < 0 || index >= resolutionTiers.length) return ""
+    return String(resolutionTiers[index].label)
+  }
+
+  // The CLI applies the tier now and writes it into monitor.kdl, so one click is
+  // "this is my resolution" for good. Re-picking the tier only counts as a no-op
+  // when it is also what boots, otherwise a runtime-only switch could never be
+  // promoted.
+  function setResolution(index) {
+    if (index < 0 || index >= resolutionTiers.length) return
+    var tier = resolutionTiers[index]
+    if (!tier) return
+    resolutionPreviewIndex = index
+    var id = String(tier.id)
+    if (id === resolutionCurrentId && id === resolutionBoot && !resolutionProc.running) {
+      resolutionPreviewIndex = -1
+      return
+    }
+    resolutionProc.command = ["omarchy-niri-monitor-modes", "set", id]
+    if (!resolutionProc.running) resolutionProc.running = true
+  }
+
+  function stepResolution(delta) {
+    if (resolutionTiers.length === 0) return
+    var index = resolutionIndexForPreview() + delta
+    if (index < 0) index = 0
+    if (index > resolutionTiers.length - 1) index = resolutionTiers.length - 1
+    setResolution(index)
+  }
+
+  function refreshResolution() {
+    if (!resolutionStateProc.running) resolutionStateProc.running = true
+  }
+
+  function resolutionIpc(tier) {
+    for (var i = 0; i < resolutionTiers.length; i++) {
+      if (String(resolutionTiers[i].id) !== String(tier)) continue
+      setResolution(i)
+      return "ok"
+    }
+    return "unknown tier: " + tier
+  }
+
+  // Drop the preview once the mode list agrees with the tier we asked for.
+  function clearResolutionPreviewIfSettled() {
+    if (resolutionPreviewIndex < 0) return
+    var index = activeResolutionIndex()
+    if (index === resolutionPreviewIndex) resolutionPreviewIndex = -1
+  }
+
   // ---- Text size (shell base font + GTK text-scaling, via one CLI) ----
   function nearestTextStop(px) {
     var best = 0
@@ -349,7 +473,10 @@ Panel {
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
-  Component.onCompleted: refresh()
+  Component.onCompleted: {
+    refresh()
+    refreshResolution()
+  }
 
   // KeyboardPanel primes focus at open-time, so SUPER-bound IPC summons land
   // with j/k ready to navigate. Keep a default landing point, but don't paint
@@ -357,6 +484,7 @@ Panel {
   onOpenedChanged: {
     if (opened) {
       refresh()
+      refreshResolution()
       if (brightnessAvailable) {
         focusSection = "brightness"
         selectedIndex = -1
@@ -369,7 +497,10 @@ Panel {
   }
 
   onBrightnessAvailableChanged: clampCursor()
-  onDisplaysChanged: clampCursor()
+  onDisplaysChanged: {
+    clampCursor()
+    clearResolutionPreviewIfSettled()
+  }
   onScaleValuesChanged: clampCursor()
   onVisibleSectionsChanged: clampCursor()
 
@@ -433,6 +564,43 @@ Panel {
     id: actionProc
     stdout: StdioCollector { waitForEnd: true }
     onRunningChanged: if (!running) root.refresh()
+  }
+
+  // The panel's own tier table, read once on open (and after a write). The tier in
+  // effect is derived from the display geometry instead of polled: a mode change
+  // lands in `displays` through the regular state refresh, so there is nothing here
+  // to keep in sync.
+  Process {
+    id: resolutionStateProc
+    command: ["omarchy-niri-monitor-modes", "list"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var parsed = null
+        try {
+          parsed = JSON.parse(String(text || ""))
+        } catch (e) {
+          parsed = null
+        }
+        if (!parsed || !parsed.tiers) return
+        root.resolutionTiers = parsed.tiers
+        root.resolutionBoot = String(parsed.boot || "")
+        root.clearResolutionPreviewIfSettled()
+        root.clampCursor()
+      }
+    }
+  }
+
+  Process {
+    id: resolutionProc
+    stdout: StdioCollector { waitForEnd: true }
+    onRunningChanged: {
+      if (running) return
+      root.clearResolutionPreviewIfSettled()
+      root.refresh()
+      // `set` also rewrites monitor.kdl, so re-read which tier is persisted.
+      root.refreshResolution()
+    }
   }
 
   // Applies text size via the CLI, which rewrites the shell override file;
@@ -500,6 +668,7 @@ Panel {
         else if (dx !== 0) {
           if (root.focusSection === "brightness") root.adjustBrightness(dx * 5)
           else if (root.focusSection === "textsize") root.adjustTextSize(dx)
+          else if (root.focusSection === "resolution") root.stepResolution(dx)
           else if (root.focusSection === "scale") root.moveCursorH(dx)
         }
       }
@@ -531,6 +700,7 @@ Panel {
 
             Text {
               id: heroIcon
+              textFormat: Text.PlainText
               text: root.displays.length > 1 ? "󰍺" : "󰍹"
               color: root.bar.foreground
               font.family: root.bar.fontFamily
@@ -559,6 +729,7 @@ Panel {
 
               Text {
                 id: heroLabel
+                textFormat: Text.PlainText
                 text: {
                   if (root.brightnessAvailable) {
                     return root.brightnessName(brightnessSlider.dragging ? brightnessSlider.liveValue : root.brightnessPercent).toUpperCase()
@@ -602,6 +773,7 @@ Panel {
 
               Text {
                 id: brightnessPercent
+                textFormat: Text.PlainText
                 text: Math.round(brightnessSlider.dragging ? brightnessSlider.liveValue : root.brightnessPercent) + "%"
                 color: Qt.darker(root.bar.foreground, 1.4)
                 font.family: root.bar.fontFamily
@@ -674,6 +846,7 @@ Panel {
 
               Text {
                 id: textSizePx
+                textFormat: Text.PlainText
                 text: (textSizeSlider.dragging
                        ? root.textSizeStops[Math.round(textSizeSlider.liveValue)]
                        : root.displayedTextPx()) + "px"
@@ -721,6 +894,86 @@ Panel {
             }
           }
 
+          // ---------- Resolution ----------
+          // Same shape as TEXT SIZE: a notched slider over a fixed table, applying
+          // on release (each notch is a full modeset, so dragging must not fire one
+          // per pixel). The tier's own scale rides along -- 3200x2000@2.0,
+          // 2880x1800@1.8 and 2560x1600@1.6 all land on a 1600x1000 logical desktop --
+          // and the pick is written to monitor.kdl, so it is also the boot value.
+          PanelSeparator {
+            visible: root.resolutionTiers.length > 0
+            foreground: root.bar.foreground
+          }
+
+          Column {
+            visible: root.resolutionTiers.length > 0
+            width: parent.width
+            spacing: Style.space(6)
+
+            Item {
+              width: parent.width
+              implicitHeight: Math.max(resolutionHeader.implicitHeight, resolutionValue.implicitHeight)
+
+              PanelSectionHeader {
+                id: resolutionHeader
+                text: "RESOLUTION"
+                foreground: root.bar.foreground
+                fontFamily: root.bar.fontFamily
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+              }
+
+              Text {
+                id: resolutionValue
+                textFormat: Text.PlainText
+                text: root.resolutionLabel(resolutionSlider.dragging
+                                           ? Math.round(resolutionSlider.liveValue)
+                                           : root.resolutionIndexForPreview())
+                color: Qt.darker(root.bar.foreground, 1.4)
+                font.family: root.bar.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+                anchors.right: parent.right
+                anchors.rightMargin: Style.space(6)
+                anchors.verticalCenter: parent.verticalCenter
+              }
+            }
+
+            CursorSurface {
+              id: resolutionRow
+              width: parent.width
+              height: resolutionSlider.implicitHeight + Style.spacing.controlGap
+              hasCursor: root.cursorActive && root.focusSection === "resolution" && root.selectedIndex === -1
+              onHasCursorChanged: if (hasCursor) root.ensureCursorVisible(resolutionRow)
+              foreground: root.bar.foreground
+              outline: true
+
+              PanelSlider {
+                id: resolutionSlider
+                bar: root.bar
+                anchors.fill: parent
+                anchors.leftMargin: Style.space(6)
+                anchors.rightMargin: Style.space(6)
+                minimum: 0
+                maximum: Math.max(0, root.resolutionTiers.length - 1)
+                step: 1
+                integer: true
+                tickCount: root.resolutionTiers.length
+                value: root.resolutionIndexForPreview()
+                onReleased: function(v) { root.setResolution(Math.round(v)) }
+              }
+
+              HoverHandler {
+                onHoveredChanged: if (hovered && !root.reflowingText) {
+                  root.cursorActive = true
+                  root.focusSection = "resolution"
+                  root.selectedIndex = -1
+                }
+              }
+            }
+
+          }
+
           // ---------- Scale ----------
           PanelSeparator {
             foreground: root.bar.foreground
@@ -747,6 +1000,7 @@ Panel {
               // focused one.
               Text {
                 id: scaleMonitor
+                textFormat: Text.PlainText
                 text: root.focusedMonitor
                 // Only worth naming when more than one display is in play.
                 visible: root.focusedMonitor !== "" && root.enabledDisplayCount > 1
@@ -887,6 +1141,7 @@ Panel {
       }
 
       Text {
+        textFormat: Text.PlainText
         text: monitorRow.display.name + (monitorRow.display.focused ? " · focused" : "")
         color: root.bar.foreground
         font.family: root.bar.fontFamily
@@ -897,6 +1152,7 @@ Panel {
       }
 
       Text {
+        textFormat: Text.PlainText
         text: monitorRow.display.enabled ? "󰄬" : ""
         color: root.bar.foreground
         font.family: root.bar.fontFamily

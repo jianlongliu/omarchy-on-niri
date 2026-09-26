@@ -1,0 +1,342 @@
+#!/bin/bash
+
+# omarchy:summary=List, apply, and persist the internal panel's resolution tier (niri port)
+# omarchy:args=[status|list|current|boot|set <tier>|set-runtime <tier>|set-boot <tier> [--dry-run]]
+# omarchy:group=monitor
+#
+# The bar's Display panel SCALE row switches `scale` only. Resolution lives on a
+# different axis that niri has no IPC for: the panel's timing has to be injected as
+# a `modeline`, because the EDID override shipped on this machine carries exactly two
+# DTDs (3840x2400 native, which the kernel exposes, and a 2560x1600 DTD2 that
+# edid-decode rejects for "invalid detailed timing descriptor ordering" and the kernel
+# never offers -- see docs/local-overrides.md §4/§5). So the five tiers below are the
+# single source of truth for this machine's panel, and both the panel slider and this
+# CLI read them from here.
+#
+# Two facts drive the design:
+#   * a runtime `niri msg output … modeline` is not persisted, and niri keeps a single
+#     user-defined mode per output -- injecting one replaces the previous one, so the
+#     config's `modeline` line is *not* what is on screen after a switch. `set`
+#     therefore does both: apply it now and write the same tier into monitor.kdl, so
+#     what you switch to is what you boot into. `set-runtime` skips the write.
+#   * `scale` is free (docs §4): it never changes sharpness, only logical size. Each
+#     tier carries the scale that makes it the documented pairing, and `set` applies
+#     both so the logical desktop does not jump (3200x2000@2.0, 2880x1800@1.8,
+#     2560x1600@1.6 all land on 1600x1000).
+#
+# Never write a `mode` line into monitor.kdl: niri rebuilds the mode list from the
+# first output block and does not recreate a custom timing on reload, so naming the
+# custom mode drops the panel to the 3840x2400 preferred mode (measured 2026-09-24).
+
+set -uo pipefail
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy"
+LOG="$STATE_DIR/monitor-modes.log"
+NIRI_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/niri"
+MONITOR_KDL="$NIRI_CONFIG_DIR/monitor.kdl"
+BACKUP_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/backups/.config/niri"
+REPO_MIRROR="${OMARCHY_NIRI_REPO:-$HOME/Projects/omarchy-on-niri}/niri-config/local/monitor.kdl"
+# The native tier is the EDID's DTD1; niri names it by geometry + refresh rate.
+NATIVE_MODE="3840x2400@60.000"
+
+# id|label|width|height|scale|modeline (empty modeline == the EDID's native timing)
+TIERS=(
+  '4k|3840×2400|3840|2400|2.4|'
+  '3200x2000|3200×2000|3200|2000|2.0|414.50 3200 3248 3280 3360 2000 2003 2009 2057 +hsync -vsync'
+  '2880x1800|2880×1800|2880|1800|1.8|337.50 2880 2928 2960 3040 1800 1803 1809 1852 +hsync -vsync'
+  '2560x1600|2560×1600|2560|1600|1.6|268.50 2560 2608 2640 2720 1600 1603 1609 1646 +hsync -vsync'
+  '1920x1200|1920×1200|1920|1200|1.25|154.00 1920 1968 2000 2080 1200 1203 1209 1235 +hsync -vsync'
+)
+
+usage() {
+  cat >&2 <<'EOF'
+Usage: omarchy-niri-monitor-modes [status|list|current|boot]
+       omarchy-niri-monitor-modes set <tier>            # apply now + make it the boot value
+       omarchy-niri-monitor-modes set-runtime <tier>    # apply now only
+       omarchy-niri-monitor-modes set-boot <tier> [--dry-run]
+Tiers: 4k 3200x2000 2880x1800 2560x1600 1920x1200
+EOF
+  exit 1
+}
+
+tier_field() {  # <tier-id> <field 1..5> -> field value, exit 1 if unknown
+  local id="$1" field="$2" tier
+  for tier in "${TIERS[@]}"; do
+    [[ ${tier%%|*} == "$id" ]] || continue
+    cut -d'|' -f"$field" <<<"$tier"
+    return 0
+  done
+  return 1
+}
+
+# name<TAB>width<TAB>height<TAB>scale, blanks when the output is off or absent.
+# The internal panel wins; a single other output is used as-is so the slider is not
+# dead on a machine whose only display is external.
+read_state() {
+  python3 - <<'PY' "$(niri msg --json outputs 2>/dev/null)"
+import json, re, sys
+try:
+    outs = json.loads(sys.argv[1])
+except Exception:
+    sys.exit(1)
+internal = sorted(n for n in outs if re.match(r'^(eDP|LVDS|DSI)-', n))
+name = internal[0] if internal else (next(iter(outs)) if len(outs) == 1 else "")
+o = outs.get(name) or {}
+logical = o.get("logical") or {}
+modes = o.get("modes") or []
+idx = o.get("current_mode")
+cur = modes[idx] if isinstance(idx, int) and 0 <= idx < len(modes) else {}
+print("%s\t%s\t%s\t%s" % (name, cur.get("width", ""), cur.get("height", ""), logical.get("scale", "")))
+PY
+}
+
+current_tier_id() {  # matches the live mode against the table; empty when foreign
+  local w="$1" h="$2" tier
+  [[ -n $w && -n $h ]] || return 0
+  for tier in "${TIERS[@]}"; do
+    local IFS='|'
+    # shellcheck disable=SC2086
+    set -- $tier
+    if [[ $3 == "$w" && $4 == "$h" ]]; then
+      printf '%s' "$1"
+      return 0
+    fi
+  done
+}
+
+boot_tier_id() {  # which tier monitor.kdl opens with (no modeline line == native)
+  [[ -r $MONITOR_KDL ]] || return 0
+  local ml
+  ml=$(python3 - "$MONITOR_KDL" <<'PY'
+import re, sys
+text = open(sys.argv[1]).read()
+block = re.search(r'output\s+"[^"]+"\s*\{(.*?)\n\}', text, re.S)
+body = block.group(1) if block else text
+m = re.search(r'^\s*modeline\s+(\S+)\s+(\d+)\s+\d+\s+\d+\s+\d+\s+(\d+)', body, re.M)
+print("%s %s" % (m.group(2), m.group(3)) if m else "")
+PY
+)
+  [[ -n $ml ]] || { printf '4k'; return 0; }
+  current_tier_id ${ml}
+}
+
+upscale_for() { awk -v w="$1" 'BEGIN { printf "%.2f", 3840 / w }'; }
+
+log_line() {  # <fields…>: one tab-separated audit line, like the scale log
+  mkdir -p "$STATE_DIR" 2>/dev/null || return 0
+  local ppid_cmd
+  ppid_cmd=$(tr '\0' ' ' <"/proc/$PPID/cmdline" 2>/dev/null | sed -E 's/[[:space:]]+$//')
+  printf 'at=%s\t%s\tparent=%s\n' "$(date --iso-8601=seconds)" "$1" "${ppid_cmd:-pid$PPID}" >>"$LOG"
+}
+
+# Reads back what niri actually did. "Reported success while the panel stayed put"
+# is the failure mode this whole script exists to avoid, so the effect is measured,
+# not assumed.
+verify_mode() {  # <w> <h> <scale>
+  local want_w="$1" want_h="$2" want_scale="$3" state w h s attempt
+  for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    state=$(read_state) || return 1
+    IFS=$'\t' read -r _ w h s <<<"$state"
+    if [[ $w == "$want_w" && $h == "$want_h" ]] &&
+      awk -v a="$s" -v b="$want_scale" 'BEGIN { exit !(a - b < 0.011 && b - a < 0.011) }'; then
+      return 0
+    fi
+    sleep 0.15
+  done
+  return 1
+}
+
+apply_tier() {  # <tier-id>
+  local id="$1" w h scale modeline state before
+  w=$(tier_field "$id" 3) || { echo "Unknown tier: $id" >&2; return 2; }
+  h=$(tier_field "$id" 4)
+  scale=$(tier_field "$id" 5)
+  modeline=$(tier_field "$id" 6)
+
+  state=$(read_state) || { echo "niri is not reachable (NIRI_SOCKET?)" >&2; return 1; }
+  local out
+  IFS=$'\t' read -r out _ _ _ <<<"$state"
+  [[ -n $out ]] || { echo "No output to switch" >&2; return 1; }
+  before=$(tr '\t' 'x' <<<"$state")
+
+  if [[ -n $modeline ]]; then
+    # shellcheck disable=SC2086
+    niri msg output "$out" modeline $modeline >/dev/null || return 1
+  else
+    niri msg output "$out" mode "$NATIVE_MODE" >/dev/null || return 1
+  fi
+  niri msg output "$out" scale "$scale" >/dev/null || return 1
+
+  if ! verify_mode "$w" "$h" "$scale"; then
+    echo "Requested $id but niri reports $(tr '\t' ' ' <<<"$(read_state)")" >&2
+    log_line "action=set requested=$id before=$before after=FAILED"
+    return 1
+  fi
+  log_line "action=set requested=$id before=$before after=$(tr '\t' 'x' <<<"$(read_state)")"
+}
+
+# Rewrites the two lines that outlive the session. Everything else in the file --
+# the comments explaining why it looks like this -- is left alone.
+persist_tier() {  # <tier-id> [--dry-run]
+  local id="$1" dry="${2:-}" w h scale modeline out
+  w=$(tier_field "$id" 3) || { echo "Unknown tier: $id" >&2; return 2; }
+  scale=$(tier_field "$id" 5)
+  modeline=$(tier_field "$id" 6)
+  [[ -r $MONITOR_KDL ]] || { echo "No $MONITOR_KDL" >&2; return 1; }
+  state=$(read_state) || state=""
+  IFS=$'\t' read -r out _ _ _ <<<"$state"
+
+  local tmp new
+  tmp=$(mktemp "$NIRI_CONFIG_DIR/.monitor.kdl.new-XXXXXX") || return 1
+  if ! new=$(python3 - "$MONITOR_KDL" "$out" "$modeline" "$scale" "$id" <<'PY'
+import re, sys
+path, name, modeline, scale, tier = sys.argv[1:6]
+lines = open(path).read().splitlines(keepends=True)
+
+start = None
+for i, line in enumerate(lines):
+    if re.match(r'^\s*output\s+"([^"]+)"\s*\{', line):
+        if name and re.match(r'^\s*output\s+"%s"\s*\{' % re.escape(name), line):
+            start = i
+            break
+        start = start if start is not None else i
+if start is None:
+    sys.exit("no output block found")
+
+end = len(lines)
+for i in range(start + 1, len(lines)):
+    if lines[i].rstrip("\n") == "}":
+        end = i
+        break
+
+if modeline:
+    # KDL has no bare words starting with + or -, so the sync polarity is quoted --
+    # bare "+hsync" is a parse error and niri drops the whole config on one.
+    args = " ".join('"%s"' % t if t[0] in "+-" else t for t in modeline.split())
+    want = "    modeline %s\n" % args
+else:
+    # No modeline == the EDID's preferred timing; say so instead of leaving a stale one.
+    want = "    // modeline omitted: native %s (set-boot %s)\n" % (name or "panel", tier)
+
+body = lines[start + 1:end]
+modeline_re = re.compile(r'^\s*(//\s*)?modeline\b')
+scale_re = re.compile(r'^\s*scale\s+\S+')
+did_modeline = did_scale = False
+out = []
+for line in body:
+    if modeline_re.match(line):
+        if not did_modeline:
+            out.append(want)
+            did_modeline = True
+        continue
+    if scale_re.match(line):
+        if not did_scale:
+            out.append("    scale %s\n" % scale)
+            did_scale = True
+        continue
+    out.append(line)
+if not did_scale:
+    out.insert(0, "    scale %s\n" % scale)
+if not did_modeline:
+    # Insert ahead of the scale line so the block keeps its old shape.
+    for i, line in enumerate(out):
+        if scale_re.match(line):
+            out.insert(i, want)
+            did_modeline = True
+            break
+    if not did_modeline:
+        out.append(want)
+
+sys.stdout.write("".join(lines[:start + 1] + out + lines[end:]))
+PY
+  ); then
+    rm -f "$tmp"
+    echo "Refusing to write: could not rewrite the output block" >&2
+    return 1
+  fi
+  # `printf '%s\n'`: the command substitution already ate the trailing newline,
+  # so writing the file back needs exactly one.
+  printf '%s\n' "$new" >"$tmp" || { rm -f "$tmp"; return 1; }
+
+  if ! niri validate -c "$tmp" >/dev/null 2>&1; then
+    rm -f "$tmp"
+    echo "Refusing to write: niri validate rejects the result" >&2
+    return 1
+  fi
+
+  if [[ $dry == "--dry-run" ]]; then
+    diff -u "$MONITOR_KDL" "$tmp"
+    rm -f "$tmp"
+    return 0
+  fi
+
+  mkdir -p "$BACKUP_DIR" || return 1
+  cp -f "$MONITOR_KDL" "$BACKUP_DIR/monitor.kdl.bak-$(date +%Y%m%d-%H%M%S)" || return 1
+  # The repo mirror must stay byte-identical (scripts/kdl-sync.sh guards it), and a
+  # switch now writes this file on every click -- so follow along. Only when the
+  # mirror still matched the file being replaced: a hand-edited mirror is never
+  # silently overwritten, it just gets the reminder below.
+  local mirror_sync=skipped
+  if [[ -f $REPO_MIRROR ]] && cmp -s "$MONITOR_KDL" "$REPO_MIRROR"; then
+    cp -f "$tmp" "$REPO_MIRROR" && mirror_sync=updated
+  fi
+  mv -f "$tmp" "$MONITOR_KDL" || return 1
+  log_line "action=set-boot requested=$id scale=$scale mirror=$mirror_sync"
+
+  if [[ $mirror_sync != updated && -f $REPO_MIRROR ]]; then
+    printf 'Run scripts/kdl-sync.sh to bring %s in line with the new monitor.kdl\n' "$REPO_MIRROR"
+  fi
+}
+
+show_status() {
+  local state out w h scale current boot
+  state=$(read_state) || { echo "niri is not reachable (NIRI_SOCKET?)" >&2; return 1; }
+  IFS=$'\t' read -r out w h scale <<<"$state"
+  current=$(current_tier_id "$w" "$h")
+  boot=$(boot_tier_id)
+  printf '%-8s %s\n' output "${out:-–}"
+  printf '%-8s %s\n' mode "${w:-?}x${h:-?} (${current:-custom})"
+  printf '%-8s %s\n' scale "${scale:-?}"
+  printf '%-8s %s\n' boot "${boot:-?}"
+}
+
+show_list() {  # JSON for the bar's Display panel
+  local state out w h scale current boot tier id label up first=1
+  state=$(read_state) 2>/dev/null || state=""
+  IFS=$'\t' read -r out w h scale <<<"${state:-}"
+  current=$(current_tier_id "$w" "$h")
+  boot=$(boot_tier_id)
+
+  printf '{"output":"%s","mode":"%sx%s","current":"%s","boot":"%s","tiers":[' \
+    "$out" "$w" "$h" "$current" "$boot"
+  for tier in "${TIERS[@]}"; do
+    local IFS='|'
+    # shellcheck disable=SC2086
+    set -- $tier
+    id="$1" label="$2"
+    (( first )) || printf ','
+    first=0
+    printf '{"id":"%s","label":"%s","width":%s,"height":%s,"scale":"%s","upscale":"%s"}' \
+      "$id" "$label" "$3" "$4" "$5" "$(upscale_for "$3")"
+  done
+  printf ']}\n'
+}
+
+action="${1:-status}"
+case "$action" in
+status) show_status ;;
+list) show_list ;;
+current) read_state >/dev/null && current_tier_id "$(read_state | cut -f2)" "$(read_state | cut -f3)" ;;
+boot) boot_tier_id; echo ;;
+set)
+  [[ $# -eq 2 ]] || usage
+  # Apply first (the visible half), then persist: if the write is refused the switch
+  # still stands for this session, and the exit status says so.
+  apply_tier "$2" || exit $?
+  persist_tier "$2" || exit $?
+  ;;
+set-runtime) [[ $# -eq 2 ]] || usage; apply_tier "$2" ;;
+set-boot) [[ $# -ge 2 && $# -le 3 ]] || usage; persist_tier "$2" "${3:-}" ;;
+-h | --help) usage ;;
+*) usage ;;
+esac
