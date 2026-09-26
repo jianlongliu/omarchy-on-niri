@@ -71,6 +71,11 @@ window-rule {
     open-floating true
     default-column-width { proportion 0.6; }
     default-window-height { proportion 0.7; }
+    // Ghostty paints its own 0.85 background (background-opacity in ~/.config/ghostty/config),
+    // and niri's opacity multiplies on top of it -- so 0.85 here lands on the same effective
+    // 0.72 the plain com.mitchellh.ghostty window gets. Without this line these windows are the
+    // only fully opaque-surfaced terminals, i.e. noticeably blacker than the one Mod+Return opens.
+    opacity 0.85
     draw-border-with-background false
     background-effect {
         xray false
@@ -109,12 +114,18 @@ window-rule {
 // Window-opening properties CANNOT live in a keybind: `spawn "x"; open-floating true;`
 // makes niri reject the whole config ("only one action is allowed per keybind") and it
 // silently keeps the previous one. Floating belongs here.
-// Nautilus (Mod+E) as a floating panel.
+// Nautilus (Mod+E) as a floating panel. It already picks up frosted glass from the
+// Ghostty/Nautilus rule above; the `opacity` here is deliberately *later*, and niri lets a
+// later matching rule override an earlier value, so this is the one that wins. 0.72 rather
+// than 0.85: Nautilus is a plain GTK4 window that paints opaque, so its own alpha is the
+// whole story -- 0.72 is the effective transparency the Ghostty windows end up with
+// (their 0.85 app background × the rule's 0.85), i.e. the terminal look it is matched to.
 window-rule {
     match app-id="^org.gnome.Nautilus$"
     open-floating true
     default-column-width { proportion 0.6; }
     default-window-height { proportion 0.7; }
+    opacity 0.72
 }
 
 // Floating TUIs — Yazi (Mod+Y) and btop (Ctrl+Shift+Esc) run inside Ghostty, so they
@@ -122,13 +133,16 @@ window-rule {
 // (binds.kdl passes --app-id=org.omarchy.float-tui → xdg-terminal-exec → `ghostty --class=`,
 // the same route upstream uses to give its install/remove terminals org.omarchy.terminal).
 // The frosted-glass block is repeated because the Ghostty rule matches
-// com.mitchellh.ghostty and no longer covers this app-id.
+// com.mitchellh.ghostty and no longer covers this app-id — and so is `opacity 0.85`, for the
+// same reason as in the org.omarchy.terminal rule above: it is what makes these two keys look
+// like the plain terminal instead of like a black slab.
 // Want a different size for one of them? Give that bind its own app-id and copy this rule.
 window-rule {
     match app-id=r#"^org\.omarchy\.float-tui$"#
     open-floating true
     default-column-width { proportion 0.6; }
     default-window-height { proportion 0.7; }
+    opacity 0.85
     draw-border-with-background false
     background-effect {
         xray false
@@ -155,6 +169,9 @@ window-rule {
     open-floating true
     default-column-width { fixed 920; }
     default-window-height { fixed 540; }
+    // Same story as org.omarchy.terminal / org.omarchy.float-tui: ghostty's own 0.85 background
+    // times this 0.85 = the plain terminal's effective 0.72.
+    opacity 0.85
     draw-border-with-background false
     background-effect {
         xray false
