@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# 本机垫片（2026-09-24，二版）：omarchy idle 的"屏保腿" ⇒ 不插电时的"到点锁屏"。
+#
+# 用户规格（2026-09-24 夜，第一版"150 秒直接灭屏"被他否掉：「我就想了一会屏幕就灭了」）：
+#   - **不插电** + **非全屏** + **没在播放视频** ⇒ 闲置到点**锁屏**；灭屏交给锁本身
+#     （`jianlongliu.split-lock` 的 `idleBlankTimer`，现在 5 秒）
+#   - **插电** ⇒ 这条腿不干预，交回 `idle.lock` 那条腿（本机 1800 秒）
+#   - **全屏** ⇒ 不打断（真全屏：窗口尺寸 == 输出逻辑尺寸）
+#   - 播放视频 ⇒ 由 idle 服务的 `IdleMonitor { respectInhibitors: true }` 保证，压根不会进空闲
+#
+# 接线：shell 的 idle 服务（`shell/plugins/services/idle/Service.qml`）到 `idle.screensaver` 秒
+# （本机 2026-09-24 从 150 改成 300）跑本脚本。本机早用官方开关 `~/.local/state/omarchy/toggles/
+# screensaver-off` 把上游那份 ASCII 屏保停了；上游仍在 `$OMARCHY_PATH/bin/`，`force` 参数仍转发给它。
+# 计时是 `min(screensaver, lock)` + 差值两段式 ⇒ **别把 screensaver 调到等于 lock**（会抢跑）。
+#
+# 回退：`rm ~/bin/omarchy-launch-screensaver`（回落上游 = 回到"什么都不做"）。
+set -euo pipefail
+
+OMARCHY_PATH="${OMARCHY_PATH:-$HOME/.local/share/omarchy}"
+
+# 菜单里"强制看 ASCII 屏保"的入口，原样转发上游
+if [[ ${1:-} == force ]]; then
+  exec "$OMARCHY_PATH/bin/omarchy-launch-screensaver" "$@"
+fi
+
+# 已经在锁屏就别再动
+if [[ $(omarchy-shell lock isLocked 2>/dev/null) == "true" ]]; then
+  exit 0
+fi
+
+# 插电：不锁（交给 idle.lock）
+for p in /sys/class/power_supply/AC*/online; do
+  if [[ -r $p ]] && [[ $(<"$p") == 1 ]]; then
+    exit 0
+  fi
+done
+
+# 全屏：不打断
+if command -v niri >/dev/null 2>&1; then
+  win=$(niri msg --json focused-window 2>/dev/null \
+    | jq -r 'if .layout.window_size then "\(.layout.window_size[0])x\(.layout.window_size[1])" else empty end' 2>/dev/null || true)
+  if [[ -n $win ]]; then
+    while IFS= read -r size; do
+      [[ -n $size && $win == "$size" ]] && exit 0
+    done < <(niri msg --json outputs 2>/dev/null \
+      | jq -r '.[].logical | "\(.width)x\(.height)"' 2>/dev/null || true)
+  fi
+fi
+
+exec omarchy-system-lock
