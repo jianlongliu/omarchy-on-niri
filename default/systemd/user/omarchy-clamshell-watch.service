@@ -1,0 +1,41 @@
+[Unit]
+Description=Reconcile the clamshell display state on lid and monitor changes (niri port)
+# Session-scoped: it calls niri over IPC and the reconcile talks to the shell
+# (laptop-display notifications), so it needs the session up. Started from
+# graphical-session.target because the upstream thing that used to start it --
+# the monitor watcher in default/hypr/autostart.lua -- is Hyprland layer-2 config
+# and is no-op'd on niri, so nothing else would ever launch it.
+After=graphical-session.target
+PartOf=graphical-session.target
+# The two upstream ConditionEnvironment= lines this unit used to need are gone:
+# OMARCHY_PATH is never in the user manager's environment on a dev-link install
+# and WAYLAND_DISPLAY is not published yet when graphical-session.target is
+# reached (see omarchy-sleep-lock.service for the boot trace). Unlike that unit
+# this one needs neither: it discovers the niri socket itself, and it talks to
+# the shell over DBus, not Wayland.
+# Set by disabling the watcher. Checked here so a disabled watcher stays disabled
+# across logins without the unit having to be disabled.
+ConditionPathExists=!%h/.local/state/omarchy/toggles/clamshell-watch-off
+
+[Service]
+Type=simple
+# Same two lines as omarchy-sleep-lock.service, for the same reason: the port's
+# hyprctl shim lives in ~/bin, and the reconcile reaches it through
+# omarchy-hyprland-monitor-clamshell. $OMARCHY_PATH/bin for the other helpers.
+Environment=OMARCHY_PATH=%h/.local/share/omarchy
+Environment=PATH=%h/bin:%h/.local/share/omarchy/bin:/usr/local/bin:/usr/bin
+ExecStart=%h/bin/omarchy-hyprland-monitor-watch
+# on-failure, NOT always: the watcher exits *cleanly* when the off-switch flag
+# appears (or when the machine has no lid). With `always` that would become a
+# restart loop -- one process every RestartSec, each exiting at the first tick.
+# A clean exit means "off", and re-enabling is one `systemctl --user start`
+# (or the next login, where the ConditionPathExists below applies).
+Restart=on-failure
+RestartSec=2
+# A 2 s polling loop on a laptop: never let it compete with the session when the
+# machine is busy, and let the kernel keep it off the cache.
+Nice=10
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=graphical-session.target

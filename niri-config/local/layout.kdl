@@ -164,3 +164,11 @@ layout {
         // bottom 64
     }
 }
+
+// 运行时可开关的「无缝隙」模式：`omarchy-hyprland-window-gaps-toggle` 垫片写/删这个文件，内容是
+// `layout { gaps 0; border { off }; focus-ring { off } }` —— 对应上游 window-no-gaps.lua 把
+// gaps_out/gaps_in、border_size、decoration:rounding 一起归零。
+// include 是**位置性**的 ⇒ 只覆盖它点名的属性，上面的主题环/边框配色原样不动；
+// optional=true ⇒ 文件不在只出一条 WARN，所以「恢复缝隙」= 删掉这个文件，不需要第二步。
+// 原理、垫片与 hyprctl 侧（Style 的 gapsOut/cornerRadius）的联动见 docs/shims.md §4。
+include optional=true "layout-no-gaps.kdl"

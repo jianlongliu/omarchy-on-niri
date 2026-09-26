@@ -1,0 +1,108 @@
+#!/bin/bash
+
+# omarchy:summary=Toggle the window gaps (niri port)
+# omarchy:args=[on|off|toggle]
+# omarchy:hidden=true
+#
+# Upstream flips the `window-no-gaps` toggle and lets Hyprland's sourced Lua do the rest:
+# default/hypr/toggles/window-no-gaps.lua turns off gaps_out, gaps_in, border_size **and**
+# decoration:rounding. The shell then re-reads gaps and rounding through `hyprctl getoption`
+# (Commons/Style.qml watches the very same flag file, so the bar/menu/panels collapse with the
+# windows instead of keeping their own margins).
+#
+# niri has no runtime IPC for any of that, and no equivalent of the Lua layer, so this shim keeps
+# the same flag file and applies the same three things through the config:
+#
+#   ~/.config/niri/layout-no-gaps.kdl -> layout { gaps 0; border { off }; focus-ring { off } }
+#
+# read by an `include optional=true` line at the end of layout.kdl. Includes are positional, so
+# this file overrides only the properties it names and leaves the theme-driven colors alone; a
+# missing optional include is a warning, so "gaps back on" is simply "file absent". Same trick as
+# omarchy-toggle-input-device (its header carries the doc quotes).
+#
+# The flag file is written here rather than through `omarchy-hyprland-toggle` because that helper
+# copies out of $OMARCHY_PATH/default/hypr/toggles/, i.e. it depends on the Hyprland layer-2 tree
+# this port already no-ops. The content is copied verbatim when the source is there, so the file
+# stays what upstream's helper would have produced.
+#
+# No notification: on Hyprland the windows' own edges are the feedback, and this toggle changes
+# the whole desktop at once, so a toast would only add noise to a state that is already visible.
+# Print the flag state like `omarchy-hyprland-toggle` does, for anyone capturing stdout.
+
+set -euo pipefail
+
+ACTION="${1:-toggle}"
+
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/niri"
+OVERLAY="$CONFIG_DIR/layout-no-gaps.kdl"
+FLAG_FILE="$HOME/.local/state/omarchy/toggles/hypr/window-no-gaps.lua"
+FLAG_SOURCE="${OMARCHY_PATH:-$HOME/.local/share/omarchy}/default/hypr/toggles/window-no-gaps.lua"
+
+usage() {
+  echo "Usage: omarchy-hyprland-window-gaps-toggle [on|off|toggle]" >&2
+}
+
+reload() {
+  # The include file is watched and niri reloads on its own; the explicit call makes it
+  # deterministic instead of dependent on inotify behaviour.
+  niri msg action load-config-file >/dev/null 2>&1 || true
+}
+
+no_gaps_on() {
+  mkdir -p "$CONFIG_DIR"
+  cat >"$OVERLAY" <<'EOF'
+// Written and removed by the niri port shim omarchy-hyprland-window-gaps-toggle.
+// Upstream equivalent: default/hypr/toggles/window-no-gaps.lua (gaps_out/in 0,
+// border_size 0, decoration:rounding 0). Included at the end of layout.kdl, so
+// these override the theme block above and nothing else.
+layout {
+    gaps 0
+
+    focus-ring {
+        off
+    }
+
+    border {
+        off
+    }
+}
+EOF
+  if ! niri validate -c "$CONFIG_DIR/config.kdl" >/dev/null 2>&1; then
+    # Never leave behind a config that makes niri reject its own reload.
+    rm -f "$OVERLAY"
+    echo "error: $OVERLAY made the config invalid; removed it again" >&2
+    exit 1
+  fi
+
+  mkdir -p "$(dirname "$FLAG_FILE")"
+  if [[ -f $FLAG_SOURCE ]]; then
+    cp "$FLAG_SOURCE" "$FLAG_FILE"
+  else
+    : >"$FLAG_FILE"
+  fi
+
+  reload
+  echo on
+}
+
+no_gaps_off() {
+  rm -f "$OVERLAY" "$FLAG_FILE"
+  reload
+  echo off
+}
+
+case "$ACTION" in
+  on) no_gaps_on ;;
+  off) no_gaps_off ;;
+  toggle)
+    if [[ -f $FLAG_FILE ]]; then
+      no_gaps_off
+    else
+      no_gaps_on
+    fi
+    ;;
+  *)
+    usage
+    exit 1
+    ;;
+esac

@@ -1,0 +1,131 @@
+#!/bin/bash
+
+# omarchy:summary=Watch lid + monitor changes and reconcile clamshell state (niri port)
+#
+# Upstream's version of this script is a Hyprland client: it reads
+# `$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock` through socat and
+# waits for `monitoradded` / `monitorremoved` / `configreloaded`, and its lid half is
+# driven by the two `switch:*:Lid Switch` binds in default/hypr/bindings/utilities.lua.
+# niri has neither: no Hyprland socket at all, no switch binds, and -- checked on niri
+# 26.04 -- no output-related event either (`niri msg event-stream` carries Workspaces /
+# Windows / KeyboardLayouts / ConfigLoaded / Screenshot / Casts / Overview /
+# PowerOnMonitors and nothing about outputs; the `OutputConfigChanged` string in the
+# binary is an IPC *reply*, not an event). So there is nothing to subscribe to and the
+# loop polls. That is not a downgrade: upstream's own script already runs a 2 s
+# `poll_clamshell_state` as its drift backstop for exactly the events it cannot get.
+#
+# What it does with each tick:
+#   * the lid is read from /proc (a syscall, no IPC) -- cheap enough to do every 2 s;
+#   * `niri msg outputs` is only asked for while the lid is CLOSED, which is the only
+#     state clamshell can be in. Open lid = zero IPC, so the steady-state cost on a
+#     docked-but-awake machine is a 2 s timer, not a 2 s compositor round-trip;
+#   * the reconcile itself is NOT reimplemented here: it calls the upstream
+#     omarchy-hyprland-monitor-clamshell, which this port already made work (its
+#     `hl.monitor({ disabled })` now reaches niri as the output-toggle overlay --
+#     see docs/shims.md §4). One place owns the logic, and it is upstream's.
+#
+# Everything is change-driven: a tick that finds the same lid + same outputs does no
+# work, so nothing here can flip an output back on under a running session. The one
+# deliberate exception is the very first tick, which always reconciles -- that is the
+# "the session started with the lid already closed / the panel was left off" case,
+# and upstream's reconcile is a no-op unless it actually has something to fix
+# (`recover` returns early unless it would re-enable a display; the scale sync
+# returns early when the panel is on the configured scale).
+#
+# Off switch: ~/.local/state/omarchy/toggles/clamshell-watch-off (same convention as
+# omarchy-picker-warmup) -- for a machine without a lid it exits immediately anyway.
+#
+# Deliberately NOT here: the `HandleLidSwitchDocked=suspend` line in
+# /etc/systemd/logind.conf.d/lid-suspend.conf. Until that is `ignore`, logind still
+# suspends on a lid close even with an external display attached, so "lid closed, keep
+# working on the external screen" cannot happen no matter what this script does. That
+# file is root-owned system config; see docs/local-overrides.md §5.
+
+set -uo pipefail
+
+OMARCHY="${OMARCHY_PATH:-$HOME/.local/share/omarchy}"
+RECONCILE="$OMARCHY/bin/omarchy-hyprland-monitor-clamshell"
+TOGGLES="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/toggles"
+# Overridable so the offline test can point at a fixture instead of the real /proc.
+LID_GLOB="${OMARCHY_LID_GLOB:-/proc/acpi/button/lid/*/state}"
+POLL="${OMARCHY_CLAMSHELL_POLL:-2}"
+
+# niri msg needs a socket; a user unit started from graphical-session.target can come up
+# before the session exports NIRI_SOCKET (the same ~1 s race that bit the sleep-lock
+# unit, docs/lock.md §11.28). Discover it instead of trusting the environment.
+if [[ -z ${NIRI_SOCKET:-} ]]; then
+  for sock in "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"/niri/*.sock; do
+    [[ -S $sock ]] || continue
+    export NIRI_SOCKET="$sock"
+    break
+  done
+fi
+
+lid_closed() {
+  local state
+  for state in $LID_GLOB; do
+    [[ -r $state ]] || continue
+    [[ $(<"$state") == *closed* ]] && return 0
+  done
+  return 1
+}
+
+# What the reconcile reacts to: which outputs exist and which of them are on.
+# `logical` is null exactly when niri has the output turned off.
+output_fingerprint() {
+  niri msg --json outputs 2>/dev/null | python3 -c '
+import json, sys
+try:
+    outputs = json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+print(" ".join("%s=%s" % (name, "on" if o.get("logical") else "off")
+               for name, o in sorted(outputs.items())))
+' 2>/dev/null
+}
+
+# No lid switch: not clamshell-capable hardware, nothing to watch (upstream: "never on
+# a machine without a lid").
+lid_present=0
+for state in $LID_GLOB; do
+  [[ -e $state ]] && lid_present=1
+done
+(( lid_present )) || {
+  printf 'clamshell: no lid switch on this machine, nothing to watch\n'
+  exit 0
+}
+
+last_lid=""
+last_outputs=""
+while :; do
+  if [[ -f $TOGGLES/clamshell-watch-off ]]; then
+    # Clean exit on purpose: the unit is Restart=on-failure, so "off" stays off
+    # instead of becoming a 2 s restart loop. `systemctl --user start` resumes.
+    printf 'clamshell: off switch present (%s), stopping\n' "$TOGGLES/clamshell-watch-off"
+    exit 0
+  fi
+
+  if lid_closed; then lid="closed"; else lid="open"; fi
+
+  if [[ $lid == closed ]]; then
+    outputs=$(output_fingerprint)
+    [[ -z $outputs ]] && outputs="unknown"
+  else
+    # Nothing clamshell-shaped is possible with the lid open, and the internal panel
+    # must not be touched while the user is looking at it.
+    outputs="open"
+  fi
+
+  if [[ $lid != "$last_lid" || $outputs != "$last_outputs" ]]; then
+    last_lid="$lid"
+    last_outputs="$outputs"
+    if [[ $lid == closed ]]; then
+      printf 'clamshell: lid closed, outputs [%s] -> reconciling\n' "$outputs"
+    else
+      printf 'clamshell: lid open -> reconciling\n'
+    fi
+    "$RECONCILE" >/dev/null 2>&1 || true
+  fi
+
+  sleep "$POLL"
+done

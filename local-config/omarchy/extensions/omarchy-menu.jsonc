@@ -7,15 +7,16 @@
   //
   // 分区：① 屏蔽（niri 无对应）② 暂未接上（能实现，待改写）③ 已核实可用
 
-  // niri 上根本没有对应功能的三条 → 直接从 Trigger 里屏蔽（when:false 就是隐藏；
+  // niri 上根本没有对应功能的两条 → 直接从 Trigger 里屏蔽（when:false 就是隐藏；
   // label/icon 一并带上，将来若取消隐藏不会退化成 id）。
-  //   Mirror Display：niri 无镜像输出；Workspace Layout：dwindle/scrolling 是 Hyprland 语义；
-  //   Window Gaps：niri 的 gap 只能改配置，无运行时 IPC。
+  //   Mirror Display：niri 无镜像输出；Workspace Layout：dwindle/scrolling 是 Hyprland 语义。
+  // Window Gaps 2026-09-24 放出来了（用户定的「现在可以做」）：垫片
+  //   `omarchy-hyprland-window-gaps-toggle` + `~/.config/niri/layout-no-gaps.kdl`（config 里
+  //   一条 `include optional=true`）就是 niri 缺的那个运行时开关，见 docs/shims.md §4。
   // 图标转义注意：>U+FFFF 的码点必须写成 UTF-16 代理对（JSON.parse 的 \u 只吃 4 位十六进制）。
   // 例：Screensaver 的 U+F1104 = \udb84\udd04；写成 \uf1104 会被当成 U+F110 + '4'。
   "trigger.hardware.mirror-display": {"icon":"\udb80\udf79","label":"Mirror Display","when":"false"},
   "trigger.toggle.workspace-layout": {"icon":"\udb84\udcac","label":"Workspace Layout","when":"false"},
-  "trigger.toggle.window-gaps": {"icon":"\ue62a","label":"Window Gaps","when":"false"},
 
   // 暂时不可用（本机缺依赖或需要改写实现，见 §8 第 21 条那批 override）
   // 注：Capture → Color 的 override 已撤（2026-09-19 装了 hyprpicker 并在 niri 上实测能抓屏），

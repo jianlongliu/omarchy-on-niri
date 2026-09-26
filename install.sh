@@ -50,6 +50,15 @@ mkdir -p "$HOME_DIR/.config/omarchy/hooks/post-update.d" "$HOME_DIR/.config/omar
 install -m 0755 "$REPO_DIR"/hooks/post-update.d/* "$HOME_DIR/.config/omarchy/hooks/post-update.d/"
 install -m 0755 "$REPO_DIR"/hooks/theme-set.d/*    "$HOME_DIR/.config/omarchy/hooks/theme-set.d/"
 
+# ---- 3b. Hyprland toggle-state directory ----
+# The shell runs on Hyprland-shaped state paths, and one of them is watched: Style.qml
+# watches toggles/hypr/window-no-gaps.lua to collapse its own gaps/rounding with the
+# windows, and a FileView watch only attaches if the path (or its directory) exists
+# when the shell starts. Nothing else on niri creates this directory -- the Hyprland
+# layer that would is no-op'd -- so without this line the window-gaps toggle moves the
+# windows but not the bar/menu/panels until the shell is restarted once.
+mkdir -p "$HOME_DIR/.local/state/omarchy/toggles/hypr"
+
 # ---- 4. picker warm-up unit (session-scoped, off-switchable) ----
 # The theme/background pickers pay a cold-cache cost on their first open after login
 # unless something reads the thumbnail cache first. See port-bin/omarchy-picker-warmup.
@@ -64,6 +73,20 @@ if command -v systemctl >/dev/null 2>&1; then
   systemctl --user daemon-reload || warn "daemon-reload failed (no user manager running?)"
 fi
 warn "  warm-up is on from the next login; to disable: touch ~/.local/state/omarchy/toggles/picker-warmup-off"
+
+# ---- 4b. clamshell watcher unit (session-scoped, off-switchable) ----
+# niri has no monitor/lid events to subscribe to (see port-bin/omarchy-hyprland-monitor-watch),
+# and the Hyprland autostart that used to launch the watcher is no-op'd here, so the
+# lid + monitor reconcile needs this unit or it never runs at all.
+log "Installing the clamshell watcher unit (~/.config/systemd/user)"
+install -m 0644 "$REPO_DIR/default/systemd/user/omarchy-clamshell-watch.service" \
+  "$UNIT_DIR/omarchy-clamshell-watch.service"
+ln -sfn "$UNIT_DIR/omarchy-clamshell-watch.service" \
+  "$UNIT_DIR/graphical-session.target.wants/omarchy-clamshell-watch.service"
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl --user daemon-reload || warn "daemon-reload failed (no user manager running?)"
+fi
+warn "  watcher is on from the next login; to disable: touch ~/.local/state/omarchy/toggles/clamshell-watch-off"
 
 # ---- 5. apply the idempotent overlay patch to the Omarchy install ----
 if [[ -x "$BIN_DIR/omarchy-niri-repatch" ]]; then

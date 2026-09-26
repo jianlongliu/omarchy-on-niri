@@ -19,6 +19,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 
 
 def niri(args):
@@ -174,7 +175,13 @@ def cmd_monitors(json_out):
     dpms = dpms_on()
     res = []
     for i, (name, o) in enumerate(outputs.items()):
+        # niri marks a disabled output by a null `logical` (there is no `enabled`
+        # field in `niri msg --json outputs`); `current_mode` goes null with it.
+        # Callers that ask "is an external monitor active" -- the clamshell path's
+        # omarchy-hyprland-monitor-external-active -- filter on `disabled == false`,
+        # so this must be the real state, not the old hardcoded False.
         logical = o.get("logical") or {}
+        disabled = o.get("logical") is None
         mode_idx = o.get("current_mode") or 0
         modes = o.get("modes") or []
         cur = modes[mode_idx] if mode_idx < len(modes) else {}
@@ -187,7 +194,7 @@ def cmd_monitors(json_out):
             "scale": logical.get("scale", 1.0),
             "x": logical.get("x", 0), "y": logical.get("y", 0),
             "transform": transform if isinstance(transform, int) else 0,
-            "active": True, "disabled": False,
+            "active": not disabled, "disabled": disabled,
             "focused": (name == focused) or bool(logical.get("is_focused")),
             "refreshRate": (cur.get("refresh_rate") or 60000) / 1000.0,
             "make": o.get("make") or "", "model": o.get("model") or "",
@@ -451,14 +458,26 @@ def cmd_cursorpos():
     return "0, 0"
 
 
+def _no_gaps():
+    """True while the `window-no-gaps` toggle is on.
+
+    Upstream's toggle Lua sets gaps_out/gaps_in, border_size and rounding to 0 at once, and the
+    shell re-reads gaps + rounding from here (Commons/Style.qml watches the same flag file), so
+    reporting 0 for both is what keeps the shell's own margins in step with the compositor. The
+    niri side of the toggle is port-bin/omarchy-hyprland-window-gaps-toggle.
+    """
+    return os.path.exists(os.path.expanduser(
+        "~/.local/state/omarchy/toggles/hypr/window-no-gaps.lua"))
+
+
 def cmd_getoption(opt, json_out):
     # Hyprland getoption: {option, int, bool, float, str}. Sensible defaults.
     val = {"int": 0, "bool": False, "float": 0.0, "str": "", "option": opt}
     if "rounding" in opt:
-        val["int"] = 12
-        val["float"] = 12.0
+        val["int"] = 0 if _no_gaps() else 12
+        val["float"] = float(val["int"])
     if "gaps" in opt:
-        val["int"] = 8
+        val["int"] = 0 if _no_gaps() else 8
     return json.dumps(val) if json_out else f"int: {val['int']}"
 
 
@@ -642,6 +661,98 @@ def cmd_eval(payload):
     return 0  # hl.config / hl.device / hl.workspace_rule -> no-op
 
 
+def _niri_config_dir():
+    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(
+        os.environ.get("HOME", ""), ".config")
+    return os.path.join(base, "niri")
+
+
+# Written by `hl.monitor({ disabled = … })`; monitor.kdl includes it optionally, and
+# that include line is at the *top* of monitor.kdl on purpose: niri keeps the first
+# definition of a key, so a block behind the output block is inert (measured both
+# ways on niri 26.04 -- see the comment in monitor.kdl).
+# The name is deliberately not one of the seven *.kdl files kdl-sync.sh walks,
+# so a runtime state file never looks like config drift.
+OUTPUT_OFF_OVERLAY = "output-toggle-off.kdl"
+
+# `hl.monitor({ scale = … })` -- the bar's Display panel SCALE row -- is deliberately
+# runtime-only: `niri msg output <name> scale N` in _eval_monitor and nothing else. What
+# outlives the session is the `scale` line in monitor.kdl, which the machine owns.
+# Driving it through a leading config include was tried on 2026-09-25 and cost this panel
+# its tuned custom modeline: the mode list is built from the *first* block for an output,
+# and that overlay block had no `modeline`, so the panel fell back to the 3840x2400
+# preferred mode for the rest of the session. Do not "fix" that by writing config.
+
+
+def _set_output_disabled(name, off):
+    """`hl.monitor({ output = …, disabled = true|false })` -> niri output off/on.
+
+    Not `niri msg output <name> off`: that is a *temporary* change which the
+    reload the upstream monitor scripts run right afterwards forgets, and it
+    leaves nothing for the next resume to re-apply. The overlay is the same
+    mechanism the input-device shim uses -- an optional include that niri
+    watches and live-reloads, where "enabled" is just "file absent" -- so the
+    state survives reloads and stays out of the mirrored monitor.kdl.
+
+    Returns True when the output is in the requested state.
+    """
+    overlay = os.path.join(_niri_config_dir(), OUTPUT_OFF_OVERLAY)
+    existing = None
+    try:
+        with open(overlay) as fh:
+            existing = fh.read()
+    except OSError:
+        existing = None
+
+    if off:
+        if existing is not None:
+            m = re.search(r'output\s+"([^"]+)"', existing)
+            if m and m.group(1) == name:
+                return True  # already off
+        os.makedirs(os.path.dirname(overlay), exist_ok=True)
+        with open(overlay, "w") as fh:
+            fh.write('output "%s" {\n    off\n}\n' % name)
+        # Never leave behind a config niri would reject on its own reload.
+        cfg = os.path.join(_niri_config_dir(), "config.kdl")
+        try:
+            v = subprocess.run(["niri", "validate", "-c", cfg],
+                               capture_output=True, text=True, timeout=10)
+        except Exception:
+            v = None
+        if v is not None and v.returncode != 0:
+            os.remove(overlay)
+            sys.stderr.write(
+                "hyprctl: %s made the niri config invalid; removed it again\n" % overlay)
+            return False
+    else:
+        if existing is None:
+            return True  # already on
+        # Only remove our own file, and only while it is about this output.
+        m = re.search(r'output\s+"([^"]+)"', existing)
+        if m and m.group(1) != name:
+            return True
+        os.remove(overlay)
+
+    niri(["action", "load-config-file"])
+
+    # The upstream scripts act on what they see afterwards, and "reported success
+    # while the screen stayed on" is the failure this shim exists to avoid, so the
+    # effect is read back instead of assumed.
+    for attempt in range(2):
+        time.sleep(0.3 if attempt == 0 else 0.5)
+        outputs = niri_json(["outputs"]) or {}
+        state = outputs.get(name)
+        if state is None:
+            return True  # output gone entirely: nothing left to be wrong
+        if (state.get("logical") is None) == bool(off):
+            return True
+    sys.stderr.write(
+        "hyprctl: %s was written but niri still reports %s as %s; "
+        "is the `include optional=true \"%s\"` line missing from monitor.kdl?\n"
+        % (OUTPUT_OFF_OVERLAY, name, "off" if off else "on", OUTPUT_OFF_OVERLAY))
+    return False
+
+
 def _eval_monitor(payload):
     m = re.search(r"hl\.monitor\(\s*\{(.*?)\}\s*\)", payload)
     if not m:
@@ -662,6 +773,9 @@ def _eval_monitor(payload):
         if len(pos) >= 2:
             subprocess.run(["niri", "msg", "output", output, "position"] + pos[:2],
                            capture_output=True, text=True)
+    if kv.get("disabled") is not None:
+        truthy = str(kv["disabled"]).strip().strip('"').lower() in ("true", "1", "yes")
+        _set_output_disabled(output, truthy)
     return 0
 
 
