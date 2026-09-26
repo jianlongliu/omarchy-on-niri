@@ -6,6 +6,7 @@
 # omarchy-on-niri port: prefers power-profiles-daemon's `powerprofilesctl`, and falls back
 # to the TLP backend (tlp-pd) via D-Bus net.hadess.PowerProfiles when
 # powerprofilesctl is absent. Lives in ~/bin so it survives `omarchy update`.
+# Also couples the power-saver profile to the panel brightness (see the bottom).
 
 action="${1:-autodetect}"
 requested_profile="${2:-}"
@@ -71,3 +72,52 @@ if [[ -n $requested_profile ]]; then
   mkdir -p "$state_dir"
   printf '%s\n' "$requested_profile" >"$state_file"
 fi
+
+# --- Brightness coupling
+
+# The power-saver profile dims the panel; every other profile restores what was in
+# effect when we dimmed. Target percentage, in order of precedence:
+#   $OMARCHY_POWERPROFILES_SAVER_BRIGHTNESS  →  $state_dir/saver-brightness  →  10
+# Persist a different one with e.g.:
+#   echo 25 > ~/.local/state/omarchy/powerprofiles/saver-brightness
+
+saver_brightness="${OMARCHY_POWERPROFILES_SAVER_BRIGHTNESS:-}"
+if [[ -z $saver_brightness && -r "$state_dir/saver-brightness" ]]; then
+  saver_brightness=$(<"$state_dir/saver-brightness")
+fi
+if [[ ! $saver_brightness =~ ^[0-9]+$ ]] || (( saver_brightness < 1 || saver_brightness > 100 )); then
+  saver_brightness=10
+fi
+
+brightness_file="$state_dir/brightness"
+
+apply_brightness_coupling() {
+  local target="$saver_brightness" cur saved
+
+  command -v brightnessctl >/dev/null 2>&1 || return 0
+  cur="$(omarchy-brightness-display 2>/dev/null)" || return 0
+  [[ $cur =~ ^[0-9]+$ ]] || return 0
+
+  if [[ $1 == power-saver ]]; then
+    # Remember the pre-dim value once: repeated switches must not overwrite the
+    # original brightness with the dimmed one.
+    if (( cur > target )) && [[ ! -r $brightness_file ]]; then
+      mkdir -p "$state_dir"
+      printf '%s\n' "$cur" >"$brightness_file"
+    fi
+
+    (( cur == target )) || omarchy-brightness-display --no-osd "${target}%" >/dev/null 2>&1
+    return 0
+  fi
+
+  # Leaving power-saver: restore only while the panel still shows our dimmed value.
+  # If the user set brightness by hand in the meantime, that choice wins.
+  [[ -r $brightness_file ]] || return 0
+  saved=$(<"$brightness_file")
+  if [[ $saved =~ ^[0-9]+$ ]] && (( cur == target )); then
+    omarchy-brightness-display --no-osd "${saved}%" >/dev/null 2>&1
+  fi
+  rm -f "$brightness_file"
+}
+
+apply_brightness_coupling "$profile"
