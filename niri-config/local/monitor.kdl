@@ -41,7 +41,7 @@ output "eDP-1" {
     // scale 1.6 = what the bar's Display panel last settled on; logical = 1600x1000.
     // This line is the only thing that outlives the session (see the top of this file).
     // 2.0 = an integer scale, crisper X11 apps, but 1280x800, i.e. a bigger UI than this.
-    modeline 337.50 2880 2928 2960 3040 1800 1803 1809 1852 "+hsync" "-vsync"
-    scale 1.8
+    modeline 414.50 3200 3248 3280 3360 2000 2003 2009 2057 "+hsync" "-vsync"
+    scale 2.0
     position x=0 y=0
 }
