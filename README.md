@@ -50,7 +50,7 @@ holds a map from every moved section to its volume. The volumes have exactly one
 ## Repository layout
 
 ```
-omarchy-on-niri/
+Nirism/
 ├── shell/        <- ported Omarchy Quickshell source (Layer 1)
 ├── bin/          <- Omarchy's own scripts (unchanged upstream)
 ├── port-bin/     <- port glue: hyprctl shim + niri system/power/theme/repatch scripts
@@ -135,8 +135,8 @@ an existing `config.kdl` and it will not auto-install packages or fix backlight 
 Short version:
 
 ```sh
-git clone https://github.com/jianlongliu/omarchy-on-niri
-cd omarchy-on-niri
+git clone https://github.com/jianlongliu/Nirism
+cd Nirism
 # install the packages in README "Requirements", then run:
 ./install.sh            # optional; or follow docs/INSTALL.md step by step
 ```
