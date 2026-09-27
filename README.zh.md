@@ -41,7 +41,7 @@ Arch + niri 登录会话、并且**已经装好 Omarchy**（或者你会先装 O
 ## 仓库结构
 
 ```
-omarchy-on-niri/
+Nirism/
 ├── shell/        <- 移植后的 Omarchy Quickshell 源码（层1）
 ├── bin/          <- Omarchy 自己的脚本（上游原样，未改）
 ├── port-bin/     <- 移植胶水：hyprctl 垫片 + uwsm-app 垫片 + omarchy-update/picker-warmup/display-text-size 垫片
@@ -127,8 +127,8 @@ omarchy-on-niri/
 简版：
 
 ```sh
-git clone https://github.com/jianlongliu/omarchy-on-niri
-cd omarchy-on-niri
+git clone https://github.com/jianlongliu/Nirism
+cd Nirism
 # 先装 README "Requirements" 里的包，然后执行：
 ./install.sh            # 可选；或按 docs/INSTALL.zh.md 逐步来
 ```
