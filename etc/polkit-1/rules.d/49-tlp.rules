@@ -1,0 +1,15 @@
+// Allow the local desktop user to run TLP charge-threshold commands without a
+// polkit authentication agent. This machine has no graphical polkit agent, so
+// an unruled pkexec either hangs or fails outright (see polkitd journal:
+// "FAILED to authenticate ... unix-process:unknown") — which makes it useless
+// from the shell panel's Process{} calls. Scope is deliberately narrow:
+// only /usr/bin/tlp (pacman-managed) and only for the wheel group.
+// polkit rules cannot filter argv, so this grants "any tlp invocation"; tlp
+// itself is limited to power/charge tuning.
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.policykit.exec" &&
+        action.lookup("program") == "/usr/bin/tlp" &&
+        subject.isInGroup("wheel")) {
+        return polkit.Result.YES;
+    }
+});

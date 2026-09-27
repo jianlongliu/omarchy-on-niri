@@ -23,15 +23,17 @@
 
 - `omarchy update` = `git pull --ff-only`（`omarchy-update-dev`，在 `post-update` 钩子**之前**）+ 迁移。
 - **仓库外不碰**：`config.kdl` / `shell.json` / `~/bin/hyprctl` 都不在 omarchy 仓库内，`git pull` 动不到。
-- **仓库内会撞**：我们改了仓库内 **24 个文件**。权威清单就是补丁自己的 `diff --git` 行：
+- **仓库内会撞**：我们改了仓库内 **26 个文件**。权威清单就是补丁自己的 `diff --git` 行：
   `grep '^diff --git' ~/.config/omarchy/niri-port/niri.patch | sed 's|.* b/||'`（换机器/换仓库路径也别抄下面的名单）。
   起步那 19 个是 `launch-{tui,editor,floating-terminal-with-presentation}`、`refresh-hyprland`、`theme-set`、
   `menu.jsonc`、`qmldir`、`Background.qml`、`ImagePicker.qml`、`Bar.qml`、`Workspaces.qml`、`Menu.qml`、
   `KeyboardPanel.qml`、`osd/Osd.qml`、`AppLibrary.qml`、`panels/power/Panel.qml`，以及 2026-08-25 加的 3 个
   `omarchy-system-{logout,reboot,shutdown}`；之后又加了 `shell/shell.qml`（boot reveal 推送）、
   `notifications/Service.qml`、`Commons/Style.qml`、`panels/monitor/Panel.qml`（分辨率滑块，2026-09-26）、
-  `bin/omarchy-battery-status`（充电阈值改 sysfs 优先，2026-09-26，见 `docs/behavior.md` §8 第 38 条）。
-  ——这 24 个文件正是 `niri.patch` 的内容（**24 个文件 / 72 hunk**，2026-09-26 核；2026-09-18 合并上游时为 30 hunk，
+  `bin/omarchy-battery-status`（充电阈值改 sysfs 优先，2026-09-26，见 `docs/behavior.md` §8 第 38 条）、
+  `bin/omarchy-default-agent` 与 `bin/omarchy-agent`（把 ante 加进默认 agent 列表，2026-09-27，见 §8 第 40 条）。
+  ——这 26 个文件正是 `niri.patch` 的内容（**26 个文件 / 77 hunk**，2026-09-27 核；2026-09-26 为 24 文件 / 72 hunk；
+  2026-09-18 合并上游时为 30 hunk，
   2026-09-19 菜单自愈守卫 +2（§8.14）、Install/Remove 终端回退 +1（§8 第 21 条）、
   2026-09-20 选择器异步解码 +1（§8 第 25 条）、电量数字置右 +1（§8 第 28 条））。
   上游改到其中任何一个，`git pull --ff-only` 会因本地未提交改动而**失败中止**整个更新——这是需要

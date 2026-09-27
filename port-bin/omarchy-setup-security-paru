@@ -1,0 +1,141 @@
+#!/bin/bash
+
+# omarchy:summary=Turn the AUR helper off (or back on) by clearing paru's execute bit
+# omarchy:args=[--status|--enabled|--enable|--disable]
+# omarchy:examples=omarchy-setup-security-paru | omarchy-setup-security-paru --status
+
+set -euo pipefail
+
+# The execute bit *is* the switch: ~/bin/yay (the shim that maps Omarchy's AUR
+# call sites onto paru) resolves the real helper by scanning PATH for an
+# executable named paru, so a non-executable paru means the AUR paths of the
+# menu have no helper at all. /usr/bin/paru is the pacman-owned path on this
+# machine; there is no user copy to shadow it.
+PARU=/usr/bin/paru
+
+# Two halves, one file, split by EUID — the shape upstream uses for privileged
+# commands (see omarchy-theme-set-browser-policy and behavior.md §8 第 20 条):
+# this copy does the talking, and the root-owned copy at the fixed path below
+# does the chmod. The fixed path is the point — a rule that authorizes a path a
+# normal user can rewrite is passwordless root.
+ROOT_COPY=/usr/bin/omarchy-setup-security-paru
+RULE=/etc/polkit-1/rules.d/49-paru.rules
+
+# Whenever this runs as root, sudo's secure_path or a dev link could put a
+# user-writable bin/ in front of the system tools, so pin PATH before calling
+# chmod. The unprivileged half keeps the caller's PATH so it still finds pkexec.
+if (( EUID == 0 )); then
+  export PATH=/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/bin:/sbin
+fi
+
+usage() {
+  echo "Usage: omarchy-setup-security-paru [--status|--enabled|--enable|--disable]" >&2
+  exit 2
+}
+
+# --- root half -------------------------------------------------------------
+# polkit rules cannot filter argv (49-paru.rules says so in its own comment), so
+# the shape of the request is validated here instead: one of two flags, and the
+# path is never taken from the caller.
+if (( EUID == 0 )); then
+  case "${1:-}" in
+  --enable) chmod +x "$PARU" ;;
+  --disable) chmod -x "$PARU" ;;
+  *) usage ;;
+  esac
+  exit 0
+fi
+
+# --- user half -------------------------------------------------------------
+case "${1:-}" in
+--status)
+  # For the menu's `checked:` field. One word, always rc=0.
+  if [[ -x $PARU ]]; then echo "enabled"; else echo "disabled"; fi
+  exit 0
+  ;;
+--enabled)
+  # Bare predicate for the menu's `when:` fields: the exit status is the answer,
+  # which is how omarchy-sudo-docker --configured is used in the same file.
+  [[ -x $PARU ]]
+  exit
+  ;;
+--enable | --disable) ;;
+"") ;;
+*) usage ;;
+esac
+
+if [[ ! -e $PARU ]]; then
+  echo "Paru is not installed ($PARU does not exist), so there is nothing to toggle."
+  exit 0
+fi
+
+ACTION="${1:-}"
+if [[ -z $ACTION ]]; then
+  if [[ -x $PARU ]]; then
+    cat <<'WARN'
+
+⚠️  WARNING: Disabling paru takes the AUR off this machine.
+
+Both halves of the AUR go with it, because they share the helper: install (a
+picker over the AUR index) and remove (a picker over the installed packages).
+With paru down those menu entries say "paru not found on PATH" instead of
+listing anything, so they hide themselves while it is off.
+
+Nothing gets uninstalled: packages that came from the AUR keep working, they
+just stop being upgradable until it is back on. Note that a paru package
+upgrade restores the execute bit, so this is a switch, not a lock — re-check it
+after 'omarchy update'.
+
+WARN
+    if gum confirm "Disable paru (drop the AUR)?"; then
+      ACTION=--disable
+    else
+      echo "Aborted. No changes made; the AUR stays available."
+      exit 0
+    fi
+  else
+    cat <<'WARN'
+
+⚠️  WARNING: Re-enabling paru brings the AUR back.
+
+AUR packages are build recipes that run as you, with your files and your
+credentials, and nothing in the index is reviewed. That is the trade Omarchy
+makes by keeping this helper armed; the picker does show what it will run before
+it builds.
+
+WARN
+    if gum confirm "Re-enable paru?"; then
+      ACTION=--enable
+    else
+      echo "Aborted. No changes made; the AUR stays off."
+      exit 0
+    fi
+  fi
+fi
+
+# The privileged step. pkexec, not sudo: this is a menu action with no terminal
+# of its own to carry a password prompt (the floating terminal only shows the
+# warning and the confirmation), and an unruled pkexec hangs on this machine —
+# so the rule is what makes this work at all.
+if [[ ! -x $ROOT_COPY ]]; then
+  echo "Cannot escalate: $ROOT_COPY is missing." >&2
+  echo "Install it with:" >&2
+  echo "  sudo install -m 0755 -o root -g root $HOME/bin/omarchy-setup-security-paru $ROOT_COPY" >&2
+  exit 1
+fi
+
+if ! pkexec "$ROOT_COPY" "$ACTION"; then
+  # /etc/polkit-1/rules.d is root-only, so this cannot test for the rule; name
+  # both things that have to be in place instead.
+  echo "Failed to change paru's permissions." >&2
+  echo "Both halves must be installed: $ROOT_COPY and $RULE." >&2
+  exit 1
+fi
+
+echo ""
+if [[ $ACTION == --enable ]]; then
+  echo "Paru ENABLED. The AUR entries in the menu work again."
+else
+  echo "Paru DISABLED. The AUR entries in the menu will find no helper."
+fi
+echo "Current state: $("$0" --status)"

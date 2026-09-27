@@ -86,7 +86,7 @@
   //     `git merge --ff-only` 会拒绝并报 "you have local changes"，需要手工重放 plugin-patches。
   //   注：新增 id 按合并规则**追加在 Update 子菜单末尾**（"Time" 之后）；override 无法改位置，要挪只能改默认文件。
   "update.omarchy": {"icon":"󰣇","iconFont":"","label":"Pacman","action":"omarchy-launch-floating-terminal-with-presentation omarchy-update"},
-  "update.aur": {"icon":"󰣇","label":"AUR","action":"omarchy-launch-floating-terminal-with-presentation 'paru -Sua'"},
+  "update.aur": {"icon":"󰣇","label":"AUR","when":"omarchy-setup-security-paru --enabled","action":"omarchy-launch-floating-terminal-with-presentation 'paru -Sua'"},
   "update.plugins": {"icon":"󰐱","label":"Plugins","action":"omarchy-launch-floating-terminal-with-presentation 'omarchy plugin update'"},
 
   // 2026-09-22 续（用户"你继续"）：Update 面板逐行体检 —— 只多出一条同 §8 第 27 条性质的死行，一并隐藏。
@@ -103,5 +103,35 @@
   //       trackpad 要 /sys/bus/i2c/drivers/i2c_hid_acpi/i2c-*（本机有 i2c-ELAN0672:00）⇒ 三条都可用。
   //     update.themes    Extra Themes 的守卫命令 omarchy-theme-extras 本机 exit 1 ⇒ 菜单里本来就自动不渲染（实测不在列表里）。
   //     update.process / update.password.user / update.timezone 照旧可用。
-  "update.password.drive": {"icon":"","label":"Drive Encryption","when":"false"}
+  "update.password.drive": {"icon":"","label":"Drive Encryption","when":"false"},
+
+  // 2026-09-27 用户要求（"paru 执行权限加入 menu → settings → security"）：paru 的**可执行位
+  // 就是本机 AUR 的总开关**（~/bin/yay 垫片是按"PATH 上找得到可执行的 paru"挑真实帮手的），
+  // 所以把它做成 Setup > Security 里一条带勾选的开关，而不是再造一个 TUI。
+  //   - 勾选值取脚本自己的 --status（打印 enabled|disabled），与 setup.default.agent.* 同一 idiom
+  //     （`[[ "$(…)" == "…" ]]`）。
+  //   - 提权走 pkexec + `/etc/polkit-1/rules.d/49-paru.rules`（不放行则本机裸 pkexec 会挂死，
+  //     见 docs/local-overrides.md §5），干活的 root 半身是 `/usr/bin/omarchy-setup-security-paru`
+  //     —— root 属主副本，不是指回用户可写树的软链。动作外面套演示终端是照 Security 区其它五条
+  //     的形状：脚本要先念警告再 `gum confirm`，需要一块能等回车的终端。
+  //   - 下面两条 when 守卫是配套：paru 一关，菜单里所有走 AUR 帮手的入口会直接失败（垫片报
+  //     "paru not found on PATH"），所以跟着消失（`update.aur` 的守卫写在上文它自己那行，
+  //     那条是本文件新增的、字段齐全，所以只加 when 不动其它）。
+  //     ⚠ 覆盖默认项必须**整条复述**，不只是 label/icon：`parseMenuJsonc` 会把每个字段补成默认值
+  //     （`action:""`、`kind` 由 action 推），而合并是逐字段覆盖 ⇒ 只写 when 会把默认项的 action
+  //     冲成空串，条目退化成"没有子项的子菜单"、整个不渲染（本轮实测踩到：install.aur 就这样消失，
+  //     行数 14→11）。所以 action 逐字照抄默认项。
+  "setup.security.paru": {"icon":"󰣇","label":"Paru (AUR)","checked":"[[ \"$(omarchy-setup-security-paru --status)\" == \"enabled\" ]]","action":"omarchy-launch-floating-terminal-with-presentation omarchy-setup-security-paru"},
+  "install.aur": {"icon":"󰣇","label":"AUR","when":"omarchy-setup-security-paru --enabled","action":"if command -v xdg-terminal-exec >/dev/null 2>&1; then xdg-terminal-exec --app-id=org.omarchy.terminal omarchy-pkg-aur-install; else omarchy-launch-floating-terminal-with-presentation omarchy-pkg-aur-install; fi"},
+  "remove.package": {"icon":"󰣇","label":"Package","when":"omarchy-setup-security-paru --enabled","action":"if command -v xdg-terminal-exec >/dev/null 2>&1; then xdg-terminal-exec --app-id=org.omarchy.terminal omarchy-pkg-remove; else omarchy-launch-floating-terminal-with-presentation omarchy-pkg-remove; fi"},
+
+  // 2026-09-27 用户要求（"把 ante 以补丁的方式加入 omarchy menu ai 列表"）：把 ante 加进
+  // Setup > Default Agent 那 14 条里。**菜单这行不需要补丁**——本文件就是覆盖层（热监听 +
+  // 合并），补丁落在命令侧那两处上游脚本上：`bin/omarchy-default-agent` 的 case 新增
+  // `ante) … agent_self_managed=true`（ante 不能被 mise 装、自己用 `ante update` 升级 ⇒
+  // 新增一个"自管理"分支，presence 就是"PATH 上找得到"），`bin/omarchy-agent` 的启动 case
+  // 新增 `ante) command=(ante --yolo)`（ante 的 `--prompt` 是 headless 语义，故不转发 prompt）。
+  // 两条都进 niri.patch（24 → 26 文件）。图标 󱚤 借 install.ai 那枚（已确认能渲染，iconFont 留空；
+  // Ante 不在 omarchy 品牌字体里）。
+  "setup.default.agent.ante": {"icon":"󱚤","label":"Ante","checked":"[[ \"$(omarchy-default-agent)\" == \"ante\" ]]","action":"omarchy-default-agent ante"}
 }

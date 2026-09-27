@@ -1,3 +1,22 @@
+diff --git a/bin/omarchy-agent b/bin/omarchy-agent
+index e35bcf0..dbc3509 100755
+--- a/bin/omarchy-agent
++++ b/bin/omarchy-agent
+@@ -130,6 +130,14 @@ pi)
+   command=(pi)
+   [[ -n ${prompt:-} ]] && command+=("$prompt")
+   ;;
++ante)
++  # --yolo is Ante's spelling of "don't stop to ask" (shorthand for
++  # --permission-mode yolo). Ante's only prompt flag runs a headless turn
++  # ("Prompt to run in headless mode"), which is not what this launcher opens,
++  # so a prompt passed here is deliberately not forwarded — the same gap pi
++  # has, and the reason this case has no ${prompt} line.
++  command=(ante --yolo)
++  ;;
+ *)
+   echo "Unsupported default agent: $agent" >&2
+   exit 1
 diff --git a/bin/omarchy-battery-status b/bin/omarchy-battery-status
 index cc0a602..0d044e2 100755
 --- a/bin/omarchy-battery-status
@@ -22,6 +41,49 @@ index cc0a602..0d044e2 100755
  
  ac_online=false
  for supply in "$power_supply_path"/*; do
+diff --git a/bin/omarchy-default-agent b/bin/omarchy-default-agent
+index eb2ef7f..f235102 100755
+--- a/bin/omarchy-default-agent
++++ b/bin/omarchy-default-agent
+@@ -1,7 +1,7 @@
+ #!/bin/bash
+ 
+ # omarchy:summary=Set and launch the default coding agent
+-# omarchy:args=[pi|omp|opencode|ori|claude|codex|grok|openclaw|agy|hermes|copilot|crush|cursor-agent|muse]
++# omarchy:args=[pi|omp|opencode|ori|claude|codex|grok|openclaw|agy|hermes|copilot|crush|cursor-agent|muse|ante]
+ # omarchy:examples=omarchy default agent | omarchy default agent codex | omarchy default agent claude
+ 
+ installing=false
+@@ -25,6 +25,7 @@ fi
+ 
+ case "$1" in
+ pi) agent="pi"; name="Pi" ;;
++ante) agent="ante"; name="Ante"; agent_self_managed=true ;;
+ omp | oh-my-pi) agent="omp"; name="Oh My Pi"; agent_package="github:can1357/oh-my-pi" ;;
+ opencode | open-code) agent="opencode"; name="OpenCode" ;;
+ ori | openrouter) agent="ori"; name="Ori"; agent_package="github:OpenRouterLabs/ori-releases" ;;
+@@ -43,7 +44,7 @@ muse | muse-code | musecode)
+   ;;
+ cursor | cursor-agent) agent="cursor-agent"; name="Cursor CLI" ;;
+ *)
+-  echo "Usage: omarchy-default-agent <pi|omp|opencode|ori|claude|codex|grok|openclaw|agy|hermes|copilot|crush|cursor-agent|muse>"
++  echo "Usage: omarchy-default-agent <pi|omp|opencode|ori|claude|codex|grok|openclaw|agy|hermes|copilot|crush|cursor-agent|muse|ante>"
+   exit 1
+   ;;
+ esac
+@@ -61,6 +62,12 @@ if [[ -n ${agent_installer:-} ]]; then
+   # inside the menu action instead.
+   agent_present() { "$agent_installer" --check; }
+   agent_install() { "$agent_installer" --now; }
++elif [[ -n ${agent_self_managed:-} ]]; then
++  # Ante ships its own launcher (nothing mise-shaped to point at) and updates
++  # itself with `ante update`, so presence is just the command being on PATH
++  # and there is nothing to install. See behavior.md §8 第 40 条.
++  agent_present() { omarchy-cmd-present "$agent"; }
++  agent_install() { agent_present; }
+ else
+   # Anything at the wrapper's path other than the wrapper is the user's own
+   # install, such as the symlink Cursor's installer leaves. A mise copy would
 diff --git a/bin/omarchy-launch-editor b/bin/omarchy-launch-editor
 index 8a69dab..2b66583 100755
 --- a/bin/omarchy-launch-editor

@@ -1,0 +1,16 @@
+// Allow the local desktop user to flip paru's execute bit (Setup > Security >
+// Paru) without a polkit authentication agent. The shell does register an agent
+// on this machine, but it fails to authenticate (polkitd journal: "FAILED to
+// authenticate ... unix-process:unknown"), so an unruled pkexec either hangs or
+// dies — which makes it useless from a menu action. Scope is deliberately
+// narrow: only the root-owned copy of omarchy-setup-security-paru and only the
+// wheel group. polkit rules cannot filter argv, so this grants "either flag";
+// the program revalidates what it is asked to do (one of --enable/--disable,
+// with the target path never taken from the caller).
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.policykit.exec" &&
+        action.lookup("program") == "/usr/bin/omarchy-setup-security-paru" &&
+        subject.isInGroup("wheel")) {
+        return polkit.Result.YES;
+    }
+});

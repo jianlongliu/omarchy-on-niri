@@ -198,8 +198,11 @@ omarchy plugin list | grep lock     # 应只有 jianlongliu.split-lock enabled
 **2. 必须带走的东西**（不只是点文件）
 - `~/bin/` 里自写的：`hyprctl`（niri 的 shim，**必需**；`.bak-*` 可丢）、`uwsm-app`（**必需**，§8 第 22 条）、
   `materal-update`、`omarchy-niri-apply-theme`、
-  `omarchy-niri-repatch`、`omarchy-niri-system`、`omarchy-powerprofiles-{list,set}`、`vantage`（分辨率 TUI，若在别处也一并带）、
+  `omarchy-niri-repatch`、`omarchy-niri-system`、`omarchy-powerprofiles-{list,set}`、
   `omarchy-picker-warmup`（登录后台预热 picker，配 `~/.config/systemd/user/omarchy-picker-warmup.service`，§8 第 25 条）。
+- ~~`vantage`~~：**2026-09-27 已退休**，源码公开归档在 `github.com/jianlongliu/vantage`（release 里有二进制），
+  四个功能都在菜单/面板里了（§8 第 41 条）⇒ **换机不再需要它**。纯本地便利件还剩 `~/.zshrc` 里那段
+  `# >>> vantage agent launcher` 的 `a()` 函数与它读的 `~/.config/vantage/config.json`（**自包含**，不依赖那个二进制）。
 - `~/.config/omarchy/`：`themes/`（含 tonal-spot 等自定义）、`plugins/`、`shell.json`、
   `extensions/omarchy-menu.jsonc`（用户级菜单 override，含 screensaver 屏蔽与 icon 转义修复）、hooks。
 - `~/.config/systemd/user/materal-recolor.{path,service}` → 搬完 `systemctl --user daemon-reload && systemctl --user enable --now materal-recolor.path`。

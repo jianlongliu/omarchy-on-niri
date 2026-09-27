@@ -33,6 +33,9 @@
 - 19. **耗电/续航专项（2026-09-19 测过一轮，下次接着做）**：表现为"感觉慢 + 续航差"。已排除的
 - 35. **Herdr 键位：`Super+Ctrl+Return` 必须经终端启动（裸 `herdr` 在 niri 下没有 tty，必死）（2026-09-24）**：`binds.kdl` 里那行原本是裸调 `herdr`
 - 38. **电池面板加 CHARGE LIMIT 档位切换（充电阈值可写）（2026-09-26）**：两档 Protect 75–80 / Full 95–100，点击走 `pkexec tlp setcharge`（规则 `/etc/polkit-1/rules.d/49-tlp.rules`）；**真根因＝`omarchy-battery-status` 优先信 UPower 而 UPower 缓存阈值不重读 ⇒ 已改成 sysfs 优先**；`setcharge` 只写运行时 ⇒ Full 一次性
+- 39. **Setup > Security 新增 "Paru (AUR)" 开关（paru 的执行位＝本机 AUR 总开关，2026-09-27）**：新命令 `port-bin/omarchy-setup-security-paru` 一身两半（用户半身念警告 + `gum confirm`，root 半身 `chmod ±x /usr/bin/paru`）+ `/usr/bin` root 属主副本 + polkit 规则 `49-paru.rules`（**没放行 chmod**）；菜单侧全在扩展文件（**零补丁**），并给 `install.aur`/`remove.package`/`update.aur` 加 `when` 守卫；⚠ **覆盖默认项必须整条复述**（解析器把每个字段补成默认值 ⇒ 只写 `when` 会把 `action` 冲空、条目静默消失）
+- 40. **ante 进菜单的"默认 agent"列表（2026-09-27）**：菜单那一行在扩展文件（零补丁），补丁落在命令侧两处上游脚本 —— `bin/omarchy-default-agent` 新增 `agent_self_managed` 分支（ante 不能被 mise 装、自己 `ante update` 自升级）+ `bin/omarchy-agent` 新增 `ante --yolo`（它的 `--prompt` 是 headless 语义，故不转发）⇒ 补丁 24 → **26 文件 / 77 hunk**、md5 `22dd2334…`
+- 41. **vantage 退休并公开归档（2026-09-27）**：自写 TUI `~/Projects/vantage` 的四个功能全部搬进菜单/面板后，用户要求"推到远程仓库、标记归档、二进制发 release、先脱敏"⇒ `github.com/jianlongliu/vantage`（**PUBLIC + 已归档**），release `v2026.8.19` 挂由该 tag 源码构建的 `vantage-x86_64-linux-gnu` + `.sha256`；README 精简成退休说明、`.gitignore` 照抄本仓库基线、commit 用 noreply 身份；⚠ **归档前必须先建 release**（归档后只读）、`gh release create` 里的 `<file>#<name>` 那个 `#` 是 label 不是文件名
 
 ---
 
@@ -783,6 +786,84 @@ Omarchy 有两层配置，只有层1在 niri 上真正生效：
       （`git diff -- <niri.patch 里那 24 个路径>`）⇒ **24 文件 / 62 → 72 hunk**，新 md5
       `e6868080f48c5f7cd1711a22e163de86`（`--reverse --check` 通过；旧版 `4ec279cf…` 已退役）。
       注意 `omarchy-niri-repatch` **只负责重放、不会重生成**补丁文件。
+      ⚠ **2026-09-27 已被 §8 第 39/40 条那版超过**：**26 文件 / 77 hunk**、md5 `22dd2334c2210d91618b9ad903d3cbc2`（那条只加了 ante 的 5 个 hunk；`e6868080…` 这一版的 72 hunk 于是变成中间版本）。
+
+39. **Setup > Security 新增 "Paru (AUR)" 开关：paru 的执行位就是本机 AUR 的总开关（2026-09-27）**
+    - **是什么**：菜单 Security 区多一条 `Paru (AUR)`，切换 `/usr/bin/paru` 的执行位。**执行位即总开关**：本机 AUR
+      全走 `~/bin/yay` 垫片（`docs/shims.md` §8 第 34 条），而垫片是**按 "PATH 上找得到可执行的 paru"** 挑真帮手的
+      （`[[ -f $dir/paru && -x $dir/paru ]]`，找不到就报 `yay(shim): paru not found on PATH …`）⇒ `chmod -x` 一次停掉
+      `install.aur` 与 `remove.package` 两条路（`/usr/bin/paru` 由 pacman 拥有，没有用户副本能 shadow 它）。
+      语义 = 整机不再碰 AUR：AUR 装过的包照旧能用，只是不再能升级。
+    - **实现三处（都在补丁之外；菜单侧零补丁）**：
+      ① `port-bin/omarchy-setup-security-paru` → `~/bin`（PATH 首位）：**一身两半**，按 `EUID` 分。用户半身提供
+         `--status`（菜单 `checked:`）、`--enabled`（菜单 `when:`，纯退出码）、无参时念警告 + `gum confirm`；
+         root 半身只认 `--enable`/`--disable`，`chmod` 目标与 `PATH` 都写死 —— 形状照
+         `omarchy-theme-set-browser-policy`（§8 第 20 条）。
+      ② `/usr/bin/omarchy-setup-security-paru`：**root 属主副本**（`install -m 0755 -o root -g root`）。pkexec 的目标
+         只能是这种固定路径 —— 放行一个普通用户改得动的路径就等于无密码 root。
+      ③ `/etc/polkit-1/rules.d/49-paru.rules`：`org.freedesktop.policykit.exec` + 只认这一个 program + wheel →
+         `polkit.Result.YES`（裸 pkexec 无规则会挂死，见 §8 第 38 条）。**刻意没放行 `/usr/bin/chmod`**：vantage 原实现
+         `pkexec chmod ±x /usr/bin/paru` 要的正是这个（= wheel 无密码改任意文件权限、`chmod u+s` 就地提权），
+         故改成"专用 helper + 只放行该 helper"。polkit 规则**不能按 argv 过滤** ⇒ 参数形状在 root 半身再校验一遍。
+    - **菜单侧**（`~/.config/omarchy/extensions/omarchy-menu.jsonc`，热监听 + 合并）：`setup.security.paru`
+      （icon 󰣇、label `Paru (AUR)`、勾选走 `--status`、动作照 Security 区其余五条套
+      `omarchy-launch-floating-terminal-with-presentation` —— 脚本要先念警告，需要一块能等回车的终端）+
+      **三条 `when` 守卫**（`install.aur`、`remove.package`、`update.aur`）：paru 关掉后这些入口本来只会失败，于是
+      跟着消失；开关自身**不带**守卫（否则关掉就开不回来）。
+    - ⚠ **覆盖默认项必须整条复述**：`parseMenuJsonc` 把**每个字段**都补成默认值（`action:""`，`kind` 由 action 推），
+      合并是**逐字段覆盖** ⇒ 用户层只写 `when` 会把默认项的 `action` 冲成空串，条目退化成"没有子项的子菜单"、
+      `isVisible` 判 false、**静默消失**（install 面板 14 → 11 行）。改默认项就要一并复述 `icon`/`label`/`action`。
+    - **验法**：`scripts/menu-model-render.js <面板 id>` 走的是壳层同一份 parse → merge → guard → isVisible。paru 开时
+      install 12 行（含 `AUR`）、remove 6 行（含 `Package`）、update 10 行（含 `AUR`）、`setup.security` 6 行；
+      关掉后 12→11 / 6→5 / 10→9，而 `setup.security` 恒 6 行。提权那一跳：
+      `pkexec /usr/bin/omarchy-setup-security-paru --enable|--disable` 应 rc=0 且**不弹认证**（= 规则在生效）。
+      ⚠ 用鼠标点那条开关本机验不了（`wtype` 送不进菜单，也没有 `dotool`/`ydotool`）。
+    - **回退**：`pkexec rm` 掉 `/usr/bin` 副本与那条规则 + `systemctl restart polkit`（逐条见 `docs/local-overrides.md` §5）。
+      ⚠ **paru 包升级会恢复执行位** ⇒ 这是开关、不是锁，`omarchy update` 之后要复查。
+
+40. **ante 进菜单的"默认 agent"列表（2026-09-27）**
+    - **列表机制**：`Setup > Default Agent` 每条动作都是 `omarchy-default-agent <name>` —— 把名字写进
+      `~/.config/omarchy/defaults/agent` 后 `exec omarchy-agent`（即"设为默认 **并** 启动"），勾选靠
+      `checked:"[[ \"$(omarchy-default-agent)\" == \"<name>\" ]]"`。这是 vantage `a()` 的官方版。
+    - **补丁落点（命令侧两处；菜单那一行在扩展文件、零补丁）**：
+      ① `bin/omarchy-default-agent`：case 新增 `ante) agent="ante"; name="Ante"; agent_self_managed=true`，并新增
+         `elif [[ -n ${agent_self_managed:-} ]]` 分支 —— ante **不是 mise 能装的东西**（原 else 分支会先
+         `mise where ante` 再 `mise use -g ante`，必败后弹 "Could not install Ante with mise"），它自己用
+         `ante update` 升级 ⇒ presence 定义为"PATH 上找得到"（`omarchy-cmd-present`），install 是空操作。
+      ② `bin/omarchy-agent`：启动 case 新增 `ante) command=(ante --yolo) ;;`。`--yolo` 是 Ante 的权限旁路拼法；
+         **故意不转发 prompt** —— ante 的 `-p/--prompt` 是 **headless** 语义，与"开一个交互窗口"不符（`pi` 同样留白）。
+    - **菜单那行**：`setup.default.agent.ante`，icon 󱚤 借 `install.ai` 那枚（已确认能渲染，`iconFont` 留空；Ante
+      不在 omarchy 品牌字体里），动作 `omarchy-default-agent ante`。
+    - **PATH 事实**（Security 开关那条与本节都靠它）：菜单动作与守卫走的是**壳层进程的 PATH**
+      （`/proc/<quickshell>/environ`）—— `~/bin` 居首、且**含 `~/.ante/bin`**，所以裸 `omarchy-setup-security-paru`
+      与裸 `ante` 都能解析。⚠ `systemctl --user show-environment` 那条 PATH **不含**这两者（user manager 的 ≠ 会话的），
+      别拿它判断菜单行为。
+    - **验法**：`omarchy-default-agent bogus` 的 usage 里应出现 `ante`；全链可用桩启动器验（PATH 前置一个只 echo 参数的
+      `omarchy-launch-tui`）⇒ 期望打印 `LAUNCH: --app-id=org.omarchy.agent ante --yolo` 并写 `defaults/agent`；
+      `scripts/menu-model-render.js setup.default.agent` ⇒ 15 行、末行 `Ante`。
+    - **补丁**：+5 hunk ⇒ **26 文件 / 77 hunk**，md5 `22dd2334c2210d91618b9ad903d3cbc2`（路径清单加 `bin/omarchy-agent`、
+      `bin/omarchy-default-agent`；`--reverse --check` 通过，两个副本逐字节一致）。
+
+41. **vantage 退休并公开归档（2026-09-27）**
+    - **四功能归位**：`res` 分辨率切换 → **弃用**（交给 Monitor 面板；代码里 `DISPLAY_LOCKED = true` 保持屏蔽）；
+      `charge` 充电阈值 → 电池面板 CHARGE LIMIT 档位（§8 第 38 条）；`paru` 执行权限 → Security 开关（§8 第 39 条）；
+      `agent` 默认 AI agent → `Setup > Default Agent`（§8 第 40 条）。
+    - **仓库**：`github.com/jianlongliu/vantage` —— **PUBLIC + 已归档**（`isArchived=true`，只读），单个 commit，
+      tag `v2026.8.19`（= `Cargo.toml` 的 version）。**顺序：先建 release 再归档**（归档后资产改不了；下载不受影响）。
+    - **Release `v2026.8.19`**：资产 `vantage-x86_64-linux-gnu`（805 544 B，动态链接 glibc 的 x86_64 ELF，
+      `lto = true` + `strip = true`）与 `vantage-x86_64-linux-gnu.sha256`；二进制**由该 tag 的源码构建** ——
+      `cargo build --release --offline` 零重编译，发布件 / `target/release/vantage` / `/usr/local/bin/vantage`
+      三者 md5 同为 `05352d1459183639dfe9388978b26e1c`。
+    - **脱敏口径**（= skill `writing-docs`）：源码本就干净（无家目录 / 主机名 / 内网 IP / URL / token，只有 `~/.zshrc`、
+      `~/.config/vantage/config.json` 这类通用路径）。README 从"个人工作记录"精简成"退休说明 + 用法 + 构建"，
+      **删掉四节本机专属内容**（开机分辨率 `user.kdl`、EDID 注入与 `/data/App/firmware/…` 备份路径、内核/UKI
+      `loader.conf`、DMS 输出管理坑与 `dms-howdy-integration.md` 指针 —— 这些知识本就在本仓库 docs/ 里）；
+      `.gitignore` = `/target` + 本仓库那份敏感文件基线；commit 身份用 GitHub noreply（与本仓库一致）。
+      **没加 LICENSE 文件**（`Cargo.toml` 已声明 MIT）。
+    - **本机残留：用户拍板"都不动"**（本轮只做到仓库 + release）：`/usr/local/bin/vantage`（与发布件同 md5）、
+      `~/.config/vantage/config.json`、`~/.zshrc` 第 130–140 行那段 `# >>> vantage agent launcher` 的 `a()` 函数
+      （**自包含**：读 `config.json` 再裸起 agent，不依赖那个二进制）、`~/.zshrc.bak-vantage`。
+      **没有任何菜单项/键位还在调 vantage**（只有 `~/.config/niri/monitor.kdl` 一句注释提到它，历史说明，保留）。
 
 ---
 
