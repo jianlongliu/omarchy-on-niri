@@ -15,6 +15,7 @@
 - 8.9 上游合并基线（`43bfe9b` → `d174d4a`，2026-09-18）
 - 8.13 上游小更新（`d174d4a` → `8675600`，2026-09-19）
 - 8.20 上游 sudo 安全机制：代码已合入、机制未启用（2026-09-27）
+- 8.21 上游 shell 层的取舍：只跟 `Color.qml` 的颜色环修复（2026-09-27）
 - 16. **GitHub 发布流程（2026-08-25 建立）**：移植差分推到 pub 仓库
 - 8. **A+C 落地 / 更新覆盖层（2026-08-24）**：本节最后两项。
 
@@ -281,6 +282,48 @@ git restore --source=HEAD --worktree -- \
 本机那处 150+/56- 的改动是"自动关闭 Hermes"那批，本次没跟）。
 
 ---
+
+### 8.21 上游 shell 层的取舍：只跟 `Color.qml` 的颜色环修复（2026-09-27）
+
+同一批（`8675600` → `c5b4db77`，138 提交）里，shell 层改动的绝大部分是**一个动作的两半**：
+把视频壁纸从壳层搬给外部壁纸引擎 OWE。这里只跟了不依赖 OWE 的那一条。
+
+**是什么**
+
+- **跟了**：`shell/Commons/Color.qml`（`flatColor` 加环检测，7+/1-）、`shell/Commons/Util.qml`
+  （一行注释 `tensaku` → `omasnap`，纯注释）。
+- **没跟（OWE 桌面半边）**：`shell/Ui/BackgroundMedia.qml`（6+/55-，删掉 video loader 与
+  `playbackEnabled`/`audioEnabled`/`reloads`/`videoUrl`，只留静图 + `version`）、
+  `shell/Ui/BackgroundVideo.qml`（删除，-122）、`shell/Ui/qmldir`（去掉该注册）、
+  `shell/plugins/background/Background.qml`（3+/40-，删掉功耗控制那一段）。
+- **没跟（OWE 锁屏半边）**：`shell/plugins/lock/LockView.qml`（21+/7-）、`lock/Service.qml`
+  （29+/0-，新增 `videoPosterPath` 与 `poster.sh` 调用）、新增 `lock/LockFeedSurface.qml`
+  （`import Owe.LockFeed`）与 `lock/poster.sh`（用 `ffmpegthumbnailer` 抽一帧缓存，锁屏在暂停或
+  没有 feed 时显示它）。
+
+**机制**：`flatColor` 逐跳解析颜色 token 链（`shell.toml` 里 `x = "y"` 这种别名）。旧实现是
+"指向另一个 token 就递归自己"，没有环检测 ⇒ 主题或用户覆盖写出 `A→B→A` 就无限递归（QML 里
+栈溢出）。新实现用 `while` + `seen` 表：重复出现过的 role 直接返回 `fallback`，多跳链照旧跟到底。
+
+**为什么其余不跟**：OWE 桌面半边装得上——AUR 有 `owe`（0.2.7，上游 `github.com/omacom/owe`，
+**不依赖 hyprland**，依赖 `mpv/ffmpeg/socat/qt6-declarative`；本机只缺 `socat`）；但锁屏半边的
+`owe-lockfeed` **AUR 查无**（`import Owe.LockFeed` 无从解析），`poster.sh` 还要本机没有的
+`ffmpegthumbnailer`。而且一动就会拆掉移植版在 `Background.qml` 里的 niri 适配（锁屏/屏保/省电/
+全屏暂停，音频只出首屏）——那正是本机视频壁纸的功耗控制。要上 OWE 就先用 AUR 的 `owe` 单独实测
+（能否在 niri 铺满、可见性暂停是否成立、功耗多少），再回来整组动；那时
+`plugins/background/Background.qml` 的 3 个 hunk 要重翻。
+
+**验证（2026-09-27 实测）**：用 node 复刻新旧两版 `flatColor`，喂本机真实配置
+（`current/theme/shell.toml` + `~/.config/omarchy/shell.toml`，合并 103 个 key）：
+**0 个环、10 个多跳链 ⇒ 逐 key 结果等价，行为零变化**。`omarchy-restart-shell` → exit 0
+（本机可用：`hyprctl` 那行由 `~/bin/hyprctl` 垫片翻成 `niri msg action spawn`，锁屏判断读 logind
+`LockedHint`），`omarchy-shell shell ping` → `ok`，`journalctl --user -t omarchy-shell` 无加载错误
+（只剩移植版常态的 `quickshell.hyprland.ipc` ServerNotFound）；重启前后同会话全屏截图对比：bar 带
+平均色一致，带内 494/384000 像素有差异且全落在内容行（时间与图标刷新）。
+
+**回退**：`git restore --source=HEAD --worktree -- shell/Commons/Color.qml shell/Commons/Util.qml`
++ `omarchy-restart-shell`。这两个文件不在 `niri.patch` 的路径表里（`grep '^diff --git'` 可查），
+所以补丁不用动；将来 FF 到上游时它们与 §8.20 那批一样属于"本地内容 == 上游内容"，同样先丢再 FF。
 
 ---
 
