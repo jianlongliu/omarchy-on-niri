@@ -895,6 +895,14 @@ Omarchy 有两层配置，只有层1在 niri 上真正生效：
 - **夜灯（日落自动那套）**：`omarchy-toggle-nightlight` / `omarchy-refresh-hyprsunset` /
   `omarchy-restart-hyprsunset` 都在，但走的是 hyprsunset（Hyprland 专有），本机也没装。
 - 更早的遗弃项另见 `docs/shims.md` §4 末尾（workspace-layout / window-transparency「不需要，别补」）。
+- **用 sudo-rs 替换 sudo（2026-09-27 评估后不换）**：Arch 的 `sudo-rs 0.2.15` 只提供
+  `sudo-rs`/`sudoedit-rs`/`visudo-rs`/`su-rs`，不动 `/usr/bin/sudo`；本机现有 sudoers 它能解析
+  （实测 `visudo-rs -cf` → `parsed OK`），但它是**功能子集**，两个缺口正打在上游"临时免密 sudo"的地基上——
+  `NOTAFTER` 不支持（实测报 `syntax error: NOTAFTER is not supported by sudo-rs`）、
+  `-N/--no-update` 没有（man page 与二进制选项表都查不到）⇒ 与那套机制**互斥**。
+  要真替代得自己改 PATH 或覆盖 `/usr/bin/sudo`（与 sudo 包互踩：pacman 升级覆盖、属主打架，
+  且它必须 root 属主 + setuid）。收益是 sudo 自身的内存安全，代价是多养一条提权入口 + 每次系统更新盯着。
+  **除非"减少提权面"成为明确目标（且接受并存维护），否则不回头。**
 - ⚠ **歧义**：「夜灯遗弃」与「色温做低优先垫片」在同一台机器上是**同一个功能面**。
   目前的记法是"**日落自动夜灯不做，纯手动色温以后再说**"；若用户的意思是"色温整个不要"，把 A 表最后一行划掉。
 

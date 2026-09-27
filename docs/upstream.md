@@ -14,6 +14,7 @@
 - 8.7 更新覆盖层：上游更新后自动重放
 - 8.9 上游合并基线（`43bfe9b` → `d174d4a`，2026-09-18）
 - 8.13 上游小更新（`d174d4a` → `8675600`，2026-09-19）
+- 8.20 上游 sudo 安全机制：代码已合入、机制未启用（2026-09-27）
 - 16. **GitHub 发布流程（2026-08-25 建立）**：移植差分推到 pub 仓库
 - 8. **A+C 落地 / 更新覆盖层（2026-08-24）**：本节最后两项。
 
@@ -204,6 +205,80 @@ laravel 从 `~/.config/composer/vendor/bin/laravel` 改成 `~/.local/bin/laravel
   `shell/test-debug.qml`）。
 - **下次更新的预期**：上游一旦改到我们那 24 个文件（当时 17，2026-09-20 起 18、当晚 19；2026-09-26 起 23，同日再加 `bin/omarchy-battery-status` 成 24，见 §8.7）里的**同一函数**，`omarchy-niri-repatch` 会以退出码 2
   明确报冲突且不动仓库（见 §8.7），那时才需要手工翻译合并。
+
+### 8.20 上游 sudo 安全机制：代码已合入、机制未启用（2026-09-27）
+
+上游 `8675600` → `c5b4db77`（138 提交）这一批里，"提权"被统一成**命令作用域 sudo**。合入的是代码，
+**系统件没装、机制没启用**。
+
+**是什么**
+
+- `bin/omarchy-security-functions`（新）：共享库。`omarchy_security_require_privileged_bash_startup`
+  要求脚本以 `bash -p` 启动（并回查 `/proc/<pid>/cmdline` 与 `exe`）；`require_source_root` 校验
+  `OMARCHY_PATH` 与入口路径的对应关系；`enable_no_update_sudo` 把 `default/omarchy/sudo-no-update`
+  前置进 PATH 并置 `OMARCHY_SUDO_NO_UPDATE=1`；另有吊销凭据/清理 trap。
+- `default/omarchy/sudo-no-update/sudo`（新）：`sudo` 包装器，除 `-k/-K/-h/-V` 外一律
+  `exec /usr/bin/sudo -N "$@"`——`-N` 不刷新凭据缓存，于是"更新流程用过的 sudo 授权"不会留给后续步骤。
+- `bin/omarchy-sudo-passwordless`（重写，449 行）：`omarchy-sudo-passwordless [MINUTES]`，默认 15、上限
+  1440，往 `/etc/sudoers.d/99-omarchy-nopasswd-<uid>` 发布
+  `<account> ALL=(ALL) NOTAFTER=<YYYYMMDDHHMMSSZ> NOPASSWD: ALL`（`visudo` 校验 → 点开头临时名 →
+  原子 `mv` 就位），配一条 `systemd-run --on-calendar` 定时器到期撤销。状态机 fail closed：
+  `3` = 确认无授权，其余一律按错误处理，而且**只有 `3` 才允许新发布**。
+- 更新流程改造：`bin/omarchy-update`、`-stay-awake`、`-restart`、`-aur-pkgs`、`refresh-pacman`、
+  `channel-set`、`remove-dev-env`、`install-service-dropbox`、`restart-shell`。其中
+  `omarchy-restart-shell` 是纯健壮性改动：先轮询 `omarchy-shell shell ping`（20 × 0.1s）确认壳层回来，
+  把重锁提到这一步之后，再（当重启前通知服务在跑时）等 `org.freedesktop.Notifications` 注册总线名，
+  最后才重发一次性邀请吐司。
+- 上游打包用的系统件：`etc/tmpfiles.d/omarchy-nopasswd-sudo.conf`（开机删残留授权）、
+  `default/libalpm/hooks/05-omarchy-passwordless-revoke.hook`（settings 包变更前先撤授权）。
+
+**本机形态过不去的三条**
+
+1. `INSTALLED_SELF=/usr/bin/omarchy-sudo-passwordless`：UI 提权（`sudo -N -- "$INSTALLED_SELF" __enable …`）
+   与到期定时器都走这个**绝对路径**。本机 `/usr/bin` 下只有 `omarchy-setup-security-paru`、
+   `omarchy-theme-set-browser-policy` 两个。
+2. `verify_boot_cleanup` 要求 `/etc/tmpfiles.d/omarchy-nopasswd-sudo.conf`（内容须逐字节等于
+   `r! /etc/sudoers.d/99-omarchy-nopasswd-*`）与 `/usr/share/libalpm/hooks/05-omarchy-passwordless-revoke.hook`
+   （内容须逐字节等于模板）。本机两个位置都没有 omarchy 条目。
+3. `omarchy_security_require_source_root` 只接受两种入口——`$OMARCHY_PATH/bin/<cmd>`，或
+   `OMARCHY_PATH == /usr/share/omarchy` 时的 `/usr/bin/<cmd>`；`verify_root_path` 还拒绝符号链接、
+   逐级要求 root 属主且无 group/other 写位。dev-link（`~/.local/share/omarchy` 属用户）两条都过不去。
+
+**为什么不用补丁绕过**：这套东西的安全前提就是"被提权的代码在 root 拥有、普通用户写不了的地方"。
+在本机摆一条用户可写的入口再给它 pkexec 免密，等于把那台机器的"无密码 root"送给任何能写该目录的进程
+（含任何 agent 进程）——这不是移植，是开洞。真要这套，正当路径是把 omarchy 装成 `/usr/share/omarchy` +
+`/usr/bin` 的包形态，即放弃 dev-link 装机。
+
+**验证（2026-09-27 实测）**：`bash -n` 过全部 13 个改动/新增脚本；`realpath ~/.local/share/omarchy`
+与原值一致（`require_source_root` 的前提）；`gum` 在 `/usr/bin/gum`（UI 确认框要用）；
+`omarchy-shell shell ping` → `ok`（新版 `omarchy-restart-shell` 的前提成立）；非交互直接跑
+`bin/omarchy-sudo-passwordless` → sudo 索要密码/指纹、未发布任何授权，
+`/etc/sudoers.d` 仍是 `00_jianlongliu` / `fprint-timer` / `omarchy-theme-browser` 三条，`/etc/tmpfiles.d`
+与 `/usr/share/libalpm/hooks` 无新增。
+
+**机制未启用意味着**：`omarchy-sudo-passwordless` 本机跑到提权那步就失败（fail closed，不会半发布）；
+`omarchy-update` 的上游流程本机本来就走不通（没装 omarchy 包、没配 Omarchy 仓库），菜单与 bar 的
+Update 仍走 `~/bin/omarchy-update` 垫片。
+
+**更新时注意**：这批文件在工作树里现在"本地改动恰好等于上游版本"，但 `git pull --ff-only` 仍会被
+dirty 挡下（git 只比是否 dirty，不比内容）。处置是先丢再 FF：
+
+```bash
+cd ~/.local/share/omarchy
+git restore --source=HEAD --worktree -- \
+  bin/omarchy-channel-set bin/omarchy-install-service-dropbox bin/omarchy-refresh-pacman \
+  bin/omarchy-remove-dev-env bin/omarchy-restart-shell bin/omarchy-sudo-passwordless \
+  bin/omarchy-update bin/omarchy-update-aur-pkgs bin/omarchy-update-restart \
+  bin/omarchy-update-stay-awake config/omarchy/hooks/pre-refresh-pacman.d/add-custom-repo.sample \
+  default/agents/skills/omarchy/hooks.md docs/update-process.md \
+  etc/tmpfiles.d/omarchy-nopasswd-sudo.conf manual/31-dotfiles.md manual/48-security.md
+# 新增的 5 个未跟踪文件（bin/omarchy-security-functions、default/libalpm/hooks/05-omarchy-passwordless-revoke.hook、
+# default/omarchy/sudo-no-update/sudo、$OMARCHY_PATH/docs/passwordless-sudo.md、migrations/1788163635.sh）
+# 与上游同路径时由 FF 直接快进，不用动。
+```
+
+丢的是"等于上游的内容"，无损；`bin/omarchy-remove-ai-hermes` **不在本次范围内**（它属于 Hermes 主题，
+本机那处 150+/56- 的改动是"自动关闭 Hermes"那批，本次没跟）。
 
 ---
 
