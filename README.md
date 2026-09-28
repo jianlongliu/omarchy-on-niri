@@ -47,10 +47,26 @@ standalone installer** — it assumes a working Arch + niri login session and an
 The volumes keep the original section numbering (`§8 第 N 条`, `§8.x`, `§11.x`); the main volume
 holds a map from every moved section to its volume. The volumes have exactly one home: `docs/` itself.
 
+## Hardware notes — ThinkPad X1 Carbon Gen 9
+
+This port was developed on and tuned for a **ThinkPad X1 Carbon Gen 9** (Intel). On top of the generic
+port, the repo carries machine-specific customisations:
+
+| Area | What it does here | What to change on other hardware |
+|---|---|---|
+| **IR face unlock** | `split-lock/ir-light` lights this machine's Chicony IR camera (`04f2:b6ea`): it hardcodes `open("/dev/video2")` and the UVC extension unit `unit=13 selector=14` | Those two values. The PAM hook is `optional`, so a wrong device only means the light never comes on |
+| **Display** | The five resolution / text-size tiers are tuned for this panel (ThinkPad `CSO1411`) | Recompute the tiers for your own panel |
+| **Touchpad / TrackPoint** | `input.kdl` enables **`dwtp`** (disable-while-trackpointing); the Fn touchpad toggle is implemented by writing `~/.config/niri/input-toggle-touchpad.kdl`, because this machine's `thinkpad_acpi` reports `hotkey_bios_enabled = 0` (no Fn event) and niri has no `KEY_TOUCHPAD_TOGGLE` | `dwtp` and that toggle are meaningless without a TrackPoint — drop them |
+| **Power / battery** | TLP instead of `power-profiles-daemon` (the shims fall back to TLP's D-Bus interface); `/etc/tlp.conf` sets `CPU_BOOST_ON_SAV = 1` (turbo allowed in powersave too); the power panel gains a **charge-limit** tier (ThinkPad conservation mode), written through the narrow polkit rule `etc/polkit-1/rules.d/49-tlp.rules` | No charge-limit tier without ThinkPad firmware support; TLP and boost settings per taste |
+| **Intel platform** | `install/hardware/intel/thermald.sh`; `default/systemd/system-sleep/keyboard-backlight` (keyboard backlight across suspend) | Pick per platform |
+
+Beyond the repo there is a layer of machine-only changes (`~/.config` overrides, `/etc/tlp.conf`, polkit
+rules, …): `docs/local-overrides.md` lists them item by item with the rollback for each.
+
 ## Repository layout
 
 ```
-Nirism/
+onarchi/
 ├── shell/        <- ported Omarchy Quickshell source (Layer 1)
 ├── bin/          <- Omarchy's own scripts (unchanged upstream)
 ├── port-bin/     <- port glue: hyprctl shim + niri system/power/theme/repatch scripts

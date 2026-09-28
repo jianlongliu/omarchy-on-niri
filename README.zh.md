@@ -38,10 +38,24 @@ Arch + niri 登录会话、并且**已经装好 Omarchy**（或者你会先装 O
 各卷**沿用原章节编号**（`§8 第 N 条`、`§8.x`、`§11.x`），主文档里有「原编号 → 卷」的映射表；
 文档只有一份正本，就在 `docs/` 里。
 
+## 针对 ThinkPad X1 Carbon Gen 9 的定制与优化
+
+本移植在 **ThinkPad X1 Carbon Gen 9**（Intel）上开发并调优，除通用移植外还带了这批机器专属的改动。
+
+| 面向 | 本机具体做法 | 换机要动什么 |
+|---|---|---|
+| **红外人脸解锁** | `split-lock/ir-light` 点亮本机 Chicony IR 摄像头（`04f2:b6ea`）：写死 `open("/dev/video2")` + UVC 扩展单元 `unit=13 selector=14` | 改这两处；PAM 里是 `optional`，写错只是灯不亮，不会把人锁在外面 |
+| **屏幕** | 五档分辨率/字号档位是按本机面板（ThinkPad `CSO1411`）调的 | 按自己的面板重算档位 |
+| **触摸板 / 小红点** | `input.kdl` 开了 **`dwtp`**（用 TrackPoint 时忽略触控板输入）；Fn 触摸板开关改由写 `~/.config/niri/input-toggle-touchpad.kdl` 实现——本机 `thinkpad_acpi` 的 `hotkey_bios_enabled = 0`，Fn 键不发事件，而 niri 不认识 `KEY_TOUCHPAD_TOGGLE` | 没有小红点的机器上 `dwtp` 与这个开关都没意义，按需删掉 |
+| **电源 / 电池** | 用 **TLP** 而非 `power-profiles-daemon`（垫片回落到 TLP 的 D-Bus 接口）；`/etc/tlp.conf` 把 `CPU_BOOST_ON_SAV` 改成 1（powersave 也允许睿频）；电源面板新增**充电上限**档位（ThinkPad 保养模式），经窄口径 polkit 规则 `etc/polkit-1/rules.d/49-tlp.rules` 写入 | 非 ThinkPad 固件没有这个充电档位；TLP 与睿频取向按自己口味 |
+| **Intel 平台** | `install/hardware/intel/thermald.sh`、`default/systemd/system-sleep/keyboard-backlight`（挂起前后处理键盘背光） | 按平台取舍 |
+
+仓库之外还有一层机器专属改动（`~/.config` 覆盖、`/etc/tlp.conf`、polkit 规则等），逐条清单与回退方式见 `docs/local-overrides.md`。
+
 ## 仓库结构
 
 ```
-Nirism/
+onarchi/
 ├── shell/        <- 移植后的 Omarchy Quickshell 源码（层1）
 ├── bin/          <- Omarchy 自己的脚本（上游原样，未改）
 ├── port-bin/     <- 移植胶水：hyprctl 垫片 + uwsm-app 垫片 + omarchy-update/picker-warmup/display-text-size 垫片
