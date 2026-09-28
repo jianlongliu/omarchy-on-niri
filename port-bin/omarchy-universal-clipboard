@@ -32,9 +32,11 @@ CHORDS = {
     "cut": ("ctrl+x", "ctrl+x"),
 }
 
-# 写剪贴板的动作 -> OSD 文案；图标是 nf-md-content_copy（F018F，本机 Nerd Font 里有）。
-OSD_ICON = "\U000f018f"
-OSD_MESSAGES = {"copy": "Copied", "cut": "Cut"}
+# 终端里只有"复制"弹卡片。**剪切不弹**：ghostty 没有 cut 动作，Ctrl+X 只是转发给应用，
+# 剪贴板纹丝不动（实测：PTY 收到 0x18、`wl-paste` 读回原哨兵）⇒ 弹 "Cut" 是虚报。
+# 哪天真想让终端里的 X 当复制使唤，图标可用 U+F0190（nf-md-content_cut，剪刀）。
+OSD_ICON = "\U000f018f"  # nf-md-content_copy（双层方框；F0190=剪刀、F0192=粘贴板，都是 Nerd Font 里有的）
+OSD_MESSAGE = "Copied"
 OSD_DURATION_MS = "1200"
 
 
@@ -70,14 +72,14 @@ def main(argv):
         print(f"{action}: app_id={app_id or '(无焦点窗口)'} terminal={is_terminal} -> {chord}")
         return 0
 
-    # 终端里的复制/剪切：注入完（剪贴板真写了）再弹 OSD 卡片，卡片本身不挡任何事。
+    # 终端里的复制：注入完（剪贴板真写了）再弹 OSD 卡片，卡片本身不挡任何事。
     # 用户若一直按住 Super，注入的和弦会带上 Super（终端侧靠 ghostty 的
     # super+ctrl+insert 变体接住，其他应用只能等 Super 松开）。
-    if is_terminal and action in OSD_MESSAGES:
+    if is_terminal and action == "copy":
         proc = subprocess.run(["omarchy-sendkeys", chord])
         if proc.returncode == 0:
             subprocess.run(
-                ["omarchy-osd", "-i", OSD_ICON, "-m", OSD_MESSAGES[action], "-d", OSD_DURATION_MS],
+                ["omarchy-osd", "-i", OSD_ICON, "-m", OSD_MESSAGE, "-d", OSD_DURATION_MS],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )

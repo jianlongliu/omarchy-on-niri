@@ -38,6 +38,7 @@ KEYS = {
     "insert": 110, "delete": 111, "home": 102, "end": 107,
     "pageup": 104, "pagedown": 109, "enter": 28, "escape": 1,
     "backspace": 14, "tab": 15, "space": 57,
+    "comma": 51, "period": 52,
     # 字母（垫片只要 c/v/x，其余是调试用）
     "a": 30, "c": 46, "e": 18, "h": 35, "i": 23, "j": 36, "k": 37,
     "l": 38, "n": 49, "o": 24, "u": 22, "v": 47, "x": 45, "z": 44,

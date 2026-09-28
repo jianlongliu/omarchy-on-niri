@@ -104,7 +104,7 @@
 | `omarchy-toggle-input-device` | 触控板 / 触摸屏开关。上游脚本走 `hl.device`（niri 侧被垫片 no-op ⇒ 只弹 OSD、设备不关的"假成功"）；本垫片改成**写 / 删** `~/.config/niri/input-toggle-{touchpad,touchscreen}.kdl`，由 `input.kdl` 里两行 `include optional=true` 引入。菜单里的 Touchpad 项现在**真生效**，见垫片卷 `docs/shims.md` §4 | ✅ `port-bin/`（2026-09-23 收进） |
 | `omarchy-niri-monitor-modes` | Display 面板**分辨率滑块**的后端：`set` = 立即注入 modeline+scale **并**写 `monitor.kdl`（切到哪档、下次开机就是哪档），另有 `set-runtime`（只切本次）/`set-boot`/`status`/`list`/`current`/`boot`。档位表与口径见 §4「显示档位」 | ✅ `port-bin/`（2026-09-26 收进） |
 | `omarchy-sendkeys` | uinput 按键注入器：`omarchy-sendkeys ctrl+Insert`；`--hold <秒> super` 是按住修饰键的调试入口，`-super+ctrl+Insert` 是"只发松开"语法。⚠ **必须声明 1..248 全段键码**（只声明用到的几个键时 udev 只给 `ID_INPUT_KEY`，libinput 不当键盘、客户端与 niri bind 都收不到） | ✅ `port-bin/`（2026-09-27 收进） |
-| `omarchy-universal-clipboard` | 通用复制/粘贴/剪切的判定层：按焦点窗口 `app_id` 选和弦（终端 → Insert 系，其他 → `Ctrl+C/V`，剪切恒 `Ctrl+X`），终端里的复制/剪切顺带弹一次 `omarchy-osd` 卡片 | ✅ `port-bin/`（2026-09-27 收进） |
+| `omarchy-universal-clipboard` | 通用复制/粘贴/剪切的判定层：按焦点窗口 `app_id` 选和弦（终端 → Insert 系，其他 → `Ctrl+C/V`，剪切恒 `Ctrl+X`），终端里的**复制**顺带弹一次 `omarchy-osd` 卡片（剪切不弹：ghostty 无 cut 动作、`Ctrl+X` 只转发给应用） | ✅ `port-bin/`（2026-09-27 收进） |
 | `wechat`、`clipboard-sync.sh`、`clipboard-handler.sh` | 移植之前的老自建，保留 | ❌（与本移植无关） |
 
 - 上表 12 项与仓库 `port-bin/` 的对账：**11 项**于 2026-09-20 `md5sum` 逐个核过（**10 项逐字节一致**；

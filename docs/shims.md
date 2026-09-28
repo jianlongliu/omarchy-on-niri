@@ -406,11 +406,15 @@ root 改动 ⇒ **等用户拍板**；真要做：`cp` 备份到 `~/.local/state
 两个脚本都在 `port-bin/`，随 `install.sh` 的 `port-bin/*` glob 装进 `~/bin`；`~/bin` 在 niri 的
 `config.kdl` `environment { PATH … }` 里排第一，所以 bind 里可以直接写命令名。
 
-**终端里的复制/剪切会给一次视觉反馈**：注入完（剪贴板真写了）再弹一张壳层 OSD 卡片
-`omarchy-osd -i <nf-md-content_copy F018F> -m Copied|Cut -d 1200` —— 就是关机/重启那种卡片
-（`bin/omarchy-system-logout` 同款调用）。**不用 ghostty 自己的通知**：`app-notifications = clipboard-copy`
+**终端里的复制会给一次视觉反馈**：注入完（剪贴板真写了）再弹一张壳层 OSD 卡片
+`omarchy-osd -i <nf-md-content_copy U+F018F> -m Copied -d 1200` —— 就是关机/重启那种卡片
+（`bin/omarchy-system-logout` 同款调用）。**剪切不弹卡片**：ghostty 没有 cut 动作
+（`ghostty +list-actions` 里只有 copy/paste），终端里 `Ctrl+X` 只是**转发给应用**（vim/tmux 里才真会切），
+剪贴板纹丝不动 —— 实测判据：探针 PTY 收到 `0x18`、`wl-paste` 读回原哨兵，所以弹 "Cut" 是虚报。
+（若哪天想让终端里的 X 当复制使唤，图标备好：`U+F0190` nf-md-content_cut＝剪刀，Nerd Font 里有、渲染验过。）
+**不用 ghostty 自己的通知**：`app-notifications = clipboard-copy`
 走 libnotify 吐司，本机那条链路看不到东西，所以 `~/.config/ghostty/config` 里保持
-`no-clipboard-copy`。反馈只给**终端分支**的写剪贴板动作（浏览器里频繁复制不该被卡片打扰）；
+`no-clipboard-copy`。反馈只给**终端分支的复制**（浏览器里频繁复制不该被卡片打扰）；
 无选区时 ghostty 的 copy 其实是空操作，卡片仍会弹（垫片没法知道有没有选到东西）。
 
 **为什么要自造注入原语**：上游在 Hyprland 上靠 `hl.dsp.send_key_state`（合成器自带键注入）。
@@ -450,6 +454,9 @@ omarchy-sendkeys super+c     # 真实链路：niri 的 bind 抓走 Super+C → �
 单独看那张卡片：`omarchy-osd -i 󰆏 -m Copied -d 3000`（`󰆏` = U+F018F）。整条链要按 bind 的
 执行环境验，别用自己的 shell：`niri msg action spawn-sh "omarchy-universal-clipboard copy"`
 （焦点在终端时才会注入 + 弹卡片，截图前后比对能看出卡片位置）。
+**顺手的一个用途**：注入器现在认识 `comma`/`period`，所以 `omarchy-sendkeys ctrl+shift+comma` 等于给运行中的
+ghostty 按一次 `reload_config` —— 实测够用：改配置后重载，新增的 keybind 立即生效（探针实例上验过：
+按新键先出 `PROBE_BEFORE`，改配置 + 重载后出 `PROBE_THIRD`），不必重启终端窗口。
 
 **回退**：`~/.local/state/backups/.config/niri/binds.kdl.bak-20260927` 与
 `~/.local/state/backups/.config/ghostty/config.bak-20260927`；或删掉三个 bind + 四个 ghostty keybind，
