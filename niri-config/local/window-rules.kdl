@@ -140,8 +140,8 @@ window-rule {
 window-rule {
     match app-id=r#"^org\.omarchy\.float-tui$"#
     open-floating true
-    default-column-width { proportion 0.6; }
-    default-window-height { proportion 0.7; }
+    default-column-width { proportion 0.7;}
+    default-window-height { proportion 0.7;}
     opacity 0.85
     draw-border-with-background false
     background-effect {
@@ -167,8 +167,8 @@ window-rule {
 window-rule {
     match app-id=r#"^org\.omarchy\.about$"#
     open-floating true
-    default-column-width { fixed 920; }
-    default-window-height { fixed 540; }
+    default-column-width { fixed 1020; }
+    default-window-height { fixed 700; }
     // Same story as org.omarchy.terminal / org.omarchy.float-tui: ghostty's own 0.85 background
     // times this 0.85 = the plain terminal's effective 0.72.
     opacity 0.85

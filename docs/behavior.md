@@ -21,7 +21,7 @@
 - 15. **brightnessctl 授权安装 + 背光权限（2026-08-25）**：媒体键 OSD（§5.3）依赖
 - 23. **screensaver 关掉并屏蔽（2026-09-20，用户要求「很烦，屏蔽和禁用他」）**：本机
 - 27. **菜单屏蔽 5 项（unlock / web app / preinstalls / channel / config.plymouth+shell）（2026-09-22，用户要求）**：这 6 个 id
-- 28. **Update 菜单改造：`update.omarchy` → "Pacman"，新增 `update.aur` / `update.plugins`（2026-09-22，用户要求）**：同一份 override
+- 28. **Update 菜单改造：`update.omarchy` → "System"（2026-09-22 起叫过 "Pacman"，2026-09-27 按 `docs/menu.md` schema 重写文案），新增 `update.aur` / `update.plugins`**：同一份 override
 - 8.17 输入源徽章（`ronald.input-sources`）+ fcitx5 双源前提（2026-09-19）
 - 12. **Super+K 键位菜单只剩 2 条（第二次复发，2026-08-25 晚已修）**：同日早些时候修过一次
 - 8.6 A 层：菜单指向 niri 真配置，Hyprland 层降级
@@ -36,6 +36,8 @@
 - 39. **Setup > Security 新增 "Paru (AUR)" 开关（paru 的执行位＝本机 AUR 总开关，2026-09-27）**：新命令 `port-bin/omarchy-setup-security-paru` 一身两半（用户半身念警告 + `gum confirm`，root 半身 `chmod ±x /usr/bin/paru`）+ `/usr/bin` root 属主副本 + polkit 规则 `49-paru.rules`（**没放行 chmod**）；菜单侧全在扩展文件（**零补丁**），并给 `install.aur`/`remove.package`/`update.aur` 加 `when` 守卫；⚠ **覆盖默认项必须整条复述**（解析器把每个字段补成默认值 ⇒ 只写 `when` 会把 `action` 冲空、条目静默消失）
 - 40. **ante 进菜单的"默认 agent"列表（2026-09-27）**：菜单那一行在扩展文件（零补丁），补丁落在命令侧两处上游脚本 —— `bin/omarchy-default-agent` 新增 `agent_self_managed` 分支（ante 不能被 mise 装、自己 `ante update` 自升级）+ `bin/omarchy-agent` 新增 `ante --yolo`（它的 `--prompt` 是 headless 语义，故不转发）⇒ 补丁 24 → **26 文件 / 77 hunk**、md5 `22dd2334…`
 - 41. **vantage 退休并公开归档（2026-09-27）**：自写 TUI `~/Projects/vantage` 的四个功能全部搬进菜单/面板后，用户要求"推到远程仓库、标记归档、二进制发 release、先脱敏"⇒ `github.com/jianlongliu/vantage`（**PUBLIC + 已归档**），release `v2026.8.19` 挂由该 tag 源码构建的 `vantage-x86_64-linux-gnu` + `.sha256`；README 精简成退休说明、`.gitignore` 照抄本仓库基线、commit 用 noreply 身份；⚠ **归档前必须先建 release**（归档后只读）、`gh release create` 里的 `<file>#<name>` 那个 `#` 是 label 不是文件名
+
+- 42. **通用剪贴板 `Super+C/V/X` + 终端里复制/剪切的 OSD 卡片（2026-09-27）**：niri 抓键（`binds.kdl` 三条 `spawn-sh "omarchy-universal-clipboard copy|paste|cut"`），垫片按焦点窗口注入——终端 → `Ctrl+Insert`/`Shift+Insert`，其他 → `Ctrl+C/V`，剪切恒 `Ctrl+X`（上游 Hyprland 靠 `send_key_state`，niri 只能 spawn ⇒ 自造 uinput 注入器 `omarchy-sendkeys`、零安装）；终端里复制/剪切额外弹一次**壳层 OSD 卡片**（`omarchy-osd`，关机/重启同款）——ghostty 自己的 `app-notifications = clipboard-copy` 走 libnotify 吐司、在本机根本不显示，所以那边保持关闭。机制、两条硬约束（注入设备必须声明 1..248 全段键码、物理按住的 SUPER 会并进和弦）、≈0.45 s/键 与验法见 `docs/shims.md`「通用剪贴板垫片」（= `§8 第 42 条`）
 
 ---
 
@@ -300,15 +302,34 @@
 
 ---
 
-28. **Update 菜单改造：`update.omarchy` → "Pacman"，新增 `update.aur` / `update.plugins`（2026-09-22，用户要求）**：
+28. **Update 菜单改造：`update.omarchy` → "System"，新增 `update.aur` / `update.plugins`（2026-09-22 起，2026-09-27 重写文案，用户要求）**：
     用户原话"omarchy menu update 把 omarchy 改 pacman，增加 aur (paru -Sua) 和 plugin (omarchy plugin update) 更新"。
     改的还是 §8 第 27 条那份用户层 override（同一个文件、同一段注释区）：
-    - `update.omarchy`：**只改显示** —— `label` → `Pacman`、图标换成 Arch 那枚（从默认项 `install.package` 抄）、
+    - **2026-09-27 文案重写（用户："pacman 和 AUR 那文字描述太潦草，遵循 omarchy 设计规范"）**：按
+      `$OMARCHY_PATH/docs/menu.md` 的 Entry schema 重写 —— `label` 取与同菜单其它行**同构的名词短语**
+      （对照 Firmware / Timezone / Extra Themes / Plugins；工具名不等于"要更新的对象"），`description`
+      是 schema 里唯一的描述字段。⇒ `update.omarchy` 由 **"Pacman" 改为 "System"**（动作不变，仍是
+      垫片 `sudo pacman -Syu`）、`update.aur` 由 **"AUR" 改为 "AUR Packages"**、`update.plugins` 保持
+      "Plugins"，三条一起补 `description`。这一段现在是：`System / Config / Process / Hardware / Firmware /
+      Password / Timezone / Time / AUR Packages / Plugins`。
+      - ⚠ **`description` 的真实行为与 `docs/menu.md` 的说法不符**（2026-09-27 实测）：md 称它是
+        "Subtitle shown while searching"，但搜索行的副标题取的是 `Menu.qml:640` 的
+        `parentPathFor(entry.id)`（= 父路径，这里显示 "Update"），**不是** description。description 只进
+        `matchesQuery` / `searchScore` ⇒ **只参与搜索匹配、从不显示**。
+      - ⚠ 匹配规则见 `MenuModel.termInSearchWords`：description 是**按空白切词后精确相等**才算命中（label /
+        leaf id 那一侧才是子串匹配）。所以为搜索写的词必须是独立单词 —— 首版
+        `"Update all system packages (pacman -Syu)"` 搜 `pacman` 命中不了（词是 `(pacman`），
+        改成 `"Update all system packages with pacman"` 才通。
+      - 验证：`omarchy-menu refresh` → `summon update` 抓图 = 上述十行；`wtype pacman` 后抓图 ⇒ 命中
+        System 行（其下小字是父路径 "Update"）；扩展文件存盘即热重载，无需重启壳。JSONC 里**别写行内注释**
+        （`stripJsonc` 只删整行注释）。
+    - （2026-09-22 原始改造）`update.omarchy`：**只改显示** —— `label` → ~~`Pacman`~~（见上，现为 "System"）、
+      图标换成 Arch 那枚（从默认项 `install.package` 抄）、
       **`iconFont` 显式清空**。清它是有原因的：`mergeMenuSources` 是**逐字段覆盖**，不清就继续拿默认项的
       `iconFont:"omarchy"` 去渲染这枚普通 Nerd Font 字形；置空后 `Menu.qml` 的
       `font.family: row.iconFont.length > 0 ? row.iconFont : root.fontFamily` 回落到菜单字体。
       **动作保持原样**（`omarchy-launch-floating-terminal-with-presentation omarchy-update`）⇒ 裸调 `omarchy-update`
-      落到 `~/bin/omarchy-update` 垫片 = `sudo pacman -Syu` + 一句 AUR 提示，与 bar 的 `system-update` 部件同一条路。
+      落到 `~/bin/omarchy-update` 垫片 = 裸 `sudo pacman -Syu`（**2026-09-27 起脚本自己不打任何字**：原先那行绿色中文横幅与末尾那行黄色 AUR 提醒都已删，用户要求更新终端保持干净；AUR 更新走菜单里独立的 AUR Packages 入口），与 bar 的 `system-update` 部件同一条路。
       想更直白就是把 action 换成 `'sudo pacman -Syu'`。
     - `update.aur`：`omarchy-launch-floating-terminal-with-presentation 'paru -Sua'`（本机 paru v2.1.0 在位；
       AUR 另有 `~/bin/yay` 垫片，此处按用户要求用 paru）。

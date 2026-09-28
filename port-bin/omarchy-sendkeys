@@ -1,0 +1,117 @@
+#!/usr/bin/env python3
+"""往 /dev/uinput 上临时建一把键盘、发一组按键、销毁（纯标准库，零安装）。
+
+用法:
+    omarchy-sendkeys ctrl+Insert        # 按顺序按下、逆序松开
+    omarchy-sendkeys ctrl+c shift+Insert   # 一次可以发多个和弦
+    omarchy-sendkeys --hold 5 super     # 按住 max 秒（调试用）
+    omarchy-sendkeys -super+ctrl+Insert # "-" 前缀 = 只发松开事件（调试用）
+
+为什么不用 wtype: wtype 走 wayland 虚拟键盘，会把自己那份最小 keymap 推给客户端，
+GTK4 客户端解不出来（收得到 key 事件但没有字符）；另外它无法在合成器层面
+解开"物理按住的 SUPER"，见 docs/shims.md。
+为什么必须声明 1..248 全段键码: 只声明实际用到的两三个键时 udev 只给
+ID_INPUT_KEY(而不是 ID_INPUT_KEYBOARD)，libinput 就不把它当键盘，合成器收不到。
+
+环境变量: UIKEY_WAIT(默认 0.25) = 等 libinput/合成器枚举新设备的秒数;
+          UIKEY_TAIL(默认 0.15) = 发完到销毁设备的秒数。
+"""
+import fcntl
+import os
+import struct
+import sys
+import time
+
+DEV = "/dev/uinput"
+UI_SET_EVBIT = 0x40045564
+UI_SET_KEYBIT = 0x40045565
+UI_DEV_CREATE = 0x5501
+UI_DEV_DESTROY = 0x5502
+UI_DEV_SETUP = 0x405C5503
+EV_SYN, EV_KEY, SYN_REPORT = 0, 1, 0
+
+KEYS = {
+    # 修饰键
+    "ctrl": 29, "leftctrl": 29, "shift": 42, "leftshift": 42,
+    "alt": 56, "leftalt": 56, "super": 125, "leftmeta": 125,
+    # 编辑/导航
+    "insert": 110, "delete": 111, "home": 102, "end": 107,
+    "pageup": 104, "pagedown": 109, "enter": 28, "escape": 1,
+    "backspace": 14, "tab": 15, "space": 57,
+    # 字母（垫片只要 c/v/x，其余是调试用）
+    "a": 30, "c": 46, "e": 18, "h": 35, "i": 23, "j": 36, "k": 37,
+    "l": 38, "n": 49, "o": 24, "u": 22, "v": 47, "x": 45, "z": 44,
+}
+
+
+def emit(fd, etype, code, value):
+    os.write(fd, struct.pack("@llHHi", 0, 0, etype, code, value))
+
+
+def parse(chord):
+    """'ctrl+Insert' -> ([29, 110], []);  '-super+ctrl+c' -> 前面是只松开的键。"""
+    parts = [p.lower() for p in chord.split("+")]
+    unknown = [p for p in parts if p.lstrip("-") not in KEYS]
+    if unknown:
+        print(f"未知键: {unknown}", file=sys.stderr)
+        return None
+    downs = [KEYS[p] for p in parts if not p.startswith("-")]
+    ups = [KEYS[p.lstrip("-")] for p in parts if p.startswith("-")]
+    return downs, ups
+
+
+def main(argv):
+    hold = 0.0
+    if argv[:1] == ["--hold"]:
+        hold, argv = float(argv[1]), argv[2:]
+    if not argv:
+        print(__doc__)
+        return 2
+
+    parsed = [parse(chord) for chord in argv]
+    if any(p is None for p in parsed):
+        return 2
+
+    wait = float(os.environ.get("UIKEY_WAIT", "0.25"))
+    tail = float(os.environ.get("UIKEY_TAIL", "0.15"))
+
+    try:
+        fd = os.open(DEV, os.O_WRONLY | os.O_NONBLOCK)
+    except OSError as e:
+        print(f"打不开 {DEV}: {e}（需要对该设备有写权限）", file=sys.stderr)
+        return 1
+
+    try:
+        fcntl.ioctl(fd, UI_SET_EVBIT, EV_KEY)
+        fcntl.ioctl(fd, UI_SET_EVBIT, EV_SYN)
+        for code in range(1, 249):
+            fcntl.ioctl(fd, UI_SET_KEYBIT, code)
+        fcntl.ioctl(fd, UI_DEV_SETUP, struct.pack("@HHHH80sI", 3, 0x1, 0x1, 1, b"omarchy-sendkeys", 0))
+        fcntl.ioctl(fd, UI_DEV_CREATE)
+        time.sleep(wait)  # 等 libinput / 合成器把新键盘枚举进来
+
+        for downs, ups in parsed:
+            for code in ups:
+                emit(fd, EV_KEY, code, 0)
+            if ups:
+                emit(fd, EV_SYN, SYN_REPORT, 0)
+            for code in downs:
+                emit(fd, EV_KEY, code, 1)
+            emit(fd, EV_SYN, SYN_REPORT, 0)
+            if hold:
+                time.sleep(hold)
+            for code in reversed(downs):
+                emit(fd, EV_KEY, code, 0)
+            emit(fd, EV_SYN, SYN_REPORT, 0)
+        time.sleep(tail)
+    finally:
+        try:
+            fcntl.ioctl(fd, UI_DEV_DESTROY)
+        except OSError:
+            pass
+        os.close(fd)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

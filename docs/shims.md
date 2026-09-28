@@ -22,6 +22,7 @@
 - 34. **AUR 助手统一成 `yay` → paru 垫片（`~/bin/yay`，2026-09-22 修）**：上游的 AUR 调用全走 `yay`，本机只有 paru
 - 〔§11〕**`omarchy-powerprofiles-{list,set}` 垫片：power-saver 档联动屏幕亮度（2026-09-24 加）** —— 本卷**不设专节**，语义与调法（三级优先 `环境变量 → …/powerprofiles/saver-brightness → 10`、智能恢复只在亮度仍等于压过的值时才回）见 `docs/behavior.md` 的「电池面板 POWER PROFILE 区为空」一条；同处也更正了「档位到底谁说了算」（壳层记忆 vs `TLP_PROFILE_AC/BAT`）
 - 〔§23〕**`omarchy-launch-screensaver` 垫片：闲置「不插电到点锁屏」（2026-09-24 加）** —— 本卷**不设专节**。上游那份在终端跑 ASCII 屏保、且早被本机 `screensaver-off` 开关停掉；垫片接管它的那个时机（`idle.screensaver`，那天从 150 改成 300）：**不插电且非全屏**才 `omarchy-system-lock`（灭屏交给锁自己），插电 / 全屏 / 已锁一概不动——**不装 swayidle**。规格、四分支实测与回退见 `docs/behavior.md` 的 §8 第 23 条「screensaver 关掉并屏蔽」
+- **通用剪贴板垫片 `omarchy-universal-clipboard` + `omarchy-sendkeys`（2026-09-27 加，`§8 第 42 条`）** —— niri 版 `Super+C/V/X`：niri 抓键，垫片按焦点窗口注入（终端 → `Ctrl+Insert`/`Shift+Insert`，其他 → `Ctrl+C/V`，剪切恒 `Ctrl+X`）。上游的 Hyprland `send_key_state` 在 niri 没有对应物 ⇒ 自造 uinput 注入原语（纯标准库、零安装）。⚠ 两条硬约束：**必须声明 1..248 全段键码**（否则 udev 只给 `ID_INPUT_KEY`、libinput 不当键盘）、**物理按住的 SUPER 会并进注入的和弦**（终端侧靠 ghostty 的 `super+ctrl+insert` 变体接住）；每次按键 ≈ 0.45 s（CPU 仅 36 ms）。终端里复制/剪切额外弹一次**壳层 OSD 卡片**（`omarchy-osd`，就是关机/重启那种卡片；**不用** ghostty 自带的 libnotify 通知，本机那条链路不显示）。见本卷「通用剪贴板垫片」
 
 ---
 
@@ -392,3 +393,65 @@ root 改动 ⇒ **等用户拍板**；真要做：`cp` 备份到 `~/.local/state
     `tail -n +5` 拿到完整 PKGBUILD / 非 `-Gp` 不加头 / `bash -n`），4/4 绿；真机在 pty 里跑了菜单那两个
     TUI（Install → AUR 列表 119811 条 + 信息面板、alt-b 预览首行 `# Maintainer: …`、Remove 的
     `paru -Qi` 预览），原始输出是合法 UTF-8、零 U+FFFD，装包数 1191 前后不变。回退：`rm ~/bin/yay`。
+
+---
+
+## 通用剪贴板垫片（`omarchy-universal-clipboard` + `omarchy-sendkeys`，2026-09-27 加，`§8 第 42 条`）
+
+**是什么**：niri 版的 Omarchy「通用复制 / 粘贴 / 剪切」。`Mod+C/V/X` 由 niri 抓走
+（`niri-config/local/binds.kdl`），垫片按**焦点窗口**决定注入哪组键 —— 终端 `Ctrl+Insert` /
+`Shift+Insert`，其他 `Ctrl+C/V`，剪切恒 `Ctrl+X`。键位表照抄上游
+`~/.local/share/omarchy/default/hypr/bindings/clipboard.lua`，终端名单照抄
+`default/hypr/apps/terminals.lua` 的正则（匹配 niri 的 `app_id`，`org.omarchy.*` 与 `TUI.*` 都在内）。
+两个脚本都在 `port-bin/`，随 `install.sh` 的 `port-bin/*` glob 装进 `~/bin`；`~/bin` 在 niri 的
+`config.kdl` `environment { PATH … }` 里排第一，所以 bind 里可以直接写命令名。
+
+**终端里的复制/剪切会给一次视觉反馈**：注入完（剪贴板真写了）再弹一张壳层 OSD 卡片
+`omarchy-osd -i <nf-md-content_copy F018F> -m Copied|Cut -d 1200` —— 就是关机/重启那种卡片
+（`bin/omarchy-system-logout` 同款调用）。**不用 ghostty 自己的通知**：`app-notifications = clipboard-copy`
+走 libnotify 吐司，本机那条链路看不到东西，所以 `~/.config/ghostty/config` 里保持
+`no-clipboard-copy`。反馈只给**终端分支**的写剪贴板动作（浏览器里频繁复制不该被卡片打扰）；
+无选区时 ghostty 的 copy 其实是空操作，卡片仍会弹（垫片没法知道有没有选到东西）。
+
+**为什么要自造注入原语**：上游在 Hyprland 上靠 `hl.dsp.send_key_state`（合成器自带键注入）。
+niri 的 bind 只有 `spawn`，没有等价能力 ⇒ 用 uinput 垫片 `omarchy-sendkeys`：临时建一把键盘、
+发和弦、销毁。**零安装**：`/dev/uinput` 对本机用户有 rw ACL（不需要 root / polkit / udev 规则 /
+额外包）。`wtype` 已否掉：它走 wayland 虚拟键盘，会把自己那份最小 keymap 推给客户端，GTK4 客户端
+收得到 `key` 事件却解不出字符（`WAYLAND_DEBUG=1` 下 `key`/`modifiers` 齐全，PTY 侧零输出）。
+
+**两条硬约束（实测，不是推测）**：
+
+1. **必须声明 1..248 全段键码**。只声明实际要用的两三个键时，udev 只给 `ID_INPUT_KEY`（而非
+   `ID_INPUT_KEYBOARD`），libinput 就不把它当键盘 ⇒ 客户端收不到键，合成器 bind 也不认
+   （判据：`udevadm monitor --subsystem-match=input --property` 里看 `ID_INPUT_KEYBOARD`）。
+2. **物理按住的 SUPER 会并进注入的和弦**（上游 `clipboard.lua` 注释里那条在 niri 上同样成立）：
+   按住 Super 时注入 `Ctrl+Insert`，客户端实际收到 `Super+Ctrl+Insert`（终端里回显 `ESC[2;13~`）。
+   终端侧由 `config/ghostty/config` 里的 `super+ctrl+insert` / `super+shift+insert` 变体接住
+   （上游那份没有这两条，是本机补的）；非终端（浏览器等）没有这个余地，只能靠"用户已松开 Super"
+   —— 注入本身 ~0.25 s 起步，轻点 `Super+C` 不受影响。补发一个合成的 `super` 松开事件**不能**清掉
+   它（niri 的修饰键状态按设备算、客户端看并集，实测无效）。
+
+**成本**：每次按键 wall ≈ 0.45 s，其中 CPU 仅 36 ms（`python3 -c pass` 启动 29 ms，峰值 RSS 11 MB）；
+余下 0.40 s 是 `UIKEY_WAIT`(0.25) + `UIKEY_TAIL`(0.15) 两个刻意 sleep，等 libinput / 合成器把新设备
+枚举进来。**这段是内核/netlink 侧开销，换 C 重写省不掉**（ydotool 快是因为它常驻、设备只建一次）。
+要毫秒级就得常驻；两个变量都可用环境变量覆盖，便于往下压阈值。
+
+**验证**：
+
+```sh
+omarchy-universal-clipboard copy  --dry-run --app-id=com.mitchellh.ghostty   # → ctrl+Insert（终端分支）
+omarchy-universal-clipboard paste --dry-run --app-id=zen                     # → ctrl+v（非终端分支）
+omarchy-sendkeys super+c     # 真实链路：niri 的 bind 抓走 Super+C → 垫片 → 注入
+```
+
+`--dry-run` 只打印判定不注入；`--app-id=` 是测试用的覆盖。走真机判据时用探针窗口：
+`XDG_CONFIG_HOME` 指到临时目录的 ghostty + `keybind = ctrl+insert=text:PROBE_CTRLINS`，
+终端 raw 模式读 PTY（`stty -icanon min 1 -echo`，否则行缓冲会让人误判"没送到"）。
+单独看那张卡片：`omarchy-osd -i 󰆏 -m Copied -d 3000`（`󰆏` = U+F018F）。整条链要按 bind 的
+执行环境验，别用自己的 shell：`niri msg action spawn-sh "omarchy-universal-clipboard copy"`
+（焦点在终端时才会注入 + 弹卡片，截图前后比对能看出卡片位置）。
+
+**回退**：`~/.local/state/backups/.config/niri/binds.kdl.bak-20260927` 与
+`~/.local/state/backups/.config/ghostty/config.bak-20260927`；或删掉三个 bind + 四个 ghostty keybind，
+并 `rm ~/bin/omarchy-universal-clipboard ~/bin/omarchy-sendkeys`。
+

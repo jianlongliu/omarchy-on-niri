@@ -24,19 +24,19 @@ mouse-hide-while-typing = true
 copy-on-select = false
 confirm-close-surface = false
 
-# Disable annoying copied to clipboard
+# 终端里的复制反馈交给 niri 垫片的 OSD 卡片（见 ~/bin/omarchy-universal-clipboard）：
+# ghostty 自己的 libnotify 吐司在本机不显示，所以两个都关掉。
 app-notifications = no-clipboard-copy,no-config-reload
 
 # Key bindings for common actions
-# Omarchy 风格通用剪贴板：Super+C/V/X 由 ghostty 自己接管。
-# 上游 Hyprland 版是把 Ctrl+Insert / Shift+Insert 注入终端（send_shortcut），
-# niri 没有注入能力，所以改成「niri 不占键 + 终端自己绑」——两边都要成立才有效。
-keybind = super+c=copy_to_clipboard
-keybind = super+v=paste_from_clipboard
-keybind = super+x=text:\x18
-# 上游 ghostty 配置里的备用键位（Insert 系）
+# Omarchy 风格通用剪贴板：Super+C/V/X 由 niri 抓走（binds.kdl 里的
+# omarchy-universal-clipboard 垫片），终端这一侧只认 Insert 系键（上游同款）。
+# 另加 super+ 变体：niri 上物理按住的 SUPER 会并进注入的和弦，
+# 客户端实际会收到 Super+Ctrl+Insert / Super+Shift+Insert。
 keybind = control+insert=copy_to_clipboard
 keybind = shift+insert=paste_from_clipboard
+keybind = super+ctrl+insert=copy_to_clipboard
+keybind = super+shift+insert=paste_from_clipboard
 #keybind = ctrl+c=copy_to_clipboard
 #keybind = ctrl+v=paste_from_clipboard
 keybind = ctrl+shift+n=new_window

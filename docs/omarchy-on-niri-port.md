@@ -621,6 +621,7 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
 | `§8 第 36 条` | About 窗口（fastfetch TUI）的磨砂与尺寸 | `docs/visual.md`（2026-09-24 从 34 让号，见该条末尾） |
 | `§8 第 37 条` | 浮动工具窗"太黑"：alpha 没用、旋钮是底色 | `docs/visual.md`（**还没定稿**，三个选项在 `docs/todo.md` 等拍板表） |
 | `§8 第 38 条` | 电池面板加 CHARGE LIMIT 档位切换（`pkexec tlp setcharge`，只写运行时） | `docs/behavior.md` |
+| `§8 第 42 条` | 通用剪贴板 `Super+C/V/X`（垫片注入）+ 终端复制/剪切的 OSD 卡片 | `docs/shims.md`（目录行在 `docs/behavior.md`） |
 | `§8.6` | A 层 | `docs/behavior.md` |
 | `§8.7` | 更新覆盖层 | `docs/upstream.md` |
 | `§8.8` | 视觉磨砂 | `docs/visual.md` |
@@ -638,6 +639,9 @@ false` 让 niri 把焦点环画在窗口**周围**而非背后，问题解决（
 
 > 注：`§8 第 34 条` 曾在 2026-09-23 被 `About 窗口` 与 `AUR 助手 yay → paru 垫片` 同时占用（两条都没登记本表）；
 > 2026-09-24 定案：About 让号改 **36**，34 归垫片。**加新条目先扫全库取号、再登记本表。**
+> 2026-09-27 补记：`§8 第 39 条`（Paru Security 开关）、`§8 第 40 条`（ante 进默认 agent 列表）、
+> `§8 第 41 条`（vantage 退休归档）目前只在 `docs/behavior.md` / `docs/migration.md` 的目录行里出现，
+> 本表没登记 —— 补登记时以各卷正文为准，**别重新取号**。
 
 ### 未决项速查（还没做的）
 

@@ -87,7 +87,7 @@
 
 ---
 
-## 2. `~/bin` 垫片（本机 PATH 层，25 项含隐藏文件；2026-09-26 实测 `ls -A ~/bin | wc -l`）
+## 2. `~/bin` 垫片（本机 PATH 层，28 项含隐藏文件；2026-09-27 实测 `ls -A ~/bin | wc -l`）
 
 | 名字 | 说明 | 仓库里有? |
 |---|---|---|
@@ -103,6 +103,8 @@
 | `omarchy-display-text-size` | bar 的 Display 面板字号滑块驱动全桌面（CLI 路径绕过它） | ✅ `port-bin/`（2026-09-20 收进） |
 | `omarchy-toggle-input-device` | 触控板 / 触摸屏开关。上游脚本走 `hl.device`（niri 侧被垫片 no-op ⇒ 只弹 OSD、设备不关的"假成功"）；本垫片改成**写 / 删** `~/.config/niri/input-toggle-{touchpad,touchscreen}.kdl`，由 `input.kdl` 里两行 `include optional=true` 引入。菜单里的 Touchpad 项现在**真生效**，见垫片卷 `docs/shims.md` §4 | ✅ `port-bin/`（2026-09-23 收进） |
 | `omarchy-niri-monitor-modes` | Display 面板**分辨率滑块**的后端：`set` = 立即注入 modeline+scale **并**写 `monitor.kdl`（切到哪档、下次开机就是哪档），另有 `set-runtime`（只切本次）/`set-boot`/`status`/`list`/`current`/`boot`。档位表与口径见 §4「显示档位」 | ✅ `port-bin/`（2026-09-26 收进） |
+| `omarchy-sendkeys` | uinput 按键注入器：`omarchy-sendkeys ctrl+Insert`；`--hold <秒> super` 是按住修饰键的调试入口，`-super+ctrl+Insert` 是"只发松开"语法。⚠ **必须声明 1..248 全段键码**（只声明用到的几个键时 udev 只给 `ID_INPUT_KEY`，libinput 不当键盘、客户端与 niri bind 都收不到） | ✅ `port-bin/`（2026-09-27 收进） |
+| `omarchy-universal-clipboard` | 通用复制/粘贴/剪切的判定层：按焦点窗口 `app_id` 选和弦（终端 → Insert 系，其他 → `Ctrl+C/V`，剪切恒 `Ctrl+X`），终端里的复制/剪切顺带弹一次 `omarchy-osd` 卡片 | ✅ `port-bin/`（2026-09-27 收进） |
 | `wechat`、`clipboard-sync.sh`、`clipboard-handler.sh` | 移植之前的老自建，保留 | ❌（与本移植无关） |
 
 - 上表 12 项与仓库 `port-bin/` 的对账：**11 项**于 2026-09-20 `md5sum` 逐个核过（**10 项逐字节一致**；
@@ -121,6 +123,9 @@
   `~/.local/state/backups/.config/omarchy/shell.json.bak-20260924-idle300`。
 - （2026-09-26 追加）**新增 `omarchy-niri-monitor-modes` 垫片**（Display 面板的分辨率滑块后端，规格见 §4）。
   同样是 `install -m 0755` 从 `port-bin/` 进的 `~/bin`，两侧 md5 同为 `2a8c22d6…`；`port-bin/` 因此从 14 个变 15 个。
+- （2026-09-27 追加）**新增 `omarchy-sendkeys` + `omarchy-universal-clipboard` 两个垫片**（niri 版通用剪贴板
+  `Super+C/V/X`，目录行 `docs/behavior.md` §8 第 42 条、正文 `docs/shims.md`「通用剪贴板垫片」）。两者都是
+  `install -m 0755` 从 `port-bin/` 进的 `~/bin`，两侧 `diff` 核过逐字节一致；`port-bin/` 因此 +2。
 - 回退：`rm ~/bin/<名字>`（若 `$OMARCHY_PATH/bin` 有同原件，会自动回退到它）。
 
 ---
@@ -131,7 +136,7 @@
 |---|---|---|
 | `shell.json` | bar 用 `charlieras262.floating-bar`（`centerAnchor: omarchy.clock`、`cornerRadius 10`、`floatGap 8`）；`omarchy.tray.hidden: ["Fcitx"]`（藏掉 fcitx5 的托盘图标）；`omarchy.power.showPercentage`；`ronald.input-sources.showSourceName=false`；`meviusisback.ai-subs`（`barDisplay: Data`、900s）；`idle.lock 1800` / `idle.screensaver 300`（**screensaver 功能仍由 flag 禁用**；那条腿 2026-09-24 起由垫片 `omarchy-launch-screensaver` 接管成"不插电到点锁屏、锁后灭屏"，见 §8 第 23 条）；`disabledPlugins: ["omarchy.lock"]`；`plugins: [jianlongliu.split-lock, io.github.claudsondouglas.arcdock]` | `.bak-20260919-preaisubs`、`.bak-20260919-prehidetray`、`.bak-20260920-bar`、`.bak-20260920-bardisplay`、`.bak-20260924-idle300` |
 | `shell.toml` | `[font] base-size 12`；`[bar]` 尺寸 + `background-alpha 0.45` + **`icon-font 12`**（要 `Style.qml` 的白名单，已进覆盖层）；`[popups]/[notifications]/[tooltip]` alpha；`[menu]` 只有 `background-alpha 0.45`、**不写底色**（走主题的 `[menu] background` ＝ matugen 出的 `colors.toml` `background`，跟 `[bar]` 同档半透明磨砂；2026-09-21 起，替掉 9-20 写死的 `"#2a2a22"` @ 0.7） | `.bak-20260920-{consistency,iconfont,menu}`、`.bak-20260921-menu` |
-| `extensions/omarchy-menu.jsonc` | 菜单用户层 override：`trigger.*` 屏蔽、`setup.input` 指 `niri/input.kdl`、screensaver 6 条 `when:"false"`、**2026-09-22 再屏蔽 6 条**（`style.unlock` / `install.webapp` / `install.preinstalls` / `update.channel` / `update.config.{plymouth,shell}`，逐条根因与验证见 §8 第 27 条）、**Update 菜单改造**（`update.omarchy` 显示成 "Pacman"、新增 `update.aur` = `paru -Sua` 与 `update.plugins` = `omarchy plugin update`，见 §8 第 28 条）、**再屏蔽 `update.password.drive`**（无 LUKS，同 §8 第 28 条体检）。⚠ 同一 id 别写两遍；**别写行内注释**（`stripJsonc` 只删整行注释） | `.bak-20260919-{prehide,prelearn}`、`.bak-20260920-prescreensaver`、`.bak-20260922-{menuhides,updatemenu,updaudit}` |
+| `extensions/omarchy-menu.jsonc` | 菜单用户层 override：`trigger.*` 屏蔽、`setup.input` 指 `niri/input.kdl`、screensaver 6 条 `when:"false"`、**2026-09-22 再屏蔽 6 条**（`style.unlock` / `install.webapp` / `install.preinstalls` / `update.channel` / `update.config.{plymouth,shell}`，逐条根因与验证见 §8 第 27 条）、**Update 菜单改造**（`update.omarchy` → "System"、新增 `update.aur` = `paru -Sua` 与 `update.plugins` = `omarchy plugin update`；2026-09-27 按 `docs/menu.md` 的 Entry schema 重写文案 = 名词短语 + 供搜索的 `description`，见 §8 第 28 条）、**再屏蔽 `update.password.drive`**（无 LUKS，同 §8 第 28 条体检）。⚠ 同一 id 别写两遍；**别写行内注释**（`stripJsonc` 只删整行注释） | `.bak-20260919-{prehide,prelearn}`、`.bak-20260920-prescreensaver`、`.bak-20260922-{menuhides,updatemenu,updaudit}` |
 | `niri-port/` | `niri.patch`（与仓库同 md5）、`Niri.qml`、`plugin-patches/*.patch`（4 个，机器独有，见 §6） | 各自的 `.bak-*` |
 | `plugins/`（8 个） | 自研：`jianlongliu.arch-logo`（**源码已进仓库 `plugins/jianlongliu.arch-logo/`**）、`jianlongliu.workspaces`（上游克隆 + `niri-port/plugin-patches/jianlongliu.workspaces.patch`）、`jianlongliu.split-lock`（**正本 `split-lock/`**）（**没有 `.git`**，`omarchy plugin update` 不碰）；第三方：`charlieras262.floating-bar`、`ronald.input-sources`、`meviusisback.ai-subs`、`jrmmhm.pocket`、`io.github.claudsondouglas.arcdock`（**本身就是上游 git 克隆**，本地魔改用 `git diff` 就地生成 patch） | `plugin-patches/*.patch` 反向 `git apply -R` |
 | `hooks/` | 与仓库同（`post-update.d/10-niri-repatch` 的 `omarchy-restart-shell` 那 8 行 2026-09-20 已并回仓库，两侧 md5 `b077156959bc9cfb4c37941a4ffb3a5e` 一致） | 从仓库重拷 |
@@ -155,6 +160,16 @@
   而 bind 派生的子进程没有 tty（niri 自己 `fd0=/dev/null`、`fd1/2=journald socket`）⇒ `herdr: Not a tty (os error
   25)` 退出、键位静默失效；上游 `applications.lua` 的 `omarchy = "terminal-herdr"` 走的就是这层包装器。
   已同步进仓库 `niri-config/local/binds.kdl`（`scripts/kdl-sync.sh` 七份全 ok），详见 `behavior.md` §8 第 35 条。
+- **2026-09-27 一处（`binds.kdl`；改前快照 `.bak-20260927`）**：`Mod+C/V/X` 从「niri 不占键、交给 ghostty
+  自己绑 `super+c/v/x`」换成**上游同款形状**——niri 抓键 + 垫片注入（`spawn-sh "omarchy-universal-clipboard
+  copy|paste|cut"`），`Mod+Shift+C { center-column; }` 保留。终端那一侧（`~/.config/ghostty/config`，镜像
+  `local-config/ghostty/config`）相应删掉 `super+c/v/x` 三条、只留 `control+insert`/`shift+insert`，**补
+  `super+ctrl+insert`/`super+shift+insert` 两个变体**（物理按住的 SUPER 会并进注入的和弦，客户端实收
+  Super+Ctrl+Insert）；`app-notifications` 仍是 `no-clipboard-copy,no-config-reload`（复制反馈改由垫片弹
+  OSD 卡片，ghostty 自己的 libnotify 通知在本机不显示）。备份
+  `~/.local/state/backups/.config/ghostty/config.bak-20260927`（键位）、`…config.bak-20260927-notify`（通知）。
+  已同步进仓库 `niri-config/local/binds.kdl`（`scripts/kdl-sync.sh` 核过），详见 `docs/behavior.md` §8 第 42 条
+  （机制与硬约束在 `docs/shims.md`「通用剪贴板垫片」）。
 - **壁纸从会话第一帧就在（2026-09-21 晚，本机新装的包）**：`swaybg`（**extra 仓库 `pacman -S swaybg`，1.2.2-1，非 omarchy 自带**）由 `config.kdl` 的 `spawn-at-startup "swaybg" "-i" "/home/<user>/.local/state/omarchy/current/background" "-m" "fill"` 拉起（走 omarchy 的"当前壁纸"软链 ⇒ 换壁纸自动跟）。
   动机：Quickshell 的 `omarchy.background` 要 ~1.4s 才画出壁纸，这段只有一屏底色（见 `docs/lock.md` §11.27 的"② 可打的部分"）。
   **实测三点**：① `-m fill` = 源图 cover 居中，与插件渲染**逐像素一致**（130 个纯壁纸区块差 0.01/255）⇒ 插件那份上来时无缝；② 杀掉壳层后壁纸仍在（顺带成壳层崩溃时的兜底）；③ **同一 background 层内"后映射的在上"**——把 swaybg 起在壳层之后它就压住插件那份（用一张品红测试图复现：此时换壁纸会看到旧图）。
@@ -428,6 +443,34 @@ cp /tmp/niri.patch ~/.config/omarchy/niri-port/niri.patch              # 重放�
       （属内存态、重启即消失）。**唯一验证路径**仍是：改 `/usr/lib/firmware/edid/CSO1411.bin`（先备份）→
       `pkexec mkinitcpio -P` → 重启；事故恢复 `Ctrl+Alt+F3` + 备份件。试件与脚本留在
       `~/.local/state/omarchy/edid-trial/`（`build-trial-edid.py`、`trial-1.bin` 合法重排、`trial-2.bin` 再加三条 CTA DTD）。
+17. **omarchy 品牌图标字体（族名就叫 `omarchy`）在 dev-link 形态下没人装（2026-09-27）**：菜单里所有
+    `iconFont:"omarchy"` 的条目都靠一个**品牌图标字体**渲染 —— Setup → Defaults → Agent 那批
+    （Codex、Cursor CLI、Grok、Hermes、omp、OpenClaw、OpenCode、Ori、Pi）、install/remove → AI 里的
+    ChatGPT、Claude、Grok Bot、LM Studio、Ollama、Perplexity、T3 Code，以及 `setup.default.editor.cursor`、
+    `install.editor.cursor`。上游把字体当包资产发：`default/fonts/omarchy/omarchy.ttf` →
+    `/usr/share/fonts/omarchy/`（映射见 `docs/file-layout.md`）；本机是 dev-link 形态、没装这个包
+    ⇒ `fc-list` 里没有该族、Qt 回落到 SF Pro，这批 logo 全渲染成**豆腐块**（其余菜单项用的是 Nerd Font
+    码点，所以看上去只是"AI 那几行坏了"）。
+    - 字形表在 `default/fonts/omarchy/README.md`：15 枚 PUA 全在 U+E900–E90E —— E900 Omarchy、
+      E901 Pi、E902 OpenCode、E903 omp、E904 Grok、E905 Codex/ChatGPT、E906 LM Studio、E907 Ollama、
+      E908 T3 Code、E909 Ori（借 OpenRouter 的标，Ori 自己没有独立 logo）、E90A Hermes、E90B Perplexity、
+      E90C OpenClaw、E90D Cursor、E90E Claude。`fc-scan` 的 charset = `61 63 68 6d 6f 72 79 e900-e90e`
+      （前面那 7 个是 "omarchy" 自己的字样）。菜单里用到的码点全在这个范围内，不必改菜单。
+    - 修法（**用户级、免 root、可逆**）：
+      `mkdir -p ~/.local/share/fonts/omarchy && ln -sfn ~/.local/share/omarchy/default/fonts/omarchy/omarchy.ttf ~/.local/share/fonts/omarchy/omarchy.ttf`
+      → `fc-cache -f` → `omarchy-restart-shell`（Qt 的字体库在进程启动时读，不重启壳看不到变化）。
+      **用软链而不是拷贝**：字体住在仓库里，`omarchy update`（git pull）改了字形会自动跟上，不用重装。
+    - **别放上游那个 `/usr/share/fonts/omarchy/`**：那是给包形态的，本机没有任何东西会去更新它，
+      仓库一更新它就变旧、字形又缺。`migrations/1788848726.sh` 只处理 legacy 的
+      `~/.local/share/fonts/omarchy.ttf`（**文件**，本机不存在）⇒ 与这里的 `fonts/omarchy/` **目录**不冲突。
+    - 验法：`fc-match omarchy` —— 装前回落 `SF-Pro.ttf`，装后必须是 `omarchy.ttf: "omarchy" "Regular"`；
+      看字形本身：`magick -background '#181818' -fill '#e8e8e8' -font omarchy -pointsize 44 label:"<U+E900…E90E>"`；
+      端到端：`omarchy-menu summon setup.default.agent`（route 直接吃 item id）→ `grim` → 裁菜单面板看
+      （面板高约屏幕七成、超出要滚动；`omarchy-menu close` 收）。2026-09-27 三法皆过。
+    - 与第 15 项那三套是**两回事**（那边是正文/等宽字体 + CJK 回退，这边是图标字体），两者同住
+      `~/.local/share/fonts/`，互不干扰。
+    - 回退：`rm ~/.local/share/fonts/omarchy/omarchy.ttf && fc-cache -f && omarchy-restart-shell`
+      （这批 logo 变回豆腐块，其余一切照常）。
 
 ---
 
@@ -435,6 +478,7 @@ cp /tmp/niri.patch ~/.config/omarchy/niri-port/niri.patch              # 重放�
 
 | 想撤销 | 命令 |
 |---|---|
+| 通用剪贴板（`Super+C/V/X`）与终端复制卡片 | 只想关卡片：删 `~/bin/omarchy-universal-clipboard` 里弹 `omarchy-osd` 那几行（注入照常，`~/bin` 与 `port-bin/` 两份都要删）。整套换回旧方案：`cp ~/.local/state/backups/.config/niri/binds.kdl.bak-20260927 ~/.config/niri/binds.kdl && cp ~/.local/state/backups/.config/ghostty/config.bak-20260927 ~/.config/ghostty/config`（回到"niri 不占键、ghostty 自己绑 `super+c/v/x`"那版），再 `rm ~/bin/omarchy-sendkeys ~/bin/omarchy-universal-clipboard`（ghostty 侧的 `app-notifications` 全程都是 `no-clipboard-copy`，不用动） |
 | 某个 `~/bin` 垫片 | `rm ~/bin/<名字>` |
 | 覆盖层（回到上游 omarchy） | 在 `$OMARCHY_PATH` 里 `git apply -R ~/.config/omarchy/niri-port/niri.patch`（`omarchy-niri-repatch` **没有**反向开关，反向只能手动 `git apply -R`） |
 | 用户级 shell 配置 | 从备份根覆盖回去：`cp ~/.local/state/backups/.config/omarchy/<文件>.bak-* ~/.config/omarchy/<文件>`（热生效，存盘即回） |
@@ -452,3 +496,4 @@ cp /tmp/niri.patch ~/.config/omarchy/niri-port/niri.patch              # 重放�
 | 插件本地魔改 | 在该插件目录 `git apply -R ~/.config/omarchy/niri-port/plugin-patches/<id>.patch` |
 | fastfetch 配置改坏 | `cp ~/.local/state/backups/.config/fastfetch/config.jsonc.bak-20260922 ~/.config/fastfetch/config.jsonc`（改前那份，`XeroArch` 简版；想回到"绿 logo"的中间版用 `…bak-20260923-greenlogo`；想回上游展示配置就直接 `cp $OMARCHY_PATH/etc/fastfetch/config.jsonc` 过来，但那条 `color: green` 会把 Arch 染绿） |
 | 字体/中文回退改坏 | `rm ~/.config/fontconfig/conf.d/60-cjk-fallback.conf`（回系统默认：中文会落到 MS Gothic、图标无回退）；`fonts.conf` 本身由菜单管，`menu → style → font` 重选一次即重建；仓库副本 `local-config/fontconfig/conf.d/` 可拷回来（见 §8 缺口第 15 项） |
+| 品牌图标字体（菜单里的 AI logo） | `rm ~/.local/share/fonts/omarchy/omarchy.ttf && fc-cache -f && omarchy-restart-shell`（回到豆腐块，别的照常；见 §8 缺口第 17 项） |

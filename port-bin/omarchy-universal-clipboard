@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+"""Omarchy 通用复制 / 粘贴 / 剪切 —— niri 版垫片。
+
+用法:
+    omarchy-universal-clipboard copy|paste|cut
+    omarchy-universal-clipboard copy --dry-run [--app-id=<id>]   # 只打印判定结果
+
+上游（Hyprland）的做法是合成器绑 SUPER+C/V/X，判断焦点窗口是不是终端，再注入
+另一组键（见 ~/.local/share/omarchy/default/hypr/bindings/clipboard.lua）。
+niri 的 bind 只有 spawn，没有 send_key_state 那种键注入原语，所以这里换注入原语：
+omarchy-sendkeys（uinput，纯标准库、零安装）。终端名单照抄上游
+default/hypr/apps/terminals.lua。见 docs/shims.md。
+
+终端里的复制/剪切顺带给一次视觉反馈：壳层 OSD 卡片（`omarchy-osd`，就是关机/重启
+那种卡片），不是 ghostty 的 libnotify 吐司（本机看不到）。只对写剪贴板的动作弹，
+且只弹终端分支 —— 浏览器里频繁复制不该被打扰。
+"""
+import json
+import os
+import re
+import subprocess
+import sys
+
+TERMINAL_RE = re.compile(
+    r"^(Alacritty|kitty|com\.mitchellh\.ghostty|foot|wezterm|org\.omarchy\..*|TUI\..*)$"
+)
+
+# 上游 clipboard.lua 的键位表: 终端走 Insert 系; cut 恒为 CTRL X（终端里也是）。
+CHORDS = {
+    "copy": ("ctrl+Insert", "ctrl+c"),
+    "paste": ("shift+Insert", "ctrl+v"),
+    "cut": ("ctrl+x", "ctrl+x"),
+}
+
+# 写剪贴板的动作 -> OSD 文案；图标是 nf-md-content_copy（F018F，本机 Nerd Font 里有）。
+OSD_ICON = "\U000f018f"
+OSD_MESSAGES = {"copy": "Copied", "cut": "Cut"}
+OSD_DURATION_MS = "1200"
+
+
+def focused_app_id():
+    try:
+        out = subprocess.run(
+            ["niri", "msg", "--json", "windows"], capture_output=True, text=True, check=True
+        ).stdout
+        windows = json.loads(out or "[]")
+    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError):
+        return ""
+    for window in windows:
+        if window.get("is_focused"):
+            return window.get("app_id") or ""
+    return ""  # 焦点在 layer-shell 面板上时没有焦点窗口 ⇒ 走非终端分支
+
+
+def main(argv):
+    action = next((a for a in argv if not a.startswith("-")), None)
+    if action not in CHORDS:
+        print(__doc__)
+        return 2
+
+    app_id = next(
+        (a.split("=", 1)[1] for a in argv if a.startswith("--app-id=")), None
+    )
+    if app_id is None:
+        app_id = focused_app_id()
+    is_terminal = bool(TERMINAL_RE.match(app_id))
+    chord = CHORDS[action][0 if is_terminal else 1]
+
+    if "--dry-run" in argv:
+        print(f"{action}: app_id={app_id or '(无焦点窗口)'} terminal={is_terminal} -> {chord}")
+        return 0
+
+    # 终端里的复制/剪切：注入完（剪贴板真写了）再弹 OSD 卡片，卡片本身不挡任何事。
+    # 用户若一直按住 Super，注入的和弦会带上 Super（终端侧靠 ghostty 的
+    # super+ctrl+insert 变体接住，其他应用只能等 Super 松开）。
+    if is_terminal and action in OSD_MESSAGES:
+        proc = subprocess.run(["omarchy-sendkeys", chord])
+        if proc.returncode == 0:
+            subprocess.run(
+                ["omarchy-osd", "-i", OSD_ICON, "-m", OSD_MESSAGES[action], "-d", OSD_DURATION_MS],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        return proc.returncode
+
+    # 其余路径 exec 掉自己，省一次进程启动；注入器默认 0.25s 等设备枚举。
+    try:
+        os.execvp("omarchy-sendkeys", ["omarchy-sendkeys", chord])
+    except OSError as e:
+        print(f"omarchy-sendkeys 起不来: {e}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
