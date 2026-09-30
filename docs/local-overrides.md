@@ -520,6 +520,10 @@ cp /tmp/niri.patch ~/.config/omarchy/niri-port/niri.patch              # 重放�
       两者都无 → 打印跳过、无外部包 → 跳过 AUR。委派验证：`$OMARCHY_PATH/bin/omarchy-update -h` 打印的是**垫片**用法
       （= 委派生效），而 `omarchy update --help` 仍是 dispatcher 帮助。⚠ 桩目录别把真 `~/bin` 留在 PATH 里，
       否则 paru 缺失时会回落到 `~/bin/yay` 垫片 → **真 paru**（2026-09-30 初测踩到；`sudo` 被桩掉所以没真升级）。
+      **真机决定性验证（2026-09-30 16:17，用户从菜单跑的）**：四段依次执行、无报错 —— repo 段
+      `there is nothing to do`、AUR 段 `paru -Su` **确实带上 AUR**（升了 `herdr-bin 0.9.3`，说明 `-Su` 不必再加 `-a`）、
+      插件段五个插件 `is up to date`（无 diff 时不弹确认，与源码一致）、mise 段 `All tools are up to date`。
+      该次没有 `/tmp/omarchy-update.log`（垫片不装上游那套 `script(1)` 转录）。
     - 回退：`rm ~/bin/omarchy-update`；要连委派一起撤，见 §9 索引那行（注意还得把它从 patch 路径表里去掉再重生成，
       否则下次 `omarchy-niri-repatch` 会再打回来）。
 
