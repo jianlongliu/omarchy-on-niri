@@ -11,7 +11,9 @@
 
 1. **`~/bin` 在 `$OMARCHY_PATH/bin` 之前**（quickshell 的 PATH 顺序）→ 同名垫片永远赢。
    `omarchy-update`、`uwsm-app`、`hyprctl` 全靠这条生效。
-   例外：CLI 的 `omarchy update` 走绝对路径 `$OMARCHY_BIN_DIR/omarchy-update`，垫片拦不住（菜单/bar 拦得住）。
+   `omarchy-update` 还有第二个入口：CLI `omarchy update` 的 dispatcher 走绝对路径
+   `$OMARCHY_BIN_DIR/omarchy-update`、绕开 PATH —— 所以 2026-09-30 起那份文件顶部有三行**委派**
+   到本垫片（条目见 §8 第 19 项；想跑上游真身是 `omarchy-update --upstream`）。
 2. **热生效面**：`~/.config/omarchy/shell.json`、`shell.toml` 是热监听（存盘即生效）。
    **仓库内 QML / 插件 QML 改完必须 `omarchy-restart-shell`**，没有热重载。
 3. **`niri-port/niri.patch` 是对 omarchy 仓库的覆盖层补丁**，不是 compositor 补丁。
@@ -75,7 +77,7 @@
 | `default/omarchy/omarchy-menu.jsonc` | `install.package`/`install.aur`/`remove.package` 的 `xdg-terminal-exec` 回退 | 随仓库/覆盖层 |
 | `docs/` | `INSTALL{,.zh}.md` + **主文档 `omarchy-on-niri-port.md`（当前事实 + 映射表）** + 模块卷 `visual/behavior/plugins/shims/upstream/migration/lock/local-overrides`（编号沿用原号），**正本就在 `docs/`** | 直接改 `docs/`，无第二副本 |
 
-- 覆盖层实际内容：**26 文件 / 77 hunk**（`--reverse --check` 通过、repatch 幂等）；**md5 `22dd2334c2210d91618b9ad903d3cbc2`**（2026-09-27 加 `bin/omarchy-default-agent`、`bin/omarchy-agent` 两条 ante 分支，见 `behavior.md` §8 第 40 条；上一版 24 文件 / 72 hunk、md5 `e6868080…`）
+- 覆盖层实际内容：**27 文件 / 81 hunk**（`--reverse --check` 通过、repatch 幂等）；**md5 `3c672ab5cfbb5fdb4ecabfdf5eecee19`**（2026-09-30 加 `bin/omarchy-update`：那份文件顶部委派给 `~/bin` 垫片，4 hunk，见 §8 第 19 项；上一版 26 文件 / 77 hunk、md5 `22dd2334…` = 2026-09-27 加 `bin/omarchy-default-agent`、`bin/omarchy-agent` 两条 ante 分支，见 `behavior.md` §8 第 40 条）
   （2026-09-26 重导出核，与 `~/.config/omarchy/niri-port/niri.patch` 逐字节一致；本次新增
   `shell/plugins/panels/monitor/Panel.qml` 的**分辨率滑块** —— 22→23 文件、48→62 hunk）。
   版本链（只留 md5，明细在各自卷）：`ef920a66ece784dfc207c7c87c479f5b`（2026-09-23，加菜单 `style.avatar.*` 三行，`docs/lock.md` §11.29）
@@ -98,7 +100,7 @@
 | `omarchy-niri-apply-theme` | 按主题 token 写 niri 的边框渐变（两带方案） | ✅ |
 | `omarchy-niri-repatch` | 重放覆盖层（幂等） | ✅ |
 | `omarchy-powerprofiles-{list,set}` | 电源档位 | ✅ |
-| `omarchy-update` | 垫片 → `sudo pacman -Syu`；手装机跑不通上游 update 流程 | ✅ `port-bin/`（2026-09-20 收进） |
+| `omarchy-update` | 垫片 = 四段：`sudo pacman -Syu` → AUR（**paru 优先**，先查可执行；无外部包就跳过）→ `omarchy plugin update` → `mise up`（`MISE_MINIMUM_RELEASE_AGE=0`）；`--upstream` 跑上游真身。手装机跑不通上游 update 流程 | ✅ `port-bin/`（2026-09-20 收进；2026-09-30 改成四段并接住 CLI，见 §8 第 19 项） |
 | `omarchy-picker-warmup` | 配合用户单元延迟预热选择器缩略图 | ✅ `port-bin/`（2026-09-20 收进） |
 | `omarchy-display-text-size` | bar 的 Display 面板字号滑块驱动全桌面（CLI 路径绕过它） | ✅ `port-bin/`（2026-09-20 收进） |
 | `omarchy-toggle-input-device` | 触控板 / 触摸屏开关。上游脚本走 `hl.device`（niri 侧被垫片 no-op ⇒ 只弹 OSD、设备不关的"假成功"）；本垫片改成**写 / 删** `~/.config/niri/input-toggle-{touchpad,touchscreen}.kdl`，由 `input.kdl` 里两行 `include optional=true` 引入。菜单里的 Touchpad 项现在**真生效**，见垫片卷 `docs/shims.md` §4 | ✅ `port-bin/`（2026-09-23 收进） |
@@ -107,9 +109,7 @@
 | `omarchy-universal-clipboard` | 通用复制/粘贴/剪切的判定层：按焦点窗口 `app_id` 选和弦（终端 → Insert 系，其他 → `Ctrl+C/V`，剪切恒 `Ctrl+X`），终端里的**复制**顺带弹一次 `omarchy-osd` 卡片（剪切不弹：ghostty 无 cut 动作、`Ctrl+X` 只转发给应用） | ✅ `port-bin/`（2026-09-27 收进） |
 | `wechat`、`clipboard-sync.sh`、`clipboard-handler.sh` | 移植之前的老自建，保留 | ❌（与本移植无关） |
 
-- 上表 12 项与仓库 `port-bin/` 的对账：**11 项**于 2026-09-20 `md5sum` 逐个核过（**10 项逐字节一致**；
-  唯一例外是 `omarchy-update` —— 仓库版只把注释改成了通用措辞（"这类机器"而不是"本机"），
-  **代码体逐行相同**（`diff <(grep -v '^#' ~/bin/omarchy-update) <(grep -v '^#' port-bin/omarchy-update)` 为空））；
+- 上表 12 项与仓库 `port-bin/` 的对账：**11 项**于 2026-09-20 `md5sum` 逐个核过（当初 10 项逐字节一致，`omarchy-update` 只差注释措辞）；**2026-09-30 起 `omarchy-update` 两份也逐字节一致** —— 那次重写同时改了两处，`install -m 755 port-bin/omarchy-update ~/bin/omarchy-update` 即同步；
   **`omarchy-toggle-input-device`** 2026-09-23 新增 —— 它进 `~/bin` 时就是 `install(1)` 从 `port-bin/` 复制的，
   已 `diff` 核过逐字节一致。
 - （2026-09-24 追加）**`omarchy-powerprofiles-set` 改了内容**：加了 power-saver 档的亮度联动
@@ -300,6 +300,8 @@ cp /tmp/niri.patch ~/.config/omarchy/niri-port/niri.patch              # 重放�
 ~/bin/omarchy-niri-repatch                                            # 应回 "already applied"
 ```
 
+- 重生成会**顺带刷新每个块的 `index <a>..<b>` 缩写哈希**（git 默认缩写长度随仓库对象数/版本变，2026-09-30 这次从 7 位变 8 位）⇒ 即使只加一个文件，patch 的 diff 也可能显示几百行变化，属噪声；判断"有没有混进无关改动"要按**每个块的 hunk 数 + 逐块内容**比，别只看 `git diff --stat`。
+
 - **仓库 `default/`、`shell/`、`bin/` 下那批"被补丁覆盖的文件"副本不是机器镜像**（2026-09-23 逐字节核：22 个里只有 9 个与机器一致，13 个不同。例：`shell/plugins/menu/Menu.qml` 少机器上的 `_BackgroundEffect` 导入与 jsonc 自愈重试、`shell/plugins/bar/Bar.qml` 少插件注册表兜底；反向也有——仓库那份 `omarchy-menu.jsonc` 比机器少 4 条 agent 行，`setup.*` 还指回根 `config.kdl`，而机器/文档都是拆分的 `monitor.kdl`/`binds.kdl`/`input.kdl`）。⇒ **改这类文件一律改机器工作区**再按上面配方重生成，编辑器/`git show` 里那份仓库副本只能当旧快照看，**别 `cp` 仓库→机器**（会把机器上的 port 增补和上游新行一起抹掉）；要更新仓库副本就按机器真身同步（2026-09-23 已把 `default/omarchy/omarchy-menu.jsonc` 这样同步，并带上头像 3 行；其余 13 个尚未同步，属已知欠账）。
 
 - `~/Documents/omarchy-niri-*.md`（九个）**已删**（2026-09-21）：2026-09-20 文档归一时它们曾是指向 `docs/` 的软链，
@@ -307,8 +309,12 @@ cp /tmp/niri.patch ~/.config/omarchy/niri-port/niri.patch              # 重放�
   `~/Documents/AI Agents/archive/doc-backups/pre-merge-20260920-232818/`（九个文件，逐字节等于当时的仓库版）。
 - 第三方插件的本地魔改：`cd ~/.config/omarchy/plugins/<id> && git diff > ~/.config/omarchy/niri-port/plugin-patches/<id>.patch`，
   改完核对 `git apply --reverse --check` 通过。
-- `plugin-patches/*.patch` **没有自动重放器**：`omarchy-niri-repatch` 只管 `$OVL/niri.patch` + `Niri.qml` + `$OVL/plugins/*`；
-  插件被 `omarchy plugin update` 覆盖后要手工 `git apply`。
+- `plugin-patches/*.patch` **没有自动重放器**：`omarchy-niri-repatch` 只管 `$OVL/niri.patch` + `Niri.qml` + `$OVL/plugins/*`。
+  **`omarchy plugin update` 不会覆盖这些魔改**（2026-09-30 读源码核）：它只做 `git fetch` + `git merge --ff-only`，
+  不能 fast-forward（含魔改与上游撞在同一处）就报错退出、**工作区不动**。真正会丢魔改的是另外两条：
+  更新成功但 `omarchy-plugin-validate` 失败时脚本 `git reset --hard ORIG_HEAD`（连同该插件的**全部**未提交改动一起扔），
+  以及重装插件（`omarchy-plugin-remove` = `rm -rf` 该目录、`omarchy-plugin-add` 重新 `git clone`）⇒ 那两种情况下照
+  `plugin-patches/README.md` 手工 `git apply`。
 
 ---
 
@@ -485,7 +491,7 @@ cp /tmp/niri.patch ~/.config/omarchy/niri-port/niri.patch              # 重放�
       **继续监督**它，不 `exit 0`（否则留下无人监督的孤儿引擎，它死在锁定态又是同一条红屏）。
     - **落点**：`~/.local/share/omarchy/bin/omarchy-launch-shell` + 其测试件
       `test/shell.d/launch-shell-test.sh`（10 例）。**这是上游 checkout，`omarchy update` 会覆盖**；
-      且该文件**不在 `niri-port/niri.patch` 里**（patch 现含 10 个 `bin/` 文件，不含它）⇒ 想跨 update
+      且该文件**不在 `niri-port/niri.patch` 里**（patch 现含 12 个 `bin/` 文件，不含它）⇒ 想跨 update
       长期保留，得并进 patch。
     - 验法：`grep -c QS_DISABLE_CRASH_HANDLER ~/.local/share/omarchy/bin/omarchy-launch-shell` = 1；
       `bash test/shell.d/launch-shell-test.sh` 10 例全绿（`restart-shell-test.sh` 仍 7 例）；
@@ -495,6 +501,27 @@ cp /tmp/niri.patch ~/.config/omarchy/niri-port/niri.patch              # 重放�
       `tr '\0' '\n' < /proc/<engine_pid>/environ | grep '^QS_'` 三个都 `=1`。
     - 回退：`cp ~/.local/state/backups/.local/share/omarchy/bin/omarchy-launch-shell.bak-20260930 ~/.local/share/omarchy/bin/omarchy-launch-shell`
       （测试件同理 `…/test/shell.d/launch-shell-test.sh.bak-20260930`）。
+19. **CLI `omarchy update` 也走本机垫片（2026-09-30）**：`~/bin/omarchy-update` 从"`sudo pacman -Syu` 一行"
+    扩成**四段** —— `sudo pacman -Syu` → AUR（**paru 优先**：先 `command -v` + `[[ -x ]]` 确认可执行，
+    再 `pacman -Qem` 看有没有外部包，没有就跳过；paru 缺了就退 yay，都没有则打印跳过）→ `omarchy plugin update`
+    → `MISE_MINIMUM_RELEASE_AGE=0 mise up`（本机 mise 只管 `bun` 一个工具，见 §8 第 15 项那批字体无关）。
+    - **为什么要在 checkout 里动手**：dispatcher（`bin/omarchy`）按 `$OMARCHY_BIN_DIR/<最长前缀>` **绝对路径** exec，
+      PATH 上的垫片拦不到 CLI，所以 `$OMARCHY_PATH/bin/omarchy-update` 顶部加三行
+      `exec "$HOME/bin/omarchy-update" "$@"`（`OMARCHY_UPDATE_NO_DELEGATE=1` 时跳过，供逃生口用），插在安全脚手架**之前**
+      —— 上游那套 `omarchy_security_*` 是给它自己的 sudo 流程用的，本机用不着。该文件随 `niri.patch` 重放
+      （新增路径 ⇒ 26→27 文件、77→81 hunk，md5 `3c672ab5…`，见 §7 配方）。
+    - **由此丢掉的上游步骤**：`omarchy-update-dev`（代码 FF = `git pull --ff-only`）、`omarchy-update-keyring`、
+      `omarchy-migrate`、snapshot、`omarchy-update-pkg-prune`、孤儿包清理、status/服务重启。
+      逃生口 = `~/bin/omarchy-update --upstream`（跑上游真身；上游代码跟进仍走 `docs/upstream.md` §8.7 手动路径）。
+    - **参数**：垫片只认 `-h/--help`、`--upstream`，**其余参数一律拒绝（exit 2）**。原因：`omarchy update aur`
+      经 dispatcher 最长前缀只匹配到 `omarchy-update`，`aur` 会当残留参数传进来（上游那份是静默忽略）。
+    - 验法（离线、不碰系统）：`OMARCHY_PATH=<假根> PATH=<桩目录>` 跑垫片，桩掉 `sudo`/`paru`/`pacman`/`mise` 并放一个桩
+      `omarchy`，看四段顺序、`paru -Su`、`MISE_MINIMUM_RELEASE_AGE=0` 是否真传进 mise；分支单测：paru 不可执行 → 退到 yay、
+      两者都无 → 打印跳过、无外部包 → 跳过 AUR。委派验证：`$OMARCHY_PATH/bin/omarchy-update -h` 打印的是**垫片**用法
+      （= 委派生效），而 `omarchy update --help` 仍是 dispatcher 帮助。⚠ 桩目录别把真 `~/bin` 留在 PATH 里，
+      否则 paru 缺失时会回落到 `~/bin/yay` 垫片 → **真 paru**（2026-09-30 初测踩到；`sudo` 被桩掉所以没真升级）。
+    - 回退：`rm ~/bin/omarchy-update`；要连委派一起撤，见 §9 索引那行（注意还得把它从 patch 路径表里去掉再重生成，
+      否则下次 `omarchy-niri-repatch` 会再打回来）。
 
 ---
 
@@ -522,3 +549,4 @@ cp /tmp/niri.patch ~/.config/omarchy/niri-port/niri.patch              # 重放�
 | 字体/中文回退改坏 | `rm ~/.config/fontconfig/conf.d/60-cjk-fallback.conf`（回系统默认：中文会落到 MS Gothic、图标无回退）；`fonts.conf` 本身由菜单管，`menu → style → font` 重选一次即重建；仓库副本 `local-config/fontconfig/conf.d/` 可拷回来（见 §8 缺口第 15 项） |
 | 品牌图标字体（菜单里的 AI logo） | `rm ~/.local/share/fonts/omarchy/omarchy.ttf && fc-cache -f && omarchy-restart-shell`（回到豆腐块，别的照常；见 §8 缺口第 17 项） |
 | 壳监督进程防双开补丁 | `cp ~/.local/state/backups/.local/share/omarchy/bin/omarchy-launch-shell.bak-20260930 ~/.local/share/omarchy/bin/omarchy-launch-shell`（测试件同理 `…/test/shell.d/launch-shell-test.sh.bak-20260930`；撤掉后引擎 SEGV 又可能双开抢锁＝红屏，链路见 `lock.md` §11.30，见 §8 缺口第 18 项） |
+| CLI `omarchy update` 走垫片（含四段更新流程） | 只撤垫片：`cp ~/.local/state/backups/bin/omarchy-update.bak-20260930 ~/bin/omarchy-update`。**连委派一起撤**：同样还原 `cp ~/.local/state/backups/.local/share/omarchy/bin/omarchy-update.bak-20260930 ~/.local/share/omarchy/bin/omarchy-update`，并把 `bin/omarchy-update` 从 `niri.patch` 路径表删掉后按 §7 限路径重生成（否则下次 repatch 会把委派再打回来；见 §8 缺口第 19 项） |

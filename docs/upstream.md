@@ -25,7 +25,7 @@
 
 - `omarchy update` = `git pull --ff-only`（`omarchy-update-dev`，在 `post-update` 钩子**之前**）+ 迁移。
 - **仓库外不碰**：`config.kdl` / `shell.json` / `~/bin/hyprctl` 都不在 omarchy 仓库内，`git pull` 动不到。
-- **仓库内会撞**：我们改了仓库内 **26 个文件**。权威清单就是补丁自己的 `diff --git` 行：
+- **仓库内会撞**：我们改了仓库内 **27 个文件**。权威清单就是补丁自己的 `diff --git` 行：
   `grep '^diff --git' ~/.config/omarchy/niri-port/niri.patch | sed 's|.* b/||'`（换机器/换仓库路径也别抄下面的名单）。
   起步那 19 个是 `launch-{tui,editor,floating-terminal-with-presentation}`、`refresh-hyprland`、`theme-set`、
   `menu.jsonc`、`qmldir`、`Background.qml`、`ImagePicker.qml`、`Bar.qml`、`Workspaces.qml`、`Menu.qml`、
@@ -33,8 +33,10 @@
   `omarchy-system-{logout,reboot,shutdown}`；之后又加了 `shell/shell.qml`（boot reveal 推送）、
   `notifications/Service.qml`、`Commons/Style.qml`、`panels/monitor/Panel.qml`（分辨率滑块，2026-09-26）、
   `bin/omarchy-battery-status`（充电阈值改 sysfs 优先，2026-09-26，见 `docs/behavior.md` §8 第 38 条）、
-  `bin/omarchy-default-agent` 与 `bin/omarchy-agent`（把 ante 加进默认 agent 列表，2026-09-27，见 §8 第 40 条）。
-  ——这 26 个文件正是 `niri.patch` 的内容（**26 个文件 / 77 hunk**，2026-09-27 核；2026-09-26 为 24 文件 / 72 hunk；
+  `bin/omarchy-default-agent` 与 `bin/omarchy-agent`（把 ante 加进默认 agent 列表，2026-09-27，见 §8 第 40 条）、
+  `bin/omarchy-update`（把 CLI `omarchy update` 委派给 `~/bin` 垫片，2026-09-30，见 `docs/omarchy-on-niri-port.md` §3.1）。
+  ——这 27 个文件正是 `niri.patch` 的内容（**27 个文件 / 81 hunk**，2026-09-30 核；2026-09-27 为 26 文件 / 77 hunk；
+  2026-09-26 为 24 文件 / 72 hunk；
   2026-09-18 合并上游时为 30 hunk，
   2026-09-19 菜单自愈守卫 +2（§8.14）、Install/Remove 终端回退 +1（§8 第 21 条）、
   2026-09-20 选择器异步解码 +1（§8 第 25 条）、电量数字置右 +1（§8 第 28 条））。
@@ -258,8 +260,10 @@ laravel 从 `~/.config/composer/vendor/bin/laravel` 改成 `~/.local/bin/laravel
 与 `/usr/share/libalpm/hooks` 无新增。
 
 **机制未启用意味着**：`omarchy-sudo-passwordless` 本机跑到提权那步就失败（fail closed，不会半发布）；
-`omarchy-update` 的上游流程本机本来就走不通（没装 omarchy 包、没配 Omarchy 仓库），菜单与 bar 的
-Update 仍走 `~/bin/omarchy-update` 垫片。
+`omarchy-update` 的上游流程本机本来就走不通（没装 omarchy 包、没配 Omarchy 仓库）：菜单与 bar 的 Update
+走 `~/bin/omarchy-update` 垫片，**CLI `omarchy update` 自 2026-09-30 起也走同一个垫片**（`bin/omarchy-update`
+顶部的三行委派，随 `niri.patch` 重放；见 §8.7 与 `local-overrides.md` §8 第 19 项），想跑上游真身用
+`~/bin/omarchy-update --upstream`。
 
 **更新时注意**：这批文件在工作树里现在"本地改动恰好等于上游版本"，但 `git pull --ff-only` 仍会被
 dirty 挡下（git 只比是否 dirty，不比内容）。处置是先丢再 FF：
@@ -269,7 +273,7 @@ cd ~/.local/share/omarchy
 git restore --source=HEAD --worktree -- \
   bin/omarchy-channel-set bin/omarchy-install-service-dropbox bin/omarchy-refresh-pacman \
   bin/omarchy-remove-dev-env bin/omarchy-restart-shell bin/omarchy-sudo-passwordless \
-  bin/omarchy-update bin/omarchy-update-aur-pkgs bin/omarchy-update-restart \
+  bin/omarchy-update-aur-pkgs bin/omarchy-update-restart \
   bin/omarchy-update-stay-awake config/omarchy/hooks/pre-refresh-pacman.d/add-custom-repo.sample \
   default/agents/skills/omarchy/hooks.md docs/update-process.md \
   etc/tmpfiles.d/omarchy-nopasswd-sudo.conf manual/31-dotfiles.md manual/48-security.md
@@ -277,6 +281,10 @@ git restore --source=HEAD --worktree -- \
 # default/omarchy/sudo-no-update/sudo、$OMARCHY_PATH/docs/passwordless-sudo.md、migrations/1788163635.sh）
 # 与上游同路径时由 FF 直接快进，不用动。
 ```
+
+> ⚠ **这条清单里不能有 `bin/omarchy-update`**（2026-09-30 起）：它现在带着我们的三行委派，
+> `git restore` 会把委派**静默丢掉**（CLI `omarchy update` 又回上游那套），而它本身是 `niri.patch`
+> 的受管路径 —— 真要还原就走 `omarchy-niri-repatch`，或照 `local-overrides.md` §9 索引那行撤回。
 
 丢的是"等于上游的内容"，无损；`bin/omarchy-remove-ai-hermes` **不在本次范围内**（它属于 Hermes 主题，
 本机那处 150+/56- 的改动是"自动关闭 Hermes"那批，本次没跟）。

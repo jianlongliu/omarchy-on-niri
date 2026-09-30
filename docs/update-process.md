@@ -108,6 +108,12 @@ and restores the session's previous `misc.disable_autoreload` and
 
 ## Path 1: `omarchy update`
 
+> **本机（dev-link 手装）现状（2026-09-30）**：`omarchy update` 不跑下面这套。dispatcher 走绝对路径
+> `$OMARCHY_PATH/bin/omarchy-update`，那份文件顶部有三行委派（随 `niri.patch` 重放）落到 `~/bin/omarchy-update`
+> 垫片，垫片 = 四段：`sudo pacman -Syu` → AUR（paru 优先，先查可执行）→ `omarchy plugin update` → `mise up`。
+> 上游真身仍可跑：`~/bin/omarchy-update --upstream`。四段、丢弃的上游步骤（代码 FF / keyring / 迁移 / snapshot /
+> prune / 孤儿包清理）与回退见 `local-overrides.md` §8 第 19 项。
+
 High-level flow:
 
 ```text
@@ -149,6 +155,11 @@ Important behavior:
   terminal transcript to debug.
 
 ## Path 2: direct `sudo pacman -Syu` attempt
+
+> **本机没有这个 guard（2026-09-30 核）**：`/etc/pacman.d/hooks` 与 `/usr/share/libalpm/hooks` 里都没有 omarchy
+> 相关条目，checkout 里的 `bin/omarchy-update-pacman-guard` 没配 hook ⇒ 直接 `sudo pacman -Syu`（包括菜单
+> Update → System 的垫片第一段）不会被拦、也不会提示改跑 `omarchy update`。跟上游代码后这条会自己生效，
+> 届时它会与 `~/bin/omarchy-update` 的第一段撞上（同一件事两条路），要一起看。
 
 High-level flow:
 

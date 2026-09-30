@@ -1,31 +1,84 @@
 #!/bin/bash
-# 手装（dev-link）移植机专用垫片：`~/bin` 在会话 PATH 里排在 $OMARCHY_PATH/bin
-# 之前，所以 omarchy menu 的 Update → Omarchy 与 bar 的 system-update 部件
-# （都裸调 `omarchy-update`）走这里。
+# omarchy-update — 手装（dev-link）机器专用垫片。正本：port-bin/omarchy-update
 #
-# 为什么换掉上游脚本：这类机器没装 omarchy 包、没配 Omarchy 自家仓库 —— 上游流程
-# 会卡在 omarchy-update-keyring（omarchy-keyring 装不到，set -e 直接终止），
-# 后面还用 yay（这类机器上通常是 paru），中间却已经跑过
-# `pacman -Syu --noconfirm` 的无人值守全系统升级。
+# 为什么换掉上游脚本：这类机器没装 omarchy 包、没配 Omarchy 自家仓库 —— 上游流程会卡在
+# omarchy-update-keyring（omarchy-keyring 装不到，set -e 直接终止），后面还用 yay
+# （这类机器上通常是 paru），中间却会执行无人值守的 `pacman -Syu --noconfirm`。
 #
-# 注意：CLI 打 `omarchy update` 走 dispatcher（绝对路径 $OMARCHY_PATH/bin/omarchy-update），
-# 本垫片拦不到——别用那个写法。
+# 谁落到这里：
+#   * omarchy menu 的 Update → System、bar 的 system-update 部件（裸调 `omarchy-update`，
+#     ~/bin 在 PATH 里排在 $OMARCHY_PATH/bin 之前）
+#   * CLI `omarchy update` —— dispatcher 走绝对路径 $OMARCHY_PATH/bin/omarchy-update，
+#     那份文件顶部有三行委派（见 docs/local-overrides.md §8 第 19 项）
 #
-# 上游代码跟进仍走手动路径（见 docs/omarchy-on-niri-port.md §8.9 / §8.13）：
-# git pull → omarchy-niri-repatch → omarchy-restart-shell。
-# 回退：rm ~/bin/omarchy-update
+# 本垫片 = 四段：pacman -Syu → AUR（优先 paru）→ omarchy plugin update → mise up。
+# 想跑上游那套（代码 FF、migrate、snapshot、prune、孤儿包清理、keyring）：--upstream。
+#
+# 回退：rm ~/bin/omarchy-update；CLI 那条还要还原 checkout 里那份（见 §9 回退索引）。
 
 set -euo pipefail
 
-if [[ ${1:-} == "-h" || ${1:-} == "--help" ]]; then
-  cat <<'EOF'
-omarchy-update（本机垫片）= sudo pacman -Syu
+omarchy_path=${OMARCHY_PATH:-$HOME/.local/share/omarchy}
 
-不含上游那套：代码 FF、niri 覆盖层重放、迁移、AUR 更新、孤儿包清理。
-上游代码跟进请走文档 §8.13 手动路径（git pull → omarchy-niri-repatch
-→ omarchy-restart-shell）。
+usage() {
+  cat <<'EOF'
+omarchy-update（本机垫片）
+
+  omarchy-update              系统包 + AUR + omarchy 插件 + mise 工具
+  omarchy-update --upstream   跑上游 omarchy-update 真身（代码 FF、迁移、keyring 那套）
+  omarchy-update -h|--help    这份说明
+
+不含上游的：代码 FF（git pull）、omarchy-migrate、snapshot、pkg-prune、孤儿包清理、keyring。
+上游代码跟进走 docs/upstream.md 的手动路径（git pull → omarchy-niri-repatch → omarchy-restart-shell）。
 EOF
+}
+
+case "${1:-}" in
+-h | --help)
+  usage
   exit 0
+  ;;
+--upstream)
+  # 逃生口：真身认得这个 env 才不往回委派（防递归）。
+  exec env OMARCHY_UPDATE_NO_DELEGATE=1 "$omarchy_path/bin/omarchy-update" "${@:2}"
+  ;;
+"") ;;
+*)
+  echo "omarchy-update: 未知参数 '$1'（-h 看用法；上游那套用 --upstream）" >&2
+  exit 2
+  ;;
+esac
+
+echo -e "\e[32m\nSystem packages (pacman -Syu)\e[0m"
+sudo pacman -Syu
+
+# AUR 段：优先 paru，且先确认它真的可执行；有外部（AUR）包才跑。
+aur_helper=""
+for candidate in paru yay; do
+  helper_path=$(command -v "$candidate" 2>/dev/null) || continue
+  if [[ -x $helper_path ]]; then
+    aur_helper=$helper_path
+    break
+  fi
+done
+
+if [[ -n $aur_helper ]]; then
+  if pacman -Qem >/dev/null 2>&1; then
+    echo -e "\e[32m\nAUR packages ($aur_helper -Su)\e[0m"
+    "$aur_helper" -Su
+  else
+    echo -e "\e[33m\n没有外部（AUR）包，跳过\e[0m"
+  fi
+else
+  echo -e "\e[33m\n没找到可执行的 AUR helper（paru/yay），跳过 AUR\e[0m"
 fi
 
-sudo pacman -Syu
+if [[ -x $omarchy_path/bin/omarchy ]]; then
+  echo -e "\e[32m\nOmarchy plugins\e[0m"
+  "$omarchy_path/bin/omarchy" plugin update
+fi
+
+if command -v mise >/dev/null 2>&1; then
+  echo -e "\e[32m\nmise tools\e[0m"
+  MISE_MINIMUM_RELEASE_AGE=0 mise up
+fi

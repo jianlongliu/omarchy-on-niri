@@ -1,5 +1,5 @@
 diff --git a/bin/omarchy-agent b/bin/omarchy-agent
-index e35bcf0..dbc3509 100755
+index e35bcf04..dbc35095 100755
 --- a/bin/omarchy-agent
 +++ b/bin/omarchy-agent
 @@ -130,6 +130,14 @@ pi)
@@ -18,7 +18,7 @@ index e35bcf0..dbc3509 100755
    echo "Unsupported default agent: $agent" >&2
    exit 1
 diff --git a/bin/omarchy-battery-status b/bin/omarchy-battery-status
-index cc0a602..0d044e2 100755
+index cc0a6024..0d044e2b 100755
 --- a/bin/omarchy-battery-status
 +++ b/bin/omarchy-battery-status
 @@ -62,11 +62,14 @@ power_rate=$(awk -v rate="${power_rate_raw:-0}" 'BEGIN {
@@ -42,7 +42,7 @@ index cc0a602..0d044e2 100755
  ac_online=false
  for supply in "$power_supply_path"/*; do
 diff --git a/bin/omarchy-default-agent b/bin/omarchy-default-agent
-index eb2ef7f..f235102 100755
+index eb2ef7fb..f235102c 100755
 --- a/bin/omarchy-default-agent
 +++ b/bin/omarchy-default-agent
 @@ -1,7 +1,7 @@
@@ -85,7 +85,7 @@ index eb2ef7f..f235102 100755
    # Anything at the wrapper's path other than the wrapper is the user's own
    # install, such as the symlink Cursor's installer leaves. A mise copy would
 diff --git a/bin/omarchy-launch-editor b/bin/omarchy-launch-editor
-index 8a69dab..2b66583 100755
+index 8a69dabd..2b665839 100755
 --- a/bin/omarchy-launch-editor
 +++ b/bin/omarchy-launch-editor
 @@ -29,6 +29,11 @@ nvim | vim | nano | micro | hx | helix | fresh)
@@ -102,7 +102,7 @@ index 8a69dab..2b66583 100755
    ;;
  esac
 diff --git a/bin/omarchy-launch-floating-terminal-with-presentation b/bin/omarchy-launch-floating-terminal-with-presentation
-index 4497ff0..c4670d5 100755
+index 4497ff0d..c4670d5d 100755
 --- a/bin/omarchy-launch-floating-terminal-with-presentation
 +++ b/bin/omarchy-launch-floating-terminal-with-presentation
 @@ -11,4 +11,16 @@ cmd="$*"
@@ -124,7 +124,7 @@ index 4497ff0..c4670d5 100755
 +
 +exec bash -c "$presentation_script"
 diff --git a/bin/omarchy-launch-tui b/bin/omarchy-launch-tui
-index bd67c64..57f7610 100755
+index bd67c64c..57f76102 100755
 --- a/bin/omarchy-launch-tui
 +++ b/bin/omarchy-launch-tui
 @@ -10,4 +10,16 @@ else
@@ -146,7 +146,7 @@ index bd67c64..57f7610 100755
 +
 +exec "$1" "${@:2}"
 diff --git a/bin/omarchy-refresh-hyprland b/bin/omarchy-refresh-hyprland
-index 6549c69..7302884 100755
+index 6549c693..73028840 100755
 --- a/bin/omarchy-refresh-hyprland
 +++ b/bin/omarchy-refresh-hyprland
 @@ -2,6 +2,14 @@
@@ -165,7 +165,7 @@ index 6549c69..7302884 100755
  omarchy-refresh-config hypr/autostart.lua
  omarchy-refresh-config hypr/bindings.lua
 diff --git a/bin/omarchy-system-logout b/bin/omarchy-system-logout
-index cb0fd66..815c214 100755
+index cb0fd660..815c2145 100755
 --- a/bin/omarchy-system-logout
 +++ b/bin/omarchy-system-logout
 @@ -4,6 +4,11 @@
@@ -181,7 +181,7 @@ index cb0fd66..815c214 100755
  
  omarchy-osd -i logout -m "Logging out" -d 5000
 diff --git a/bin/omarchy-system-reboot b/bin/omarchy-system-reboot
-index 4d2b6c8..9e84b32 100755
+index 4d2b6c86..9e84b323 100755
 --- a/bin/omarchy-system-reboot
 +++ b/bin/omarchy-system-reboot
 @@ -4,6 +4,11 @@
@@ -197,7 +197,7 @@ index 4d2b6c8..9e84b32 100755
  # scope cannot terminate it before it runs.
  systemd-run --user --collect --quiet --on-active="2s" --timer-property=AccuracySec=100ms systemctl reboot --no-wall || exit 1
 diff --git a/bin/omarchy-system-shutdown b/bin/omarchy-system-shutdown
-index 0143760..38a78a6 100755
+index 0143760e..38a78a60 100755
 --- a/bin/omarchy-system-shutdown
 +++ b/bin/omarchy-system-shutdown
 @@ -4,6 +4,11 @@
@@ -213,7 +213,7 @@ index 0143760..38a78a6 100755
  # scope cannot terminate it before it runs.
  systemd-run --user --collect --quiet --on-active="2s" --timer-property=AccuracySec=100ms systemctl poweroff --no-wall || exit 1
 diff --git a/bin/omarchy-theme-set b/bin/omarchy-theme-set
-index 782b4ba..1a95bde 100755
+index 782b4ba7..1a95bdeb 100755
 --- a/bin/omarchy-theme-set
 +++ b/bin/omarchy-theme-set
 @@ -135,7 +135,7 @@ set_theme_background_link() {
@@ -261,8 +261,192 @@ index 782b4ba..1a95bde 100755
        OLD_BACKGROUND_SNAPSHOT=$(snapshot_current_background)
      else
        BACKGROUND_TRANSITION_SNAPSHOTS=false
+diff --git a/bin/omarchy-update b/bin/omarchy-update
+index 1738ebff..9c29db60 100755
+--- a/bin/omarchy-update
++++ b/bin/omarchy-update
+@@ -1,4 +1,4 @@
+-#!/bin/bash
++#!/bin/bash -p
+ 
+ # omarchy:summary=Update Omarchy and system packages
+ # omarchy:alias=omarchy up
+@@ -6,27 +6,115 @@
+ # omarchy:examples=omarchy update | omarchy update -y
+ # omarchy:requires-sudo=true
+ 
++# 本机（手装/dev-link）委派：CLI `omarchy update` 也落到 ~/bin 垫片，因为它走的是
++# 绝对路径 $OMARCHY_PATH/bin/omarchy-update，PATH-first 的垫片拦不到。
++# 上游那套在本机跑不通（keyring 装不上，set -e 直接终止），故在安全脚手架之前就转走；
++# 垫片自己是普通 sudo 流程、不需要这套脚手架。想跑真身：`omarchy-update --upstream`
++# （它设 OMARCHY_UPDATE_NO_DELEGATE=1，防递归）。
++# 见 docs/local-overrides.md §8 第 19 项。
++if [[ ${OMARCHY_UPDATE_NO_DELEGATE:-0} != 1 && -x $HOME/bin/omarchy-update ]]; then
++  exec "$HOME/bin/omarchy-update" "$@"
++fi
++
++if [[ $- != *p* ]]; then
++  echo "Refusing an unsafe Bash startup." >&2
++  exit 126
++fi
++
++security_entrypoint=$(/usr/bin/readlink -e -- "${BASH_SOURCE[0]}") || exit 126
++source "${security_entrypoint%/*}/omarchy-security-functions" || exit 126
++omarchy_security_require_privileged_bash_startup || exit 126
+ set -e
++omarchy_security_sanitize_bash_environment "$0" "$@"
++omarchy_security_require_source_root "$0"
++# Logging and lock acquisition re-exec this command with a sanitized PATH.
++# Preserve the caller's path only for the later hook/mise phases.
++user_path=${OMARCHY_UPDATE_USER_PATH:-$PATH}
++unset OMARCHY_UPDATE_USER_PATH
++# Traps first, so a signal or failure during the entry revocation still
++# exits through the cleanup path. Starting cold means the single password
++# prompt below always belongs to this update, never to an earlier session.
++omarchy_security_install_sudo_cleanup_traps
++omarchy_security_revoke_sudo_timestamp || exit 1
++# Validate the no-update wrapper up front: the AUR phase depends on it. Every
++# other phase shares the one authorization, so it stays off PATH until then.
++omarchy_security_enable_no_update_sudo
++PATH="$OMARCHY_PATH/bin:/usr/bin:/usr/sbin:/bin:/sbin"
++unset OMARCHY_SUDO_NO_UPDATE
++# Helpers that manage their own sudo boundary leave this authorization to us.
++export PATH OMARCHY_UPDATE_SUDO_SESSION=1
++
++update_stay_awake_stopped=0
++sudo_keepalive_pid=""
++
++# Ask for the password once, then keep sudo's timestamp fresh so long package
++# downloads, migrations, hooks, and mise never outlast it and prompt again.
++# Authorize by running a command rather than sudo -v: under the default
++# verifypw=all, -v prompts even when passwordless sudo is enabled.
++authorize_update() {
++  /usr/bin/sudo /usr/bin/true || return 1
++
++  local update_pid=$$
++  (
++    [[ -z ${OMARCHY_UPDATE_LOCK_FD:-} ]] || exec {OMARCHY_UPDATE_LOCK_FD}>&-
++    sleep_pid=""
++    trap - EXIT HUP INT
++    trap '[[ -z $sleep_pid ]] || kill "$sleep_pid" 2>/dev/null; exit 0' TERM
++    while :; do
++      sleep 60 &
++      sleep_pid=$!
++      wait "$sleep_pid"
++      kill -0 "$update_pid" 2>/dev/null || exit 0
++      /usr/bin/sudo -n /usr/bin/true 2>/dev/null || exit 0
++    done
++  ) &
++  sudo_keepalive_pid=$!
++}
++
++end_update_authorization() {
++  if [[ -n $sudo_keepalive_pid ]]; then
++    kill "$sudo_keepalive_pid" 2>/dev/null || true
++    wait "$sudo_keepalive_pid" 2>/dev/null || true
++    sudo_keepalive_pid=""
++  fi
++  omarchy_security_revoke_sudo_timestamp
++}
++
++cleanup_update() {
++  local status=$?
++  trap - EXIT HUP INT TERM
++  if ! end_update_authorization; then
++    echo "Could not invalidate sudo before update cleanup." >&2
++    omarchy_security_exit_with_revoked_sudo 1
++  fi
++  if (( update_stay_awake_stopped == 0 )); then
++    omarchy-update-stay-awake stop || status=1
++  fi
++  omarchy_security_exit_with_revoked_sudo "$status"
++}
+ 
+ if [[ -z ${OMARCHY_UPDATE_LOGGED:-} ]]; then
+   script_command=$(printf '%q ' "$0" "$@")
+-  exec env OMARCHY_UPDATE_LOGGED=1 script -qefc "$script_command" "/tmp/omarchy-update.log"
++  exec env OMARCHY_UPDATE_LOGGED=1 OMARCHY_UPDATE_USER_PATH="$user_path" script -qefc "$script_command" "/tmp/omarchy-update.log"
+ fi
+ 
+ if ! omarchy-update-lock held; then
+-  exec omarchy-update-lock run "$0" "$@"
++  exec env OMARCHY_UPDATE_USER_PATH="$user_path" omarchy-update-lock run "$0" "$@"
+ fi
+ 
+ trap 'echo ""; echo -e "\033[0;31mSomething went wrong during the update!\n\nPlease review the output above carefully, correct the error, and retry the update.\n\nIf you need assistance, get help from the community at https://omarchy.org/discord\033[0m"' ERR
+-trap 'omarchy-update-stay-awake stop' EXIT
++trap cleanup_update EXIT
++omarchy_security_install_signal_exit_traps
+ 
+ omarchy-update-requires-free-space
+ 
+-# -y is a promise not to ask anything. Steps that would need an answer report
+-# and move on instead of waiting on a prompt nobody is here to give.
++# -y suppresses Omarchy confirmation prompts; sudo authorization is still
++# required. Interactive review steps report and move on instead of waiting.
+ [[ ${1:-} != "-y" ]] || export OMARCHY_UPDATE_UNATTENDED=1
+ 
+ if [[ ${1:-} == "-y" ]] || omarchy-update-confirm; then
++  authorize_update
++
+   # Before the snapshot: the cache is on the snapshotted subvolume, so pruning
+   # after it frees nothing until that snapshot ages out.
+   omarchy-update-pkg-prune
+@@ -39,6 +127,7 @@ if [[ ${1:-} == "-y" ]] || omarchy-update-confirm; then
+ 
+   omarchy-update-stay-awake start
+ 
++  # Preserve the established development-checkout update ordering.
+   omarchy-update-dev
+   omarchy-update-keyring
+ 
+@@ -46,20 +135,36 @@ if [[ ${1:-} == "-y" ]] || omarchy-update-confirm; then
+   # them, so everything below waits on this finishing. An upgrade that stopped
+   # takes the update with it rather than migrating against what is still on disk.
+   omarchy-update-system-pkgs
++
+   omarchy-migrate
+-  omarchy-hook post-update
+-  omarchy-update-aur-pkgs
+-  omarchy-update-mise
+   omarchy-update-orphan-pkgs
+ 
+   omarchy-update-analyze-logs
+   omarchy-update-status
+ 
+-  # Release update-owned inhibitors before offering a reboot. A confirmed
+-  # reboot can terminate this process before its EXIT trap gets a chance to
+-  # remove the persistent Stay Awake marker.
++  # Service restart helpers can need sudo. The reboot-only phase below
++  # performs no privileged work.
++  omarchy-update-restart --services-only
++
++  # Hooks and mise run with the caller's PATH so user-installed tools resolve.
++  PATH="$user_path" "$OMARCHY_PATH/bin/omarchy-hook" post-update
++  PATH="$user_path" "$OMARCHY_PATH/bin/omarchy-update-mise"
++
++  # AUR builds run third-party PKGBUILD code, so they go last and never see the
++  # update's authorization: revoke it, then authenticate each sudo call with
++  # the no-update wrapper, for yay and any bare sudo a PKGBUILD runs, so an AUR
++  # install prompts without caching anything.
++  end_update_authorization
++  PATH="$OMARCHY_PATH/default/omarchy/sudo-no-update:$PATH" OMARCHY_SUDO_NO_UPDATE=1 omarchy-update-aur-pkgs
++  omarchy_security_revoke_sudo_timestamp
++
++  # The sleep inhibitor covers AUR builds, hooks and mise as well; releasing it
++  # needs no privilege because the held command already dropped to this user.
++  # Release it before offering a reboot: a confirmed reboot can terminate this
++  # process before its EXIT trap gets a chance to remove the persistent Stay
++  # Awake marker.
+   omarchy-update-stay-awake stop
+-  trap - EXIT
++  update_stay_awake_stopped=1
+ 
+-  omarchy-update-restart
++  "$OMARCHY_PATH/bin/omarchy-update-restart" --reboot-only
+ fi
 diff --git a/default/omarchy/omarchy-menu.jsonc b/default/omarchy/omarchy-menu.jsonc
-index 2ee2457..a109d2b 100644
+index 2ee24576..a109d2be 100644
 --- a/default/omarchy/omarchy-menu.jsonc
 +++ b/default/omarchy/omarchy-menu.jsonc
 @@ -108,9 +108,10 @@
@@ -342,7 +526,7 @@ index 2ee2457..a109d2b 100644
    "update.config.tmux": {"icon":"","label":"Tmux","action":"omarchy-launch-floating-terminal-with-presentation omarchy-refresh-tmux"},
    "update.config.shell": {"icon":"󰍜","label":"Shell","action":"omarchy-launch-floating-terminal-with-presentation omarchy-refresh-shell"},
 diff --git a/shell/Commons/Style.qml b/shell/Commons/Style.qml
-index ec61252..ec2ee7d 100644
+index ec61252b..ec2ee7df 100644
 --- a/shell/Commons/Style.qml
 +++ b/shell/Commons/Style.qml
 @@ -403,9 +403,16 @@ QtObject {
@@ -364,7 +548,7 @@ index ec61252..ec2ee7d 100644
            if (isFinite(b)) barOut[key] = b
          }
 diff --git a/shell/Commons/qmldir b/shell/Commons/qmldir
-index 4bfd0b7..17edf0c 100644
+index 4bfd0b78..17edf0c8 100644
 --- a/shell/Commons/qmldir
 +++ b/shell/Commons/qmldir
 @@ -1,5 +1,6 @@
@@ -375,7 +559,7 @@ index 4bfd0b7..17edf0c 100644
  singleton Style 1.0 Style.qml
  singleton Util 1.0 Util.qml
 diff --git a/shell/Ui/KeyboardPanel.qml b/shell/Ui/KeyboardPanel.qml
-index b2fb218..c64a57e 100644
+index b2fb218f..c64a57e8 100644
 --- a/shell/Ui/KeyboardPanel.qml
 +++ b/shell/Ui/KeyboardPanel.qml
 @@ -1,6 +1,7 @@
@@ -401,7 +585,7 @@ index b2fb218..c64a57e 100644
    WlrLayershell.layer: WlrLayer.Overlay
    // Keyboard focus follows `open` (NOT `visible`). The window remains
 diff --git a/shell/plugins/background/Background.qml b/shell/plugins/background/Background.qml
-index dea93a4..96b26b6 100644
+index dea93a4c..96b26b69 100644
 --- a/shell/plugins/background/Background.qml
 +++ b/shell/plugins/background/Background.qml
 @@ -27,6 +27,13 @@ Item {
@@ -444,7 +628,7 @@ index dea93a4..96b26b6 100644
              root.incomingBackground = ""
              root.oldBackground = ""
 diff --git a/shell/plugins/bar/Bar.qml b/shell/plugins/bar/Bar.qml
-index be9fece..dee17ed 100644
+index be9fece4..dee17ed6 100644
 --- a/shell/plugins/bar/Bar.qml
 +++ b/shell/plugins/bar/Bar.qml
 @@ -1,5 +1,4 @@
@@ -602,7 +786,7 @@ index be9fece..dee17ed 100644
        // A child of the loader, not a sibling of the sections: an ancestor stays
        // hovered while the pointer is over a widget, where a sibling would lose
 diff --git a/shell/plugins/bar/widgets/Workspaces.qml b/shell/plugins/bar/widgets/Workspaces.qml
-index ec0482a..985d1d9 100644
+index ec0482a5..985d1d90 100644
 --- a/shell/plugins/bar/widgets/Workspaces.qml
 +++ b/shell/plugins/bar/widgets/Workspaces.qml
 @@ -1,6 +1,5 @@
@@ -640,7 +824,7 @@ index ec0482a..985d1d9 100644
          bar: root.bar
          text: focused ? "\uDB85\uDCFB" : (modelData === 10 ? "0" : String(modelData))
 diff --git a/shell/plugins/image-picker/ImagePicker.qml b/shell/plugins/image-picker/ImagePicker.qml
-index 5c00240..5fbeb0c 100644
+index 5c002402..5fbeb0c0 100644
 --- a/shell/plugins/image-picker/ImagePicker.qml
 +++ b/shell/plugins/image-picker/ImagePicker.qml
 @@ -507,7 +507,11 @@ Item {
@@ -657,7 +841,7 @@ index 5c00240..5fbeb0c 100644
                    smooth: true
                  }
 diff --git a/shell/plugins/menu/Menu.qml b/shell/plugins/menu/Menu.qml
-index aa879c1..95fc735 100644
+index aa879c18..95fc7352 100644
 --- a/shell/plugins/menu/Menu.qml
 +++ b/shell/plugins/menu/Menu.qml
 @@ -1,6 +1,7 @@
@@ -727,7 +911,7 @@ index aa879c1..95fc735 100644
      // or submenu move freezes the top line where it currently sits — from
      // then on the card grows and shrinks downward instead of re-centering
 diff --git a/shell/plugins/notifications/Service.qml b/shell/plugins/notifications/Service.qml
-index 0122310..39d5556 100644
+index 0122310e..39d5556f 100644
 --- a/shell/plugins/notifications/Service.qml
 +++ b/shell/plugins/notifications/Service.qml
 @@ -5,6 +5,7 @@ import QtQuick.Layouts
@@ -754,7 +938,7 @@ index 0122310..39d5556 100644
          service.barPosition, service.barClearance, Style.gapsOut)
  
 diff --git a/shell/plugins/osd/Osd.qml b/shell/plugins/osd/Osd.qml
-index 581bfa3..0228823 100644
+index 581bfa3c..02288237 100644
 --- a/shell/plugins/osd/Osd.qml
 +++ b/shell/plugins/osd/Osd.qml
 @@ -126,7 +126,18 @@ Item {
@@ -790,7 +974,7 @@ index 581bfa3..0228823 100644
        radius: Style.cornerRadius
        opacity: root.opened ? 1 : 0
 diff --git a/shell/plugins/panels/monitor/Panel.qml b/shell/plugins/panels/monitor/Panel.qml
-index bec3882..9878550 100644
+index bec38820..98785506 100644
 --- a/shell/plugins/panels/monitor/Panel.qml
 +++ b/shell/plugins/panels/monitor/Panel.qml
 @@ -27,6 +27,24 @@ Panel {
@@ -1172,7 +1356,7 @@ index bec3882..9878550 100644
            PanelSeparator {
              foreground: root.bar.foreground
 diff --git a/shell/plugins/panels/power/Panel.qml b/shell/plugins/panels/power/Panel.qml
-index b1c34da..a46be0e 100644
+index b1c34da2..a46be0e8 100644
 --- a/shell/plugins/panels/power/Panel.qml
 +++ b/shell/plugins/panels/power/Panel.qml
 @@ -18,6 +18,14 @@ Panel {
@@ -1402,7 +1586,7 @@ index b1c34da..a46be0e 100644
      }
    }
 diff --git a/shell/services/AppLibrary.qml b/shell/services/AppLibrary.qml
-index 738529d..460565c 100644
+index 738529de..460565c1 100644
 --- a/shell/services/AppLibrary.qml
 +++ b/shell/services/AppLibrary.qml
 @@ -82,7 +82,10 @@ Item {
@@ -1418,7 +1602,7 @@ index 738529d..460565c 100644
  
    function remove(desktopId, name) {
 diff --git a/shell/shell.qml b/shell/shell.qml
-index 8208062..27d31e4 100644
+index 82080624..27d31e4a 100644
 --- a/shell/shell.qml
 +++ b/shell/shell.qml
 @@ -2,6 +2,7 @@ import QtQuick

@@ -34,7 +34,7 @@
 - 35. **Herdr 键位：`Super+Ctrl+Return` 必须经终端启动（裸 `herdr` 在 niri 下没有 tty，必死）（2026-09-24）**：`binds.kdl` 里那行原本是裸调 `herdr`
 - 38. **电池面板加 CHARGE LIMIT 档位切换（充电阈值可写）（2026-09-26）**：两档 Protect 75–80 / Full 95–100，点击走 `pkexec tlp setcharge`（规则 `/etc/polkit-1/rules.d/49-tlp.rules`）；**真根因＝`omarchy-battery-status` 优先信 UPower 而 UPower 缓存阈值不重读 ⇒ 已改成 sysfs 优先**；`setcharge` 只写运行时 ⇒ Full 一次性
 - 39. **Setup > Security 新增 "Paru (AUR)" 开关（paru 的执行位＝本机 AUR 总开关，2026-09-27）**：新命令 `port-bin/omarchy-setup-security-paru` 一身两半（用户半身念警告 + `gum confirm`，root 半身 `chmod ±x /usr/bin/paru`）+ `/usr/bin` root 属主副本 + polkit 规则 `49-paru.rules`（**没放行 chmod**）；菜单侧全在扩展文件（**零补丁**），并给 `install.aur`/`remove.package`/`update.aur` 加 `when` 守卫；⚠ **覆盖默认项必须整条复述**（解析器把每个字段补成默认值 ⇒ 只写 `when` 会把 `action` 冲空、条目静默消失）
-- 40. **ante 进菜单的"默认 agent"列表（2026-09-27）**：菜单那一行在扩展文件（零补丁），补丁落在命令侧两处上游脚本 —— `bin/omarchy-default-agent` 新增 `agent_self_managed` 分支（ante 不能被 mise 装、自己 `ante update` 自升级）+ `bin/omarchy-agent` 新增 `ante --yolo`（它的 `--prompt` 是 headless 语义，故不转发）⇒ 补丁 24 → **26 文件 / 77 hunk**、md5 `22dd2334…`
+- 40. **ante 进菜单的"默认 agent"列表（2026-09-27）**：菜单那一行在扩展文件（零补丁），补丁落在命令侧两处上游脚本 —— `bin/omarchy-default-agent` 新增 `agent_self_managed` 分支（ante 不能被 mise 装、自己 `ante update` 自升级）+ `bin/omarchy-agent` 新增 `ante --yolo`（它的 `--prompt` 是 headless 语义，故不转发）⇒ 补丁 24 → **26 文件 / 77 hunk**、md5 `22dd2334…`（2026-09-30 再加 `bin/omarchy-update` 那版 ⇒ **27 文件 / 81 hunk**、md5 `3c672ab5…`，见 §8.7）
 - 41. **vantage 退休并公开归档（2026-09-27）**：自写 TUI `~/Projects/vantage` 的四个功能全部搬进菜单/面板后，用户要求"推到远程仓库、标记归档、二进制发 release、先脱敏"⇒ `github.com/jianlongliu/vantage`（**PUBLIC + 已归档**），release `v2026.8.19` 挂由该 tag 源码构建的 `vantage-x86_64-linux-gnu` + `.sha256`；README 精简成退休说明、`.gitignore` 照抄本仓库基线、commit 用 noreply 身份；⚠ **归档前必须先建 release**（归档后只读）、`gh release create` 里的 `<file>#<name>` 那个 `#` 是 label 不是文件名
 
 - 42. **通用剪贴板 `Super+C/V/X` + 终端里复制/剪切的 OSD 卡片（2026-09-27）**：niri 抓键（`binds.kdl` 三条 `spawn-sh "omarchy-universal-clipboard copy|paste|cut"`），垫片按焦点窗口注入——终端 → `Ctrl+Insert`/`Shift+Insert`，其他 → `Ctrl+C/V`，剪切恒 `Ctrl+X`（上游 Hyprland 靠 `send_key_state`，niri 只能 spawn ⇒ 自造 uinput 注入器 `omarchy-sendkeys`、零安装）；终端里复制/剪切额外弹一次**壳层 OSD 卡片**（`omarchy-osd`，关机/重启同款）——ghostty 自己的 `app-notifications = clipboard-copy` 走 libnotify 吐司、在本机根本不显示，所以那边保持关闭。机制、两条硬约束（注入设备必须声明 1..248 全段键码、物理按住的 SUPER 会并进和弦）、≈0.45 s/键 与验法见 `docs/shims.md`「通用剪贴板垫片」（= `§8 第 42 条`）
@@ -807,7 +807,7 @@ Omarchy 有两层配置，只有层1在 niri 上真正生效：
       （`git diff -- <niri.patch 里那 24 个路径>`）⇒ **24 文件 / 62 → 72 hunk**，新 md5
       `e6868080f48c5f7cd1711a22e163de86`（`--reverse --check` 通过；旧版 `4ec279cf…` 已退役）。
       注意 `omarchy-niri-repatch` **只负责重放、不会重生成**补丁文件。
-      ⚠ **2026-09-27 已被 §8 第 39/40 条那版超过**：**26 文件 / 77 hunk**、md5 `22dd2334c2210d91618b9ad903d3cbc2`（那条只加了 ante 的 5 个 hunk；`e6868080…` 这一版的 72 hunk 于是变成中间版本）。
+      ⚠ **2026-09-27 已被 §8 第 39/40 条那版超过**：**26 文件 / 77 hunk**、md5 `22dd2334c2210d91618b9ad903d3cbc2`（那条只加了 ante 的 5 个 hunk；`e6868080…` 这一版的 72 hunk 于是变成中间版本）。⚠ **2026-09-30 再被 §8.7 那版超过**：**27 文件 / 81 hunk**、md5 `3c672ab5…`（那条加 `bin/omarchy-update`：CLI `omarchy update` 委派给 `~/bin` 垫片）。
 
 39. **Setup > Security 新增 "Paru (AUR)" 开关：paru 的执行位就是本机 AUR 的总开关（2026-09-27）**
     - **是什么**：菜单 Security 区多一条 `Paru (AUR)`，切换 `/usr/bin/paru` 的执行位。**执行位即总开关**：本机 AUR
@@ -863,7 +863,8 @@ Omarchy 有两层配置，只有层1在 niri 上真正生效：
       `omarchy-launch-tui`）⇒ 期望打印 `LAUNCH: --app-id=org.omarchy.agent ante --yolo` 并写 `defaults/agent`；
       `scripts/menu-model-render.js setup.default.agent` ⇒ 15 行、末行 `Ante`。
     - **补丁**：+5 hunk ⇒ **26 文件 / 77 hunk**，md5 `22dd2334c2210d91618b9ad903d3cbc2`（路径清单加 `bin/omarchy-agent`、
-      `bin/omarchy-default-agent`；`--reverse --check` 通过，两个副本逐字节一致）。
+      `bin/omarchy-default-agent`；`--reverse --check` 通过，两个副本逐字节一致）。⚠ 2026-09-30 又被 §8.7 那版超过：
+      **27 文件 / 81 hunk**、md5 `3c672ab5…`（那条加 `bin/omarchy-update`：CLI `omarchy update` 委派给 `~/bin` 垫片）。
 
 41. **vantage 退休并公开归档（2026-09-27）**
     - **四功能归位**：`res` 分辨率切换 → **弃用**（交给 Monitor 面板；代码里 `DISPLAY_LOCKED = true` 保持屏蔽）；
