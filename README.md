@@ -151,8 +151,8 @@ an existing `config.kdl` and it will not auto-install packages or fix backlight 
 Short version:
 
 ```sh
-git clone https://github.com/jianlongliu/Nirism
-cd Nirism
+git clone https://github.com/jianlongliu/onarchi
+cd onarchi
 # install the packages in README "Requirements", then run:
 ./install.sh            # optional; or follow docs/INSTALL.md step by step
 ```

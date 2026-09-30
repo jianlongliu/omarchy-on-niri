@@ -141,8 +141,8 @@ onarchi/
 简版：
 
 ```sh
-git clone https://github.com/jianlongliu/Nirism
-cd Nirism
+git clone https://github.com/jianlongliu/onarchi
+cd onarchi
 # 先装 README "Requirements" 里的包，然后执行：
 ./install.sh            # 可选；或按 docs/INSTALL.zh.md 逐步来
 ```
