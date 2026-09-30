@@ -516,8 +516,11 @@ cp /tmp/niri.patch ~/.config/omarchy/niri-port/niri.patch              # 重放�
     - **由此丢掉的上游步骤**：`omarchy-update-dev`（代码 FF = `git pull --ff-only`）、`omarchy-update-keyring`、
       `omarchy-migrate`、snapshot、`omarchy-update-pkg-prune`、孤儿包清理、status/服务重启。
       逃生口 = `~/bin/omarchy-update --upstream`（跑上游真身；上游代码跟进仍走 `docs/upstream.md` §8.7 手动路径）。
-    - **参数**：垫片只认 `-h/--help`、`--upstream`，**其余参数一律拒绝（exit 2）**。原因：`omarchy update aur`
-      经 dispatcher 最长前缀只匹配到 `omarchy-update`，`aur` 会当残留参数传进来（上游那份是静默忽略）。
+    - **参数**：垫片认 `-h/--help`、`--upstream`、**`aur`**（只跑 AUR 段 = `paru -Sua`，即
+      `omarchy update aur`；后面不接别的参数），**其余一律拒绝（exit 2）**。`aur` 之所以要单独实现：dispatcher 按最长前缀
+      只匹配到 `omarchy-update`，`aur` 是当**残留参数**传进来的，上游那份静默忽略它 ⇒ 不接住的话
+      `omarchy update aur` 什么也不做（本机垫片早期版本是直接拒掉）。这里是"只更 AUR"的唯一实现，
+      菜单 Update → AUR Packages 那条扩展走的是同一语义的 `paru -Sua`（`~/.config/omarchy/extensions/omarchy-menu.jsonc`）。
     - 验法（离线、不碰系统）：`OMARCHY_PATH=<假根> PATH=<桩目录>` 跑垫片，桩掉 `sudo`/`paru`/`pacman`/`mise` 并放一个桩
       `omarchy`，看四段顺序、`paru -Sua`、`MISE_MINIMUM_RELEASE_AGE=0` 是否真传进 mise；分支单测：paru 不可执行 → 退到 yay、
       两者都无 → 打印跳过、无外部包 → 跳过 AUR。委派验证：`$OMARCHY_PATH/bin/omarchy-update -h` 打印的是**垫片**用法

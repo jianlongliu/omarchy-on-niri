@@ -11,7 +11,8 @@
 #   * CLI `omarchy update` —— dispatcher 走绝对路径 $OMARCHY_PATH/bin/omarchy-update，
 #     那份文件顶部有三行委派（见 docs/local-overrides.md §8 第 19 项）
 #
-# 本垫片 = 四段：pacman -Syu → AUR（优先 paru）→ omarchy plugin update → mise up。
+# 本垫片 = 四段：pacman -Syu → AUR（优先 paru，`-Sua` 只做 AUR）→ omarchy plugin update → mise up。
+# `omarchy-update aur` 只跑 AUR 那一段（菜单 Update → AUR Packages 走的也是这条）。
 # 想跑上游那套（代码 FF、migrate、snapshot、prune、孤儿包清理、keyring）：--upstream。
 #
 # 回退：rm ~/bin/omarchy-update；CLI 那条还要还原 checkout 里那份（见 §9 回退索引）。
@@ -25,6 +26,7 @@ usage() {
 omarchy-update（本机垫片）
 
   omarchy-update              系统包 + AUR + omarchy 插件 + mise 工具
+  omarchy-update aur          只更 AUR 包（= paru -Sua；菜单 Update → AUR Packages 也走这条）
   omarchy-update --upstream   跑上游 omarchy-update 真身（代码 FF、迁移、keyring 那套）
   omarchy-update -h|--help    这份说明
 
@@ -33,6 +35,7 @@ omarchy-update（本机垫片）
 EOF
 }
 
+aur_only=0
 case "${1:-}" in
 -h | --help)
   usage
@@ -42,6 +45,15 @@ case "${1:-}" in
   # 逃生口：真身认得这个 env 才不往回委派（防递归）。
   exec env OMARCHY_UPDATE_NO_DELEGATE=1 "$omarchy_path/bin/omarchy-update" "${@:2}"
   ;;
+aur)
+  # CLI `omarchy update aur` = 只更 AUR（dispatcher 只匹配到 update，把 aur 当残留参数传进来）。
+  aur_only=1
+  ref=${2:-}
+  if [[ -n $ref ]]; then
+    echo "omarchy-update: aur 后面不接参数（收到 '$ref'）" >&2
+    exit 2
+  fi
+  ;;
 "") ;;
 *)
   echo "omarchy-update: 未知参数 '$1'（-h 看用法；上游那套用 --upstream）" >&2
@@ -49,31 +61,36 @@ case "${1:-}" in
   ;;
 esac
 
+# AUR 段 = **只做 AUR**：`-Sua`（`-a` = `--aur`，本机 help 原话 "Assume targets are from the AUR"）。
+# repo 那半边由 `pacman -Syu` 负责，所以 `-Su`（不带 a）是错的用法 —— 它会连 repo 再做一遍。
+# 优先 paru，且先确认它真的可执行；返回 1 表示没有可用的 helper。
+aur_segment() {
+  local candidate helper_path
+  for candidate in paru yay; do
+    helper_path=$(command -v "$candidate" 2>/dev/null) || continue
+    if [[ -x $helper_path ]]; then
+      if pacman -Qem >/dev/null 2>&1; then
+        echo -e "\e[32m\nAUR packages ($helper_path -Sua)\e[0m"
+        "$helper_path" -Sua
+      else
+        echo -e "\e[33m\n没有外部（AUR）包，跳过\e[0m"
+      fi
+      return 0
+    fi
+  done
+  echo -e "\e[33m\n没找到可执行的 AUR helper（paru/yay），跳过 AUR\e[0m"
+  return 1
+}
+
+if [[ $aur_only == 1 ]]; then
+  aur_segment || exit 1
+  exit 0
+fi
+
 echo -e "\e[32m\nSystem packages (pacman -Syu)\e[0m"
 sudo pacman -Syu
 
-# AUR 段：优先 paru，且先确认它真的可执行；有外部（AUR）包才跑。
-# 用 -Sua（-a = --aur，"targets are from the AUR"）只做 AUR —— repo 那段已由上面的
-# `pacman -Syu` 覆盖，不加 -a 的 `-Su` 会把 repo 再做一遍（paru 默认两者都管）。
-aur_helper=""
-for candidate in paru yay; do
-  helper_path=$(command -v "$candidate" 2>/dev/null) || continue
-  if [[ -x $helper_path ]]; then
-    aur_helper=$helper_path
-    break
-  fi
-done
-
-if [[ -n $aur_helper ]]; then
-  if pacman -Qem >/dev/null 2>&1; then
-    echo -e "\e[32m\nAUR packages ($aur_helper -Sua)\e[0m"
-    "$aur_helper" -Sua
-  else
-    echo -e "\e[33m\n没有外部（AUR）包，跳过\e[0m"
-  fi
-else
-  echo -e "\e[33m\n没找到可执行的 AUR helper（paru/yay），跳过 AUR\e[0m"
-fi
+aur_segment || true
 
 if [[ -x $omarchy_path/bin/omarchy ]]; then
   echo -e "\e[32m\nOmarchy plugins\e[0m"
