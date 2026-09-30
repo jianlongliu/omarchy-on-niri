@@ -160,7 +160,7 @@ hyprctl 调用面有界、可直接映射。
 > ⚠ 现状核对（2026-08-30）：下列两个 `config.kdl.bak-*` 文件**已不存在**（随后续重构清理）。
 > 当前 niri 配置的回滚手段为：`~/.local/state/backups/bin/hyprctl.bak-20260825-211843`（垫片旧版）、
 > `~/.config/omarchy/niri-port/`（patch + Niri.qml 覆盖层）、以及 pub 仓库
-> `github.com/jianlongliu/omarchy-on-niri`（移植差分快照）。
+> `github.com/jianlongliu/onarchi`（移植差分快照）。
 
 | 备份 | 对应（历史，现已清理） |
 |---|---|

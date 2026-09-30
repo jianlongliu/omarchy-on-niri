@@ -21,7 +21,7 @@
 ### 11.0 背景与目标
 
 - 两个账户同属一人：主账户（uid 1000）是**日用账户**，实验账户（uid 1001）是**专门给本移植做实验**的账户。本节是把移植整体搬进主账户的 runbook。
-- **新 session 从哪读**：文档正本随仓库走 —— `git clone https://github.com/jianlongliu/omarchy-on-niri`（公开仓，主账户无需凭据），正文在 `docs/omarchy-on-niri-port.md`，§11 就是本节。正本随仓库走，权限 0644、**两个账户都读得到**（2026-09-20 文档归一、2026-09-21 连那九个软链也删掉之后，正本只此一处；0600 那件旧事见 §11.2）；`/var/tmp` 里的摘录重启就没了，不要当唯一来源。
+- **新 session 从哪读**：文档正本随仓库走 —— `git clone https://github.com/jianlongliu/onarchi`（公开仓，主账户无需凭据），正文在 `docs/omarchy-on-niri-port.md`，§11 就是本节。正本随仓库走，权限 0644、**两个账户都读得到**（2026-09-20 文档归一、2026-09-21 连那九个软链也删掉之后，正本只此一处；0600 那件旧事见 §11.2）；`/var/tmp` 里的摘录重启就没了，不要当唯一来源。
 - 主账户现状：**原生 DMS**（打包的 `dms-shell 1.6.2` + `dms-shell-niri 1.6.2` + `dankcalendar-bin` + `greetd-dms-greeter-bin`，登录界面是 dms-greeter）。
 - 目标形态：主账户跑本移植（Omarchy 壳层 + niri），**卸掉 DMS**，niri 配置以**原版默认**为基座（不是从 DMS 那套改）。
 
@@ -177,7 +177,7 @@ omarchy plugin list | grep lock     # 应只有 jianlongliu.split-lock enabled
 ### 11.15 迁移执行清单（照着做；2026-09-19 核过机器事实）
 
 **这份文档在哪**（主账户怎么拿到）：公开仓库
-<https://github.com/jianlongliu/omarchy-on-niri/blob/quattro/docs/omarchy-on-niri-port.md>（`git clone` 或浏览器都行，主账户可读）；
+<https://github.com/jianlongliu/onarchi/blob/quattro/docs/omarchy-on-niri-port.md>（`git clone` 或浏览器都行，主账户可读）；
 §11 的纯摘录在 `/var/tmp/omarchy-migrate-to-main-account.md`（重启会被清，别当唯一副本）。
 （2026-09-20 前）本机的 `~/Documents/omarchy-on-niri.md` 曾是 0600，主账户读不到 —— **现在不必了**：文档正本在仓库里（`~/Documents` 那九个软链 2026-09-21 也已删，本机只此一处）。
 

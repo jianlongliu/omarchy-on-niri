@@ -563,7 +563,7 @@ Omarchy 有两层配置，只有层1在 niri 上真正生效：
    `.desktop` 的 `Exec=`，niri 看到的是 Wayland surface，框架不影响启动——只要 `.desktop` 合法、
    应用自身能跑 Wayland/X11 即可（个别 Qt 应用若不能自动探测 Wayland，需 `QT_QPA_PLATFORM=wayland`，
    那是应用自身行为，不是菜单启动链的问题）。改动已追加进 `niri-port/niri.patch`
-   （reverse-check 通过），重启 Quickshell 生效；已推到 `github.com/jianlongliu/omarchy-on-niri`。
+   （reverse-check 通过），重启 Quickshell 生效；已推到 `github.com/jianlongliu/onarchi`。
    - **Zen 强制走 Wayland（2026-08-27）**：菜单拉起 Zen 经 `gtk-launch zen-browser.desktop`，
      原 `.desktop` 的 `Exec=zen-browser %u` 无 Wayland 标志，在 niri 上会落到 XWayland
      （实测 XWayland 进程一直在跑）。已在用户级 `~/.local/share/applications/zen-browser.desktop`
