@@ -471,6 +471,30 @@ cp /tmp/niri.patch ~/.config/omarchy/niri-port/niri.patch              # 重放�
       `~/.local/share/fonts/`，互不干扰。
     - 回退：`rm ~/.local/share/fonts/omarchy/omarchy.ttf && fc-cache -f && omarchy-restart-shell`
       （这批 logo 变回豆腐块，其余一切照常）。
+18. **壳监督进程防双开补丁（红屏根因，2026-09-30）**：上游 `$OMARCHY_PATH/bin/omarchy-launch-shell`
+    的引擎重拉逻辑在本机补了四条护栏。完整链路（引擎 SEGV → 监督进程与 quickshell 自带 crash handler
+    **同刻各重拉一条** → 两条引擎各做 stranded-lock 恢复 → 同一 output 上两个 lock surface →
+    niri 判 `ext_session_lock_v1: error 3` = `duplicate_output` → 壳死在锁定态＝红屏裸底色）见
+    `lock.md` §11.30。
+    - **四条护栏**：① 引擎环境串上加 `QS_DISABLE_CRASH_HANDLER=1`，关掉 quickshell 自带的重拉
+      （该处本就设了 `QS_DISABLE_FILE_WATCHER` / `QS_NO_RELOAD_POPUP`）；② 监督进程自身 flock 单实例
+      （`$XDG_RUNTIME_DIR/omarchy-shell-supervisor.<WAYLAND_DISPLAY>.lock`，拿不到就重试 5s，让
+      `omarchy-restart-shell` 的"先停后起"交接过得去，仍拿不到才退出）；③ 启动/重拉前查实例登记表
+      `quickshell list -j -p "$OMARCHY_PATH/shell"`，有实例就等它死 —— **不用 IPC ping**，因为
+      启动中/卡死的实例也算占用，ping 会把它们当"没有实例"；④ 干净退出后若槽位仍被别的实例占着就
+      **继续监督**它，不 `exit 0`（否则留下无人监督的孤儿引擎，它死在锁定态又是同一条红屏）。
+    - **落点**：`~/.local/share/omarchy/bin/omarchy-launch-shell` + 其测试件
+      `test/shell.d/launch-shell-test.sh`（10 例）。**这是上游 checkout，`omarchy update` 会覆盖**；
+      且该文件**不在 `niri-port/niri.patch` 里**（patch 现含 10 个 `bin/` 文件，不含它）⇒ 想跨 update
+      长期保留，得并进 patch。
+    - 验法：`grep -c QS_DISABLE_CRASH_HANDLER ~/.local/share/omarchy/bin/omarchy-launch-shell` = 1；
+      `bash test/shell.d/launch-shell-test.sh` 10 例全绿（`restart-shell-test.sh` 仍 7 例）；
+      决定性一条 = `kill -SEGV <engine_pid>` → 只多出**一条**引擎、日志只一行
+      `Omarchy shell exited with status 139; relaunching.`，没有 `Quickshell has been restarted.` /
+      `already running` / `error 3` / `stranded`；线上标志：
+      `tr '\0' '\n' < /proc/<engine_pid>/environ | grep '^QS_'` 三个都 `=1`。
+    - 回退：`cp ~/.local/state/backups/.local/share/omarchy/bin/omarchy-launch-shell.bak-20260930 ~/.local/share/omarchy/bin/omarchy-launch-shell`
+      （测试件同理 `…/test/shell.d/launch-shell-test.sh.bak-20260930`）。
 
 ---
 
@@ -497,3 +521,4 @@ cp /tmp/niri.patch ~/.config/omarchy/niri-port/niri.patch              # 重放�
 | fastfetch 配置改坏 | `cp ~/.local/state/backups/.config/fastfetch/config.jsonc.bak-20260922 ~/.config/fastfetch/config.jsonc`（改前那份，`XeroArch` 简版；想回到"绿 logo"的中间版用 `…bak-20260923-greenlogo`；想回上游展示配置就直接 `cp $OMARCHY_PATH/etc/fastfetch/config.jsonc` 过来，但那条 `color: green` 会把 Arch 染绿） |
 | 字体/中文回退改坏 | `rm ~/.config/fontconfig/conf.d/60-cjk-fallback.conf`（回系统默认：中文会落到 MS Gothic、图标无回退）；`fonts.conf` 本身由菜单管，`menu → style → font` 重选一次即重建；仓库副本 `local-config/fontconfig/conf.d/` 可拷回来（见 §8 缺口第 15 项） |
 | 品牌图标字体（菜单里的 AI logo） | `rm ~/.local/share/fonts/omarchy/omarchy.ttf && fc-cache -f && omarchy-restart-shell`（回到豆腐块，别的照常；见 §8 缺口第 17 项） |
+| 壳监督进程防双开补丁 | `cp ~/.local/state/backups/.local/share/omarchy/bin/omarchy-launch-shell.bak-20260930 ~/.local/share/omarchy/bin/omarchy-launch-shell`（测试件同理 `…/test/shell.d/launch-shell-test.sh.bak-20260930`；撤掉后引擎 SEGV 又可能双开抢锁＝红屏，链路见 `lock.md` §11.30，见 §8 缺口第 18 项） |

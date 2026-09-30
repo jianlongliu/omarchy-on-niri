@@ -29,6 +29,7 @@
 - §11.27 交接那段黑：方向 A（底部 `Thinking…` 卡片）已实施，方向 B（plymouth 盖交接）仍搁置（2026-09-21）
 - §11.28 合盖/挂起不锁屏：单元**从没装过** → 2026-09-21 修好并**合盖实测通过**（当晚重启又暴露 `WAYLAND_DISPLAY` 条件在开机那刻也不成立 ⇒ 两条条件都删了，改用 `omarchy-sleep-lock-start` 包装器等会话环境）
 - §11.29 头像改成"可选"：真源 = AccountsService（免 root 的 `SetIconFile`），换头像入口 `omarchy-avatar` + 菜单 Style › Avatar（2026-09-23，用户指定）
+- §11.30 红屏真链路：引擎 SEGV 后 **双引擎抢锁** → `duplicate_output` → 死壳孤儿锁；`omarchy-launch-shell` 补三条护栏（2026-09-30）
 
 ## 另见（锁屏相关的东西分住哪几处）
 
@@ -608,6 +609,41 @@ Omarchy 的锁层从 `hyprctl -j monitors` 读两个字段，shim 之前都在�
 **没验（要人）**：真 GTK 文件选择器点一次（只验了接线圈）；锁屏真锁一次看头像（照规矩不主动锁他的屏）；登录屏下次登录看（greeter 只认 AccountsService，本机注入不了点击）。
 
 **回退**：`omarchy-avatar default` 一键回原图；补丁用 `~/.local/state/backups/.niri.patch.bak-20260923`（与现行只差头像 3 行），菜单文件用 `.omarchy-menu.jsonc.bak-20260923`。
+
+---
+
+### §11.30 红屏真链路：引擎 SEGV 后**双引擎抢锁** → `duplicate_output` → 死壳孤儿锁（2026-09-30，本机修复）
+
+**症状**：整屏只剩锁屏/登录面的底色裸奔（本机主账户 = 酒红 `#191114`），锁屏出不来；`systemctl restart greetd` / `pkill niri` 之后**桌面起不来**、屏幕刷 `Page flip commit failed … Permission denied`。**那条救援命令是自毁路线**，别执行（见下）。
+
+**真链路（三个 bug 叠加）**：
+
+1. **起爆点**：长寿命引擎在**锁屏的文本框里吃按键**时 SEGV（栈 `QQuickTextInputPrivate::processKeyEvent` → `QQmlBoundSignalExpression::evaluate` → `emitNotify`）。崩溃报告在 `~/.cache/quickshell/crashes/<id>/report.txt`。
+2. **两套重拉同刻抢跑** → **一句钟内两条引擎并存**：`omarchy-launch-shell`（监督进程）见引擎非零退出会重拉一次，而 **quickshell 自带 crash handler 也自己重拉一条**。两条引擎互抢单例（`another handler is registered for target omarchy.bar`、`An authentication agent already exists`）。
+3. **两套 stranded-lock 恢复都执行**：上游「Recover a session lock stranded by a dead shell」让壳「锁被死壳遗留就自己接管」（日志 `lock-stranded: recovering`）——**两条引擎都接管 → 同一 output 上第二个 lock surface** → niri 判 `ext_session_lock_v1: error 3`（= `duplicate_output`，**不是**"别人持锁"）→ 掐连接 → 壳**死在锁定态** ⇒ 孤儿锁裸底色 = 红屏。
+4. **红屏为何不消失**：被重拉的新实例吐 `An instance of this configuration is already running.` 后**干净退出**，监督进程按契约把"干净退出"当**用户有意停壳** → `exit 0` 收工，不再重拉。
+
+**为什么 `restart greetd` / `pkill niri` 是自毁**（本机 dev-link 形态）：**桌面会话是 greetd 会话 worker 的子进程** ⇒ 重启 greetd 连桌面一起带走（再登录只活 0.2s，`A niri session is already running.`）；**greeter 自己也是 niri 会话** ⇒ `pkill niri` 连 greeter 一起杀；事后新 niri 拿不到 DRM（`error setting gamma … Permission denied`）⇒ 只能整机重启。
+
+**修复**——本机对上游 `$OMARCHY_PATH/bin/omarchy-launch-shell` 的补丁（清单见 `local-overrides.md` §8 缺口第 18 项），四条护栏：
+
+- **`QS_DISABLE_CRASH_HANDLER=1`**：关掉 quickshell 自带的重拉，**只留监督进程一套**。（该文件本就已设 `QS_DISABLE_FILE_WATCHER` / `QS_NO_RELOAD_POPUP`。）
+- **监督进程 flock 单实例**：`$XDG_RUNTIME_DIR/omarchy-shell-supervisor.<WAYLAND_DISPLAY>.lock`，拿不到就重试 5s（让 `omarchy-restart-shell` 的"先停后起"交接能过），仍拿不到就退出——**两个 supervisor 各拉一条引擎**正是要防的重复。
+- **启动/重拉前查实例登记表**：`quickshell list -j -p "$OMARCHY_PATH/shell"` 有实例就等它死（`Quickshell` 会拒绝第二条引擎且**干净退出**，与"有意停壳"无法区分，所以查登记表而不是猜）。用登记表而非 IPC ping：**启动中/卡死的实例也算占用**，ping 会把它们当"没有实例"。
+- **干净退出后若槽位被别的实例占着 → 继续监督它**，不 `exit 0`（否则留下**无人监督的孤儿引擎**，它死在锁定态就又是那条红屏）。
+
+（连带：上游 #6692 的 stranded-lock 恢复**缺"同 output 已有 lock surface"的守卫**，两条引擎同时恢复才致命。本补丁从**源头**保证只剩一条引擎，故未改 QML；见本节末"未做"。）
+
+**验法**：
+
+- 单测：`test/shell.d/launch-shell-test.sh`（改后 10 例，含"外部实例占槽→等其死再接管""第二个 supervisor 让位"两条）。关联的 `test/shell.d/restart-shell-test.sh` 仍 7 例全绿。
+- 真机（决定性）：`kill -SEGV <engine pid>` → **只出现一条**新引擎、日志只有一行 `Omarchy shell exited with status 139; relaunching.`，**没有** `Quickshell has been restarted.`、没有 `already running` / `error 3` / `stranded`。
+- 线上标志：`tr '\0' '\n' < /proc/<engine_pid>/environ | grep '^QS_'` 三个都 `=1`；`ls -l /proc/<supervisor_pid>/fd/9` 指向锁文件（引擎不继承它）。
+- 让线上生效（不重启整机）：`niri msg action spawn-sh -- omarchy-launch-shell` 后再 `kill -TERM <旧 supervisor pid>`（新 supervisor 会拿锁、等旧引擎死、接管）。
+
+**回退**：备份 `~/.local/state/backups/.local/share/omarchy/bin/omarchy-launch-shell.bak-20260930`（测试件同理 `…/test/shell.d/launch-shell-test.sh.bak-20260930`）。**注意**：`~/.local/share/omarchy` 是上游 checkout，`omarchy update` 会覆盖这个文件 ⇒ 要长期保留得并进 `niri-port/niri.patch`（该 patch 现已含 10 个 `bin/` 文件，此文件**不在其中**）。
+
+**未做（留给上游/待发话）**：给 stranded-lock 恢复加"这个 output 是否已有 lock surface"的防重守卫（本机 fork `~/.config/omarchy/plugins/jianlongliu.split-lock/Service.qml`，上游 `shell/plugins/lock/Service.qml`）—— 本轮从源头消掉了"两条引擎"，故只作为纵深防御记在此处。
 
 ---
 
