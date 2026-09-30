@@ -110,7 +110,7 @@ and restores the session's previous `misc.disable_autoreload` and
 
 > **本机（dev-link 手装）现状（2026-09-30）**：`omarchy update` 不跑下面这套。dispatcher 走绝对路径
 > `$OMARCHY_PATH/bin/omarchy-update`，那份文件顶部有三行委派（随 `niri.patch` 重放）落到 `~/bin/omarchy-update`
-> 垫片，垫片 = 四段：`sudo pacman -Syu` → AUR（paru 优先，先查可执行）→ `omarchy plugin update` → `mise up`。
+> 垫片，垫片 = 四段：`sudo pacman -Syu` → AUR（paru 优先，先查可执行；`-Sua` 只做 AUR）→ `omarchy plugin update` → `mise up`。
 > 上游真身仍可跑：`~/bin/omarchy-update --upstream`。四段、丢弃的上游步骤（代码 FF / keyring / 迁移 / snapshot /
 > prune / 孤儿包清理）与回退见 `local-overrides.md` §8 第 19 项。
 

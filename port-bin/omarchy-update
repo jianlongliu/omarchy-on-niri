@@ -53,6 +53,8 @@ echo -e "\e[32m\nSystem packages (pacman -Syu)\e[0m"
 sudo pacman -Syu
 
 # AUR 段：优先 paru，且先确认它真的可执行；有外部（AUR）包才跑。
+# 用 -Sua（-a = --aur，"targets are from the AUR"）只做 AUR —— repo 那段已由上面的
+# `pacman -Syu` 覆盖，不加 -a 的 `-Su` 会把 repo 再做一遍（paru 默认两者都管）。
 aur_helper=""
 for candidate in paru yay; do
   helper_path=$(command -v "$candidate" 2>/dev/null) || continue
@@ -64,8 +66,8 @@ done
 
 if [[ -n $aur_helper ]]; then
   if pacman -Qem >/dev/null 2>&1; then
-    echo -e "\e[32m\nAUR packages ($aur_helper -Su)\e[0m"
-    "$aur_helper" -Su
+    echo -e "\e[32m\nAUR packages ($aur_helper -Sua)\e[0m"
+    "$aur_helper" -Sua
   else
     echo -e "\e[33m\n没有外部（AUR）包，跳过\e[0m"
   fi

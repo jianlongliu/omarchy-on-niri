@@ -100,7 +100,7 @@
 | `omarchy-niri-apply-theme` | 按主题 token 写 niri 的边框渐变（两带方案） | ✅ |
 | `omarchy-niri-repatch` | 重放覆盖层（幂等） | ✅ |
 | `omarchy-powerprofiles-{list,set}` | 电源档位 | ✅ |
-| `omarchy-update` | 垫片 = 四段：`sudo pacman -Syu` → AUR（**paru 优先**，先查可执行；无外部包就跳过）→ `omarchy plugin update` → `mise up`（`MISE_MINIMUM_RELEASE_AGE=0`）；`--upstream` 跑上游真身。手装机跑不通上游 update 流程 | ✅ `port-bin/`（2026-09-20 收进；2026-09-30 改成四段并接住 CLI，见 §8 第 19 项） |
+| `omarchy-update` | 垫片 = 四段：`sudo pacman -Syu` → AUR（**paru 优先**，先查可执行；`-Sua` 只做 AUR；无外部包就跳过）→ `omarchy plugin update` → `mise up`（`MISE_MINIMUM_RELEASE_AGE=0`）；`--upstream` 跑上游真身。手装机跑不通上游 update 流程 | ✅ `port-bin/`（2026-09-20 收进；2026-09-30 改成四段并接住 CLI，见 §8 第 19 项） |
 | `omarchy-picker-warmup` | 配合用户单元延迟预热选择器缩略图 | ✅ `port-bin/`（2026-09-20 收进） |
 | `omarchy-display-text-size` | bar 的 Display 面板字号滑块驱动全桌面（CLI 路径绕过它） | ✅ `port-bin/`（2026-09-20 收进） |
 | `omarchy-toggle-input-device` | 触控板 / 触摸屏开关。上游脚本走 `hl.device`（niri 侧被垫片 no-op ⇒ 只弹 OSD、设备不关的"假成功"）；本垫片改成**写 / 删** `~/.config/niri/input-toggle-{touchpad,touchscreen}.kdl`，由 `input.kdl` 里两行 `include optional=true` 引入。菜单里的 Touchpad 项现在**真生效**，见垫片卷 `docs/shims.md` §4 | ✅ `port-bin/`（2026-09-23 收进） |
@@ -505,6 +505,9 @@ cp /tmp/niri.patch ~/.config/omarchy/niri-port/niri.patch              # 重放�
     扩成**四段** —— `sudo pacman -Syu` → AUR（**paru 优先**：先 `command -v` + `[[ -x ]]` 确认可执行，
     再 `pacman -Qem` 看有没有外部包，没有就跳过；paru 缺了就退 yay，都没有则打印跳过）→ `omarchy plugin update`
     → `MISE_MINIMUM_RELEASE_AGE=0 mise up`（本机 mise 只管 `bun` 一个工具，见 §8 第 15 项那批字体无关）。
+    - AUR 段用 **`-Sua`**（`-a` = `--aur`，本机 help 原话 "Assume targets are from the AUR"）：**只做 AUR**。
+      不带 `-a` 的 `-Su` 会连 repo 一起升级（`-Su` 只省掉 `-y` 刷库，不等于"只 AUR"）⇒ 与第一段重复；
+      repo 那半边交给 `sudo pacman -Syu`，paru 只管它真正独占的那部分。
     - **为什么要在 checkout 里动手**：dispatcher（`bin/omarchy`）按 `$OMARCHY_BIN_DIR/<最长前缀>` **绝对路径** exec，
       PATH 上的垫片拦不到 CLI，所以 `$OMARCHY_PATH/bin/omarchy-update` 顶部加三行
       `exec "$HOME/bin/omarchy-update" "$@"`（`OMARCHY_UPDATE_NO_DELEGATE=1` 时跳过，供逃生口用），插在安全脚手架**之前**
@@ -516,14 +519,15 @@ cp /tmp/niri.patch ~/.config/omarchy/niri-port/niri.patch              # 重放�
     - **参数**：垫片只认 `-h/--help`、`--upstream`，**其余参数一律拒绝（exit 2）**。原因：`omarchy update aur`
       经 dispatcher 最长前缀只匹配到 `omarchy-update`，`aur` 会当残留参数传进来（上游那份是静默忽略）。
     - 验法（离线、不碰系统）：`OMARCHY_PATH=<假根> PATH=<桩目录>` 跑垫片，桩掉 `sudo`/`paru`/`pacman`/`mise` 并放一个桩
-      `omarchy`，看四段顺序、`paru -Su`、`MISE_MINIMUM_RELEASE_AGE=0` 是否真传进 mise；分支单测：paru 不可执行 → 退到 yay、
+      `omarchy`，看四段顺序、`paru -Sua`、`MISE_MINIMUM_RELEASE_AGE=0` 是否真传进 mise；分支单测：paru 不可执行 → 退到 yay、
       两者都无 → 打印跳过、无外部包 → 跳过 AUR。委派验证：`$OMARCHY_PATH/bin/omarchy-update -h` 打印的是**垫片**用法
       （= 委派生效），而 `omarchy update --help` 仍是 dispatcher 帮助。⚠ 桩目录别把真 `~/bin` 留在 PATH 里，
       否则 paru 缺失时会回落到 `~/bin/yay` 垫片 → **真 paru**（2026-09-30 初测踩到；`sudo` 被桩掉所以没真升级）。
-      **真机决定性验证（2026-09-30 16:17，用户从菜单跑的）**：四段依次执行、无报错 —— repo 段
-      `there is nothing to do`、AUR 段 `paru -Su` **确实带上 AUR**（升了 `herdr-bin 0.9.3`，说明 `-Su` 不必再加 `-a`）、
+      **真机决定性验证（2026-09-30 16:17，用户从菜单跑的，当时 AUR 段还是 `-Su`）**：四段依次执行、无报错 —— repo 段
+      `there is nothing to do`、AUR 段**确实带上了 AUR**（升了 `herdr-bin 0.9.3`；也正是这次跑出来的证据说明
+      `-Su` 会先做一遍 "Starting full system upgrade" 的 repo 段 —— 与第一段重复，故当晚改成 `-Sua`）、
       插件段五个插件 `is up to date`（无 diff 时不弹确认，与源码一致）、mise 段 `All tools are up to date`。
-      该次没有 `/tmp/omarchy-update.log`（垫片不装上游那套 `script(1)` 转录）。
+      该次没有 `/tmp/omarchy-update.log`（垫片不装上游那套 `script(1)` 转录）。**`-Sua` 尚未真机跑过**（改用桩测过）。
     - 回退：`rm ~/bin/omarchy-update`；要连委派一起撤，见 §9 索引那行（注意还得把它从 patch 路径表里去掉再重生成，
       否则下次 `omarchy-niri-repatch` 会再打回来）。
 
