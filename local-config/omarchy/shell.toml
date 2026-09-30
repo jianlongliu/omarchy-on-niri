@@ -13,7 +13,7 @@ icon-font = 12
 background-alpha = 0.65
 
 [notifications]
-background-alpha = 0.85
+background-alpha = 0.35
 
 [menu]
 # 卡片底色不再写死色值，跟 [bar] / [popups] 同一色源（主题的 [menu] background），
